@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         PH Fórum színezés – .msg-body háttérrel
+// @name         PH Fórum színezés (dark/light link observer)
 // @namespace    ph
-// @version      1.0.0
-// @description  Kiemeli a saját és rád válaszoló hozzászólásokat a .msg-body háttér színezésével
+// @version      1.1.0
+// @description  Saját és rád válaszoló hozzászólások kiemelése PH light/dark módban
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://itcafe.hu/tema/*
@@ -12,70 +12,73 @@
 // ==/UserScript==
 
 (function () {
-  'use strict';
+    'use strict';
 
-  const FELHASZNALO = "lkristóf";
+    const FELHASZNALO = "lkristóf";
 
-  // Színek
-  const SAJAT = "#c4f0ff";
-  const VALASZ = "#d6ffbf";
+    const COLORS = {
+        light: {
+            SAJAT:  "#C7D7E0",
+            VALASZ: "#CFE0C3",
+        },
+        dark: {
+            SAJAT:  "#2F4A57",
+            VALASZ: "#344A3A",
+        }
+    };
 
-  // Segéd: string lower/trim
-  const lower = s => (s || "").toString().trim().toLowerCase();
+    const lower = s => (s || "").toString().trim().toLowerCase();
 
-  function colorMsgBody(msg, color) {
-    const body = msg.querySelector(".msg-body");
-    if (body) {
-      // !important, hogy semmi ne írja felül
-      body.style.setProperty("background-color", color, "important");
-    }
-  }
-
-  function processOne(msg) {
-    if (!(msg instanceof HTMLElement)) return;
-    if (msg.dataset._phProcessed === "1") return;
-
-    const authorEl = msg.querySelector(".msg-head-author .user-title a");
-    const replyEl  = msg.querySelector(".msg-head-replied .user-title a");
-
-    const author  = authorEl ? authorEl.textContent.trim() : "";
-    const replyTo = replyEl  ? replyEl.textContent.trim()  : "";
-
-    if (lower(author) === lower(FELHASZNALO)) {
-      colorMsgBody(msg, SAJAT);
-    } else if (lower(replyTo) === lower(FELHASZNALO)) {
-      colorMsgBody(msg, VALASZ);
+    function colorMsgBody(msg, color) {
+        const body = msg.querySelector(".msg-body");
+        if (body) {
+            body.style.setProperty("background-color", color, "important");
+        }
     }
 
-    msg.dataset._phProcessed = "1";
-  }
+    function recolorAll(isDark) {
+        const { SAJAT, VALASZ } = isDark ? COLORS.dark : COLORS.light;
 
-  function processAll(root = document) {
-    root.querySelectorAll(".msg").forEach(processOne);
-  }
+        document.querySelectorAll(".msg").forEach(msg => {
+            const author =
+                  msg.querySelector(".msg-head-author .user-title a")?.textContent || "";
+            const reply =
+                  msg.querySelector(".msg-head-replied .user-title a")?.textContent || "";
 
-  function init() {
-    processAll();
-
-    // Dinamikus betöltések figyelése (lapozás, végtelen görgetés, stb.)
-    const obs = new MutationObserver(muts => {
-      muts.forEach(m => {
-        m.addedNodes.forEach(n => {
-          if (!(n instanceof HTMLElement)) return;
-          if (n.matches && n.matches(".msg")) {
-            processOne(n);
-          } else {
-            n.querySelectorAll?.(".msg").forEach(processOne);
-          }
+            if (lower(author) === lower(FELHASZNALO)) {
+                colorMsgBody(msg, SAJAT);
+            } else if (lower(reply) === lower(FELHASZNALO)) {
+                colorMsgBody(msg, VALASZ);
+            }
         });
-      });
-    });
-    obs.observe(document.body, { childList: true, subtree: true });
-  }
+    }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init, { once: true });
-  } else {
-    init();
-  }
+    // ---------------------------------------------------
+    // Téma felismerése a link media attribútum alapján
+    // ---------------------------------------------------
+    function detectDark() {
+        const darkLink = document.querySelector('link[href*="dark_base"]');
+        return darkLink && darkLink.media === "all";
+    }
+
+    function init() {
+        // Első színezés
+        recolorAll(detectDark());
+
+        // Observer minden dark_ linkre
+        const darkLinks = document.querySelectorAll('link[href*="dark_"]');
+        const observer = new MutationObserver(() => {
+            recolorAll(detectDark());
+        });
+
+        darkLinks.forEach(link => {
+            observer.observe(link, { attributes: true, attributeFilter: ['media'] });
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init, { once: true });
+    } else {
+        init();
+    }
 })();
