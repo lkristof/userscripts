@@ -1,14 +1,14 @@
 // ==UserScript==
-// @name         PH Fórum színezés (prefers-color-scheme + kulcsszó)
-// @namespace    ph
-// @version      2.1.0
-// @description  Saját és rád válaszoló hozzászólások kiemelése PH light/dark módban, #akció kulcsszó kiemelés, interval nélkül
-// @match        https://prohardver.hu/tema/*
-// @match        https://mobilarena.hu/tema/*
-// @match        https://itcafe.hu/tema/*
-// @match        https://gamepod.hu/tema/*
-// @match        https://logout.hu/tema/*
-// @grant        none
+// @name PH Fórum színezés
+// @namespace ph
+// @version 2.1.0
+// @description Saját és rád válaszoló hozzászólások kiemelése PH light/dark módban, #akció kulcsszó kiemelés
+// @match https://prohardver.hu/tema/*
+// @match https://mobilarena.hu/tema/*
+// @match https://itcafe.hu/tema/*
+// @match https://gamepod.hu/tema/*
+// @match https://logout.hu/tema/*
+// @grant none
 // ==/UserScript==
 
 (function () {
@@ -18,12 +18,12 @@
 
     const COLORS = {
         light: {
-            SAJAT:  "#C7D7E0",
+            SAJAT: "#C7D7E0",
             VALASZ: "#CFE0C3",
             AKCIO: "#FFC0C0",
         },
         dark: {
-            SAJAT:  "#2F4A57",
+            SAJAT: "#2F4A57",
             VALASZ: "#344A3A",
             AKCIO: "#8B0000",
         }
@@ -34,9 +34,11 @@
     const lower = s => (s || "").toString().trim().toLowerCase();
 
     function detectDark() {
-        const darkLink = document.querySelector('link[href*="dark_base"]');
-        return darkLink && (darkLink.media.includes('dark') || darkLink.media === "all");
+        const btn = document.querySelector('.theme-button span');
+        if (!btn) return false;
+        return btn.classList.contains('fa-sun-bright');
     }
+
 
     function recolorAll(isDark) {
         const { SAJAT, VALASZ, AKCIO } = isDark ? COLORS.dark : COLORS.light;
@@ -76,18 +78,20 @@
     }
 
     function waitForDarkLinkAndInit() {
-        const darkLink = document.querySelector('link[href*="dark_base"]');
-        if (darkLink) {
-            init();
-        } else {
-            const observer = new MutationObserver(() => {
-                if (document.querySelector('link[href*="dark_base"]')) {
-                    observer.disconnect();
-                    init();
-                }
-            });
-            observer.observe(document.head, { childList: true });
-        }
+        setTimeout(() => {
+            const darkLink = document.querySelector('link[href*="dark_base"]');
+            if (darkLink) {
+                init();
+            } else {
+                const observer = new MutationObserver(() => {
+                    if (document.querySelector('link[href*="dark_base"]')) {
+                        observer.disconnect();
+                        init();
+                    }
+                });
+                observer.observe(document.head, { childList: true });
+            }
+        }, 1000);
     }
 
     if (document.readyState === "loading") {
