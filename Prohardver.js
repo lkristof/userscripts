@@ -56,9 +56,10 @@
     // ---------------------------------------------------
     // Téma felismerése a link media attribútum alapján
     // ---------------------------------------------------
+
     function detectDark() {
         const darkLink = document.querySelector('link[href*="dark_base"]');
-        return darkLink && darkLink.media === "all";
+        return darkLink && (darkLink.media.includes('dark') || darkLink.media === "all");
     }
 
     function init() {
