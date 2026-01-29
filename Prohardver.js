@@ -8,6 +8,7 @@
 // @match https://itcafe.hu/tema/*
 // @match https://gamepod.hu/tema/*
 // @match https://logout.hu/tema/*
+// @match https://fototrend.hu/tema/*
 // @grant none
 // ==/UserScript==
 
