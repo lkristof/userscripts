@@ -34,9 +34,30 @@
     const lower = s => (s || "").toString().trim().toLowerCase();
 
     function detectDark() {
+        // 1. Megnézzük a sötét mód stíluslapját
+        const darkLink = document.querySelector('link[href*="dark_base"]');
+
+        if (darkLink) {
+            const media = darkLink.getAttribute('media');
+
+            // Ha fixen be van kapcsolva (media="all")
+            if (media === 'all') return true;
+
+            // Ha fixen ki van kapcsolva (media="not all")
+            if (media === 'not all') return false;
+
+            // Ha automatikus módban van (media="(prefers-color-scheme: dark)")
+            // Ekkor lekérdezzük a böngésző/eszköz beállítását
+            if (media.includes('prefers-color-scheme: dark')) {
+                return window.matchMedia('(prefers-color-scheme: dark)').matches;
+            }
+        }
+
+        // 2. Tartalék megoldás: ha a link valamiért nincs ott, nézzük a gombot
         const btn = document.querySelector('.theme-button span');
-        if (!btn) return false;
-        return btn.classList.contains('fa-sun-bright');
+        if (btn) return btn.classList.contains('fa-sun-bright');
+
+        return false;
     }
 
 
@@ -75,23 +96,25 @@
         darkLinks.forEach(link => {
             observer.observe(link, { attributes: true, attributeFilter: ['media'] });
         });
+
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            recolorAll(detectDark());
+        });
     }
 
     function waitForDarkLinkAndInit() {
-        setTimeout(() => {
-            const darkLink = document.querySelector('link[href*="dark_base"]');
-            if (darkLink) {
-                init();
-            } else {
-                const observer = new MutationObserver(() => {
-                    if (document.querySelector('link[href*="dark_base"]')) {
-                        observer.disconnect();
-                        init();
-                    }
-                });
-                observer.observe(document.head, { childList: true });
-            }
-        }, 1000);
+        const darkLink = document.querySelector('link[href*="dark_base"]');
+        if (darkLink) {
+            init();
+        } else {
+            const observer = new MutationObserver(() => {
+                if (document.querySelector('link[href*="dark_base"]')) {
+                    observer.disconnect();
+                    init();
+                }
+            });
+            observer.observe(document.head, { childList: true });
+        }
     }
 
     if (document.readyState === "loading") {
