@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver – fórum színezés
 // @namespace    ph
-// @version      4.0.2
+// @version      4.0.3
 // @description  Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés, világos/sötét módban
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -133,7 +133,7 @@
             if (!body) return;
 
             body.style.backgroundColor = "";
-            body.style.borderLeft = "";
+            body.style.boxShadow = "";
 
             const text = body.textContent.toLowerCase();
             const author = getAuthor(msg);
@@ -163,7 +163,7 @@
             // 3️⃣ Lánc kiemelés (OLDALSÁV!)
             if (msgId && activeChainIds.has(msgId)) {
                 body.style.backgroundColor = c.CHAIN_BG;
-                body.style.borderLeft = `5px solid ${c.CHAIN_BORDER}`;
+                body.style.boxShadow = `inset 5px 0 0 0 ${c.CHAIN_BORDER}`;
                 return;
             }
 
