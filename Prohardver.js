@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver – fórum színezés
 // @namespace    ph
-// @version      4.0.0
+// @version      4.0.1
 // @description  Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés, világos/sötét módban
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -197,7 +197,14 @@
     }
 
     function attachAvatarHandlers() {
-        document.querySelectorAll(".msg-user img").forEach(img => {
+        // Kijelöljük az összes lehetséges avatar képet (msg-body és msg-header is)
+        const selectors = [
+            ".msg-user img",           // Desktop/Normál avatar a body-ban
+            ".user-face img",          // Mobilos/Fejléc avatar
+            ".user-face-circle img"    // Specifikus kör alakú wrapper
+        ];
+
+        document.querySelectorAll(selectors.join(", ")).forEach(img => {
             img.style.cursor = "pointer";
             img.removeEventListener("click", onAvatarClick);
             img.addEventListener("click", onAvatarClick);
