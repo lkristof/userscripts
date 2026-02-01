@@ -1,126 +1,198 @@
 // ==UserScript==
-// @name PH Fórum színezés
-// @namespace ph
-// @version 2.1.0
-// @description Saját és rád válaszoló hozzászólások kiemelése PH light/dark módban, #akció kulcsszó kiemelés
-// @match https://prohardver.hu/tema/*
-// @match https://mobilarena.hu/tema/*
-// @match https://itcafe.hu/tema/*
-// @match https://gamepod.hu/tema/*
-// @match https://logout.hu/tema/*
-// @match https://fototrend.hu/tema/*
-// @grant none
+// @name         Prohardver – fórum színezés
+// @namespace    ph
+// @version      3.0.0
+// @description  Saját / rád válaszoló / #akció kiemelés + avatar kattintásos user fókusz, light/dark módban
+// @match        https://prohardver.hu/tema/*
+// @match        https://mobilarena.hu/tema/*
+// @match        https://itcafe.hu/tema/*
+// @match        https://gamepod.hu/tema/*
+// @match        https://logout.hu/tema/*
+// @match        https://fototrend.hu/tema/*
+// @grant        none
 // ==/UserScript==
 
 (function () {
-    'use strict';
+    "use strict";
 
+    /**********************
+     * BEÁLLÍTÁSOK
+     **********************/
     const FELHASZNALO = "lkristóf";
+    const AKCIO_KEYWORDS = ["#akció", "#akcio"];
+
+    let selectedUser = null;
 
     const COLORS = {
         light: {
             SAJAT: "#C7D7E0",
             VALASZ: "#CFE0C3",
             AKCIO: "#FFC0C0",
+
+            FOCUS_AUTHOR: "#FFF3A0",
+            FOCUS_REPLY:  "#FFF9D6",
+            FOCUS_BORDER: "#FF9800"
         },
         dark: {
             SAJAT: "#2F4A57",
             VALASZ: "#344A3A",
             AKCIO: "#8B0000",
+
+            FOCUS_AUTHOR: "#4A4215",
+            FOCUS_REPLY:  "#3A3312",
+            FOCUS_BORDER: "#FFB300"
         }
     };
 
-    const AKCIO_KEYWORDS = ["#akció", "#akcio"];
-
     const lower = s => (s || "").toString().trim().toLowerCase();
 
+    /**********************
+     * TÉMA FELISMERÉS
+     **********************/
     function detectDark() {
-        // 1. Megnézzük a sötét mód stíluslapját
         const darkLink = document.querySelector('link[href*="dark_base"]');
-
         if (darkLink) {
-            const media = darkLink.getAttribute('media');
-
-            // Ha fixen be van kapcsolva (media="all")
-            if (media === 'all') return true;
-
-            // Ha fixen ki van kapcsolva (media="not all")
-            if (media === 'not all') return false;
-
-            // Ha automatikus módban van (media="(prefers-color-scheme: dark)")
-            // Ekkor lekérdezzük a böngésző/eszköz beállítását
-            if (media.includes('prefers-color-scheme: dark')) {
-                return window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const media = darkLink.getAttribute("media");
+            if (media === "all") return true;
+            if (media === "not all") return false;
+            if (media?.includes("prefers-color-scheme")) {
+                return window.matchMedia("(prefers-color-scheme: dark)").matches;
             }
         }
 
-        // 2. Tartalék megoldás: ha a link valamiért nincs ott, nézzük a gombot
-        const btn = document.querySelector('.theme-button span');
-        if (btn) return btn.classList.contains('fa-sun-bright');
+        const btn = document.querySelector(".theme-button span");
+        if (btn) return btn.classList.contains("fa-sun-bright");
 
         return false;
     }
 
+    function getThemeColors() {
+        return detectDark() ? COLORS.dark : COLORS.light;
+    }
 
-    function recolorAll(isDark) {
-        const { SAJAT, VALASZ, AKCIO } = isDark ? COLORS.dark : COLORS.light;
+    /**********************
+     * SEGÉD: USER INFÓ
+     **********************/
+    function getAuthor(msg) {
+        return msg.querySelector(".msg-head-author .user-title a")?.textContent?.trim() || "";
+    }
+
+    function getRepliedTo(msg) {
+        return msg.querySelector(".msg-head-replied .user-title a")?.textContent?.trim() || "";
+    }
+
+    /**********************
+     * FŐ SZÍNEZŐ LOGIKA
+     **********************/
+    function recolorAll() {
+        const c = getThemeColors();
 
         document.querySelectorAll(".msg").forEach(msg => {
             const body = msg.querySelector(".msg-body");
             if (!body) return;
-            const text = body.textContent.toLowerCase();
-            const author =
-                  msg.querySelector(".msg-head-author .user-title a")?.textContent || "";
-            const reply =
-                  msg.querySelector(".msg-head-replied .user-title a")?.textContent || "";
 
-            if (AKCIO_KEYWORDS.some(kw => text.includes(kw.toLowerCase()))) {
-                body.style.setProperty("background-color", AKCIO, "important");
-            } else if (lower(author) === lower(FELHASZNALO)) {
-                body.style.setProperty("background-color", SAJAT, "important");
-            } else if (lower(reply) === lower(FELHASZNALO)) {
-                body.style.setProperty("background-color", VALASZ, "important");
-            } else {
-                body.style.removeProperty("background-color");
+            body.style.backgroundColor = "";
+            body.style.borderLeft = "";
+
+            const text = body.textContent.toLowerCase();
+            const author = getAuthor(msg);
+            const replied = getRepliedTo(msg);
+
+            // 1️⃣ #akció – mindig nyer
+            if (AKCIO_KEYWORDS.some(k => text.includes(k))) {
+                body.style.setProperty("background-color", c.AKCIO, "important");
+                return;
+            }
+
+            // 2️⃣ Avatar fókusz
+            if (selectedUser) {
+                if (author === selectedUser) {
+                    body.style.backgroundColor = c.FOCUS_AUTHOR;
+                    body.style.borderLeft = `6px solid ${c.FOCUS_BORDER}`;
+                    return;
+                }
+                if (replied === selectedUser) {
+                    body.style.backgroundColor = c.FOCUS_REPLY;
+                    body.style.borderLeft = `4px solid ${c.FOCUS_BORDER}`;
+                    return;
+                }
+            }
+
+            // 3️⃣ Saját / válasz
+            if (lower(author) === lower(FELHASZNALO)) {
+                body.style.backgroundColor = c.SAJAT;
+            } else if (lower(replied) === lower(FELHASZNALO)) {
+                body.style.backgroundColor = c.VALASZ;
             }
         });
     }
 
-    function init() {
-        recolorAll(detectDark());
+    /**********************
+     * AVATAR KATTINTÁS
+     **********************/
+    function onAvatarClick(e) {
+        e.preventDefault();
+        e.stopPropagation();
 
-        const darkLinks = document.querySelectorAll('link[href*="dark_"]');
-        const observer = new MutationObserver(() => {
-            recolorAll(detectDark());
-        });
+        const msg = e.target.closest(".msg");
+        if (!msg) return;
 
-        darkLinks.forEach(link => {
-            observer.observe(link, { attributes: true, attributeFilter: ['media'] });
-        });
+        const author = getAuthor(msg);
+        if (!author) return;
 
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-            recolorAll(detectDark());
+        selectedUser = (selectedUser === author) ? null : author;
+        recolorAll();
+    }
+
+    function attachAvatarHandlers() {
+        document.querySelectorAll(".msg-user img").forEach(img => {
+            img.style.cursor = "pointer";
+            img.removeEventListener("click", onAvatarClick);
+            img.addEventListener("click", onAvatarClick);
         });
     }
 
-    function waitForDarkLinkAndInit() {
-        const darkLink = document.querySelector('link[href*="dark_base"]');
-        if (darkLink) {
+    /**********************
+     * INIT + OBSERVEREK
+     **********************/
+    function init() {
+        attachAvatarHandlers();
+        recolorAll();
+    }
+
+    const observer = new MutationObserver(() => {
+        attachAvatarHandlers();
+        recolorAll();
+    });
+
+    function waitForThemeAndInit() {
+        if (document.querySelector('link[href*="dark_base"]')) {
             init();
         } else {
-            const observer = new MutationObserver(() => {
+            const o = new MutationObserver(() => {
                 if (document.querySelector('link[href*="dark_base"]')) {
-                    observer.disconnect();
+                    o.disconnect();
                     init();
                 }
             });
-            observer.observe(document.head, { childList: true });
+            o.observe(document.head, { childList: true });
         }
     }
 
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class"]
+    });
+
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", waitForDarkLinkAndInit, { once: true });
+        document.addEventListener("DOMContentLoaded", waitForThemeAndInit, { once: true });
     } else {
-        waitForDarkLinkAndInit();
+        waitForThemeAndInit();
     }
+
+    window.matchMedia("(prefers-color-scheme: dark)")
+        .addEventListener("change", recolorAll);
+
 })();
