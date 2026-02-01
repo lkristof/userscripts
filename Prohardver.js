@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prohardver – fórum színezés
 // @namespace    ph
-// @version      3.0.0
-// @description  Saját / rád válaszoló / #akció kiemelés + avatar kattintásos user fókusz, light/dark módban
+// @version      4.0.0
+// @description  Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés, világos/sötét módban
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://itcafe.hu/tema/*
@@ -22,6 +22,7 @@
     const AKCIO_KEYWORDS = ["#akció", "#akcio"];
 
     let selectedUser = null;
+    let activeChainIds = new Set();
 
     const COLORS = {
         light: {
@@ -29,18 +30,22 @@
             VALASZ: "#CFE0C3",
             AKCIO: "#FFC0C0",
 
-            FOCUS_AUTHOR: "#FFF3A0",
-            FOCUS_REPLY:  "#FFF9D6",
-            FOCUS_BORDER: "#FF9800"
+            FOCUS_AUTHOR: "#FFA966",
+            FOCUS_REPLY:  "#F6CEAF",
+
+            CHAIN_BG: "#FFF6C8",
+            CHAIN_BORDER: "#FF9800"
         },
         dark: {
             SAJAT: "#2F4A57",
             VALASZ: "#344A3A",
             AKCIO: "#8B0000",
 
-            FOCUS_AUTHOR: "#4A4215",
-            FOCUS_REPLY:  "#3A3312",
-            FOCUS_BORDER: "#FFB300"
+            FOCUS_AUTHOR: "#5B327A",
+            FOCUS_REPLY:  "#3A1F4F",
+
+            CHAIN_BG: "#4A4015",
+            CHAIN_BORDER: "#FFB300"
         }
     };
 
@@ -59,10 +64,8 @@
                 return window.matchMedia("(prefers-color-scheme: dark)").matches;
             }
         }
-
         const btn = document.querySelector(".theme-button span");
         if (btn) return btn.classList.contains("fa-sun-bright");
-
         return false;
     }
 
@@ -71,7 +74,7 @@
     }
 
     /**********************
-     * SEGÉD: USER INFÓ
+     * SEGÉDEK
      **********************/
     function getAuthor(msg) {
         return msg.querySelector(".msg-head-author .user-title a")?.textContent?.trim() || "";
@@ -81,8 +84,46 @@
         return msg.querySelector(".msg-head-replied .user-title a")?.textContent?.trim() || "";
     }
 
+    function getAllLis() {
+        return Array.from(document.querySelectorAll("li.media[data-id]"));
+    }
+
     /**********************
-     * FŐ SZÍNEZŐ LOGIKA
+     * LÁNC LOGIKA
+     **********************/
+    function buildChain(startLi) {
+        activeChainIds.clear();
+
+        const all = getAllLis();
+        const byId = Object.fromEntries(all.map(li => [li.dataset.id, li]));
+
+        const startId = startLi.dataset.id;
+        activeChainIds.add(startId);
+
+        // ⬆ felfelé
+        let current = startLi;
+        while (current.dataset.rplid) {
+            const prev = byId[current.dataset.rplid];
+            if (!prev) break;
+            activeChainIds.add(prev.dataset.id);
+            current = prev;
+        }
+
+        // ⬇ lefelé
+        function findReplies(parentId) {
+            all.forEach(li => {
+                if (li.dataset.rplid === parentId && !activeChainIds.has(li.dataset.id)) {
+                    activeChainIds.add(li.dataset.id);
+                    findReplies(li.dataset.id);
+                }
+            });
+        }
+
+        findReplies(startId);
+    }
+
+    /**********************
+     * FŐ SZÍNEZÉS
      **********************/
     function recolorAll() {
         const c = getThemeColors();
@@ -98,7 +139,10 @@
             const author = getAuthor(msg);
             const replied = getRepliedTo(msg);
 
-            // 1️⃣ #akció – mindig nyer
+            const li = msg.closest("li.media[data-id]");
+            const msgId = li?.dataset?.id;
+
+            // 1️⃣ #akció
             if (AKCIO_KEYWORDS.some(k => text.includes(k))) {
                 body.style.setProperty("background-color", c.AKCIO, "important");
                 return;
@@ -108,17 +152,22 @@
             if (selectedUser) {
                 if (author === selectedUser) {
                     body.style.backgroundColor = c.FOCUS_AUTHOR;
-                    body.style.borderLeft = `6px solid ${c.FOCUS_BORDER}`;
                     return;
                 }
                 if (replied === selectedUser) {
                     body.style.backgroundColor = c.FOCUS_REPLY;
-                    body.style.borderLeft = `4px solid ${c.FOCUS_BORDER}`;
                     return;
                 }
             }
 
-            // 3️⃣ Saját / válasz
+            // 3️⃣ Lánc kiemelés (OLDALSÁV!)
+            if (msgId && activeChainIds.has(msgId)) {
+                body.style.backgroundColor = c.CHAIN_BG;
+                body.style.borderLeft = `5px solid ${c.CHAIN_BORDER}`;
+                return;
+            }
+
+            // 4️⃣ Saját / válasz
             if (lower(author) === lower(FELHASZNALO)) {
                 body.style.backgroundColor = c.SAJAT;
             } else if (lower(replied) === lower(FELHASZNALO)) {
@@ -140,6 +189,9 @@
         const author = getAuthor(msg);
         if (!author) return;
 
+        // HA AVATART KATTINTASZ: Töröljük a láncot
+        activeChainIds.clear();
+
         selectedUser = (selectedUser === author) ? null : author;
         recolorAll();
     }
@@ -153,43 +205,61 @@
     }
 
     /**********************
-     * INIT + OBSERVEREK
+     * LÁNC LINK
+     **********************/
+    function attachChainLinks() {
+        document.querySelectorAll(".msg-head-options").forEach(opts => {
+            if (opts.querySelector(".chain-link")) return;
+
+            const wrapper = document.createElement("span");
+            wrapper.className = "chain-link";
+
+            wrapper.style.cursor = "pointer";
+            wrapper.style.marginLeft = "8px";
+            wrapper.style.display = "inline-flex";
+            wrapper.style.alignItems = "center";
+
+            wrapper.innerHTML = '<span class="fas fa-link fa-fw"></span>&nbsp;Lánc';
+
+            wrapper.addEventListener("click", e => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const li = opts.closest("li.media[data-id]");
+                if (!li) return;
+
+                // HA LÁNCRA KATTINTASZ: Töröljük a kijelölt felhasználót
+                selectedUser = null;
+
+                if (activeChainIds.has(li.dataset.id)) {
+                    activeChainIds.clear();
+                } else {
+                    buildChain(li);
+                }
+
+                recolorAll();
+            });
+
+            opts.prepend(wrapper);
+        });
+    }
+
+    /**********************
+     * INIT
      **********************/
     function init() {
         attachAvatarHandlers();
+        attachChainLinks();
         recolorAll();
     }
 
-    const observer = new MutationObserver(() => {
-        attachAvatarHandlers();
-        recolorAll();
-    });
-
-    function waitForThemeAndInit() {
-        if (document.querySelector('link[href*="dark_base"]')) {
-            init();
-        } else {
-            const o = new MutationObserver(() => {
-                if (document.querySelector('link[href*="dark_base"]')) {
-                    o.disconnect();
-                    init();
-                }
-            });
-            o.observe(document.head, { childList: true });
-        }
-    }
-
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ["class"]
-    });
+    const observer = new MutationObserver(init);
+    observer.observe(document.body, { childList: true, subtree: true });
 
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", waitForThemeAndInit, { once: true });
+        document.addEventListener("DOMContentLoaded", init, { once: true });
     } else {
-        waitForThemeAndInit();
+        init();
     }
 
     window.matchMedia("(prefers-color-scheme: dark)")
