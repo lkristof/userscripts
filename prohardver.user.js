@@ -145,7 +145,6 @@
             // 1️⃣ #akció
             if (AKCIO_KEYWORDS.some(k => text.includes(k))) {
                 body.style.setProperty("background-color", c.AKCIO, "important");
-                return;
             }
 
             // 2️⃣ Avatar fókusz
