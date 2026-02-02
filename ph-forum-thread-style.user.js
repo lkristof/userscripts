@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    ph
-// @version      1.0.0
+// @version      1.0.1
 // @description  Reddit-style thread elrendezés
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -19,6 +19,9 @@
     const LINE_COLOR   = "#C1BFB6";
     const LINE_OPACITY = 1;
     const LINE_THICK   = 1;
+
+    const PINNED_TEXT  = '(rögzített hozzászólás)';
+    let threadContainerHeader = null; // ahol a gomb van
 
     /* ===== CSS ===== */
     const style = document.createElement('style');
@@ -58,12 +61,27 @@
     `;
     document.head.appendChild(style);
 
-    /* ===== Thread renderelés funkció ===== */
+    /* ===== Thread renderelés ===== */
     function renderThreading() {
-        const items = [...document.querySelectorAll('li.media[data-id]')];
-        if (!items.length) return;
+        if (!threadContainerHeader) return;
 
-        const ul = items[0].closest('ul.list-unstyled');
+        // az első UL, ami KÖZVETLENÜL a h4 alatt van
+        let ul = threadContainerHeader.nextElementSibling;
+        while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
+            ul = ul.nextElementSibling;
+        }
+        if (!ul) return;
+
+        // rögzített hozzászólás (szöveg alapján)
+        const pinned = [...ul.querySelectorAll('li.media')]
+            .find(li => li.textContent.includes(PINNED_TEXT));
+
+        const pinnedNext = pinned?.nextSibling;
+
+        // csak a threadelhető elemek
+        const items = [...ul.querySelectorAll('li.media[data-id]')]
+            .filter(li => li !== pinned);
+        if (!items.length) return;
 
         const postMap = {};
         const childrenMap = {};
@@ -75,12 +93,21 @@
             const id = li.dataset.id;
             let parent = li.dataset.rplid || null;
             if (parent && !allIds.has(parent)) parent = null;
+
             postMap[id] = li;
             if (!childrenMap[parent]) childrenMap[parent] = [];
             childrenMap[parent].push(id);
         });
 
+        // UL újraépítés, pinned érintetlen
         ul.innerHTML = '';
+        if (pinned) {
+            if (pinnedNext) {
+                ul.insertBefore(pinned, pinnedNext);
+            } else {
+                ul.appendChild(pinned);
+            }
+        }
 
         function renderThread(id, depth, ancestorPath = []) {
             const el = postMap[id];
@@ -93,9 +120,8 @@
 
             if (depth === 0) {
                 ul.appendChild(el);
-                const kids = childrenMap[id] || [];
-                kids.forEach((childId, i) => {
-                    renderThread(childId, 1, [i === kids.length - 1]);
+                (childrenMap[id] || []).forEach((childId, i, arr) => {
+                    renderThread(childId, 1, [i === arr.length - 1]);
                 });
                 return;
             }
@@ -130,20 +156,20 @@
 
             ul.appendChild(el);
 
-            const kids = childrenMap[id] || [];
-            kids.forEach((childId, i) => {
-                renderThread(childId, depth + 1, [...ancestorPath, i === kids.length - 1]);
+            (childrenMap[id] || []).forEach((childId, i, arr) => {
+                renderThread(childId, depth + 1, [...ancestorPath, i === arr.length - 1]);
             });
         }
 
-        const roots = childrenMap[null] || [];
-        roots.forEach(id => renderThread(id, 0, []));
+        (childrenMap[null] || []).forEach(id => renderThread(id, 0, []));
     }
 
-    /* ===== Új gomb létrehozása ===== */
+    /* ===== Gomb ===== */
     function addThreadButton() {
         const container = document.querySelector('h4.list-message');
         if (!container) return;
+
+        threadContainerHeader = container;
 
         const btn = document.createElement('a');
         btn.href = 'javascript:;';
@@ -151,15 +177,10 @@
         btn.innerHTML = `<span class="fas fa-project-diagram"></span> Thread nézet`;
         btn.style.marginLeft = '5px';
 
-        btn.addEventListener('click', () => {
-            renderThreading();
-        });
-
+        btn.addEventListener('click', renderThreading);
         container.appendChild(btn);
     }
 
-    // Gomb létrehozása oldalletöltéskor
     addThreadButton();
 
 })();
-
