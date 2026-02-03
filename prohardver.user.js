@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver – fórum színezés
 // @namespace    ph
-// @version      4.0.4
+// @version      4.1.0
 // @description  Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés, világos/sötét módban
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -18,7 +18,10 @@
     /**********************
      * BEÁLLÍTÁSOK
      **********************/
-    const FELHASZNALO = "lkristóf";
+    const FELHASZNALO = (() => {
+        const el = document.querySelector('.dropdown-menu h6 a[href^="/tag/"]');
+        return el ? el.textContent.trim() : "__NINCS_BEJELENTKEZVE__";
+    })();
     const AKCIO_KEYWORDS = ["#akció", "#akcio"];
 
     let selectedUser = null;
