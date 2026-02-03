@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver – fórum színezés
 // @namespace    ph
-// @version      4.0.3
+// @version      4.0.4
 // @description  Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés, világos/sötét módban
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -144,7 +144,7 @@
 
             // 1️⃣ #akció
             if (AKCIO_KEYWORDS.some(k => text.includes(k))) {
-                body.style.setProperty("background-color", c.AKCIO, "important");
+                body.style.setProperty("background-color", c.AKCIO);
             }
 
             // 2️⃣ Avatar fókusz
