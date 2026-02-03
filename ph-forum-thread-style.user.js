@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    ph
-// @version      1.0.1
+// @version      1.1.0
 // @description  Reddit-style thread elrendezés
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -19,9 +19,11 @@
     const LINE_COLOR   = "#C1BFB6";
     const LINE_OPACITY = 1;
     const LINE_THICK   = 1;
-
     const PINNED_TEXT  = '(rögzített hozzászólás)';
-    let threadContainerHeader = null; // ahol a gomb van
+
+    let threadContainerHeader = null;
+    let threadActive = false;
+    let originalHTML = ''; // itt mentjük a HTML snapshotot
 
     /* ===== CSS ===== */
     const style = document.createElement('style');
@@ -65,22 +67,25 @@
     function renderThreading() {
         if (!threadContainerHeader) return;
 
-        // az első UL, ami KÖZVETLENÜL a h4 alatt van
         let ul = threadContainerHeader.nextElementSibling;
         while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
             ul = ul.nextElementSibling;
         }
         if (!ul) return;
 
-        // rögzített hozzászólás (szöveg alapján)
+        // első kattintáskor mentjük az eredeti HTML-t
+        if (!threadActive) {
+            originalHTML = ul.innerHTML;
+        }
+
         const pinned = [...ul.querySelectorAll('li.media')]
             .find(li => li.textContent.includes(PINNED_TEXT));
-
         const pinnedNext = pinned?.nextSibling;
 
         // csak a threadelhető elemek
         const items = [...ul.querySelectorAll('li.media[data-id]')]
             .filter(li => li !== pinned);
+
         if (!items.length) return;
 
         const postMap = {};
@@ -99,14 +104,10 @@
             childrenMap[parent].push(id);
         });
 
-        // UL újraépítés, pinned érintetlen
         ul.innerHTML = '';
         if (pinned) {
-            if (pinnedNext) {
-                ul.insertBefore(pinned, pinnedNext);
-            } else {
-                ul.appendChild(pinned);
-            }
+            if (pinnedNext) ul.insertBefore(pinned, pinnedNext);
+            else ul.appendChild(pinned);
         }
 
         function renderThread(id, depth, ancestorPath = []) {
@@ -162,9 +163,24 @@
         }
 
         (childrenMap[null] || []).forEach(id => renderThread(id, 0, []));
+        threadActive = true;
     }
 
-    /* ===== Gomb ===== */
+    /* ===== Visszaállítás az eredeti HTML-re ===== */
+    function restoreOriginalHTML() {
+        if (!threadContainerHeader || !originalHTML) return;
+
+        let ul = threadContainerHeader.nextElementSibling;
+        while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
+            ul = ul.nextElementSibling;
+        }
+        if (!ul) return;
+
+        ul.innerHTML = originalHTML;
+        threadActive = false;
+    }
+
+    /* ===== Gomb létrehozása ===== */
     function addThreadButton() {
         const container = document.querySelector('h4.list-message');
         if (!container) return;
@@ -177,7 +193,11 @@
         btn.innerHTML = `<span class="fas fa-project-diagram"></span> Thread nézet`;
         btn.style.marginLeft = '5px';
 
-        btn.addEventListener('click', renderThreading);
+        btn.addEventListener('click', () => {
+            if (threadActive) restoreOriginalHTML();
+            else renderThreading();
+        });
+
         container.appendChild(btn);
     }
 
