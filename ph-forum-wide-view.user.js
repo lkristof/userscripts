@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum - Széles nézet
 // @namespace    ph
-// @version      1.2.0
+// @version      1.2.1
 // @description  Dinamikus széles nézet: képernyőszélesség -20%
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -15,11 +15,11 @@
     'use strict';
 
     // ---- Beállítások ----
-    const LEFT_PX = 260;
-    const RIGHT_PX = 260;
+    const LEFT_PX = 230;
+    const RIGHT_PX = 230;
     const GAP_PX = 0;
     const SIDE_MARGIN_RATIO = 0.20;
-    const MIN_CENTER_PX = 900;
+    const MIN_CENTER_PX = 710;
 
     const STYLE_ID = 'ph-wide-center-style';
     const ROW_CLASS = 'ph-center-row';
