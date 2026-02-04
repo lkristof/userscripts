@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum - Széles nézet
 // @namespace    ph
-// @version      1.0.0
+// @version      1.1.0
 // @description  Megszélesíti a fórum nézetet, Full HD felbontás mellett ajánlott
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -22,31 +22,30 @@
     const STYLE_ID = 'ph-wide-center-style';
     const ROW_CLASS = 'ph-center-row';
 
+    const STORAGE_KEY = 'ph_wide_view';
+    const STATUS = { ON: 'enabled', OFF: 'disabled' };
+
     // ---- Segédfüggvények ----
     const totalWidth = () => LEFT_PX + CENTER_PX + RIGHT_PX + (2 * GAP_PX);
 
     function buildCSS() {
         const TOTAL = totalWidth();
         return `
-      /* A fő wrapper pontosan akkora legyen, mint a három oszlop együtt – és legyen középen */
       .container, .container-fluid, #container, .site-container {
         max-width: ${TOTAL}px !important;
         width: ${TOTAL}px !important;
         margin-left: auto !important;
         margin-right: auto !important;
       }
-
-      /* Csak azt a sort igazítjuk középre, amelyik a #center-t tartalmazza */
       .${ROW_CLASS} {
         display: flex !important;
         flex-wrap: nowrap !important;
-        justify-content: center !important; /* vízszintesen középre */
+        justify-content: center !important;
         gap: ${GAP_PX}px !important;
-        margin-left: 0 !important;  /* bootstrap negatív margók kiiktatása ennél a sornál */
+        margin-left: 0 !important;
         margin-right: 0 !important;
       }
 
-      /* Fix pixeles szélességek */
       #left {
         width: ${LEFT_PX}px !important;
         min-width: ${LEFT_PX}px !important;
@@ -58,7 +57,7 @@
         min-width: ${CENTER_PX}px !important;
         max-width: ${CENTER_PX}px !important;
         flex: 0 0 ${CENTER_PX}px !important;
-        overflow-x: auto !important; /* ha valami szélesebb, ne törjön, hanem görgessen vízszintesen */
+        overflow-x: auto !important;
       }
       #right {
         width: ${RIGHT_PX}px !important;
@@ -67,7 +66,6 @@
         flex: 0 0 ${RIGHT_PX}px !important;
       }
 
-      /* Ha col-* osztályok százalékot kényszerítenek, írjuk felül csak ezeken az elemeken */
       #left[class*="col-"]   { flex: 0 0 ${LEFT_PX}px !important;   width: ${LEFT_PX}px !important; }
       #center[class*="col-"] { flex: 0 0 ${CENTER_PX}px !important; width: ${CENTER_PX}px !important; }
       #right[class*="col-"]  { flex: 0 0 ${RIGHT_PX}px !important;  width: ${RIGHT_PX}px !important; }
@@ -79,17 +77,21 @@
         return center ? center.closest('.row') : null;
     }
 
+    function saveState(active) {
+        localStorage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
+    }
+
+    function shouldBeActive() {
+        return localStorage.getItem(STORAGE_KEY) === STATUS.ON;
+    }
+
     function applyLayout() {
         if (!document.getElementById(STYLE_ID)) {
             const style = document.createElement('style');
             style.id = STYLE_ID;
             style.textContent = buildCSS();
             document.documentElement.appendChild(style);
-        } else {
-            const style = document.getElementById(STYLE_ID);
-            style.textContent = buildCSS();
         }
-
         const row = getCenterRow();
         if (row && !row.classList.contains(ROW_CLASS)) {
             row.classList.add(ROW_CLASS);
@@ -97,11 +99,8 @@
     }
 
     function removeLayout() {
-        // 1) Stílus eltávolítása
         const style = document.getElementById(STYLE_ID);
         if (style) style.remove();
-
-        // 2) Címke levétele a soról
         const row = getCenterRow();
         if (row && row.classList.contains(ROW_CLASS)) {
             row.classList.remove(ROW_CLASS);
@@ -112,43 +111,47 @@
         return !!document.getElementById(STYLE_ID);
     }
 
-    // ---- Gomb beszúrása a megadott gombsorba ----
     function insertButton() {
         const toolbar = document.querySelector('h4.list-message');
-        if (!toolbar) return false;
+        const center = document.querySelector('#center');
+        if (!toolbar || !center) return false;
 
         const btn = document.createElement('a');
         btn.href = 'javascript:;';
         btn.className = 'btn btn-forum';
         btn.style.userSelect = 'none';
+        btn.style.marginLeft = '5px';
 
         const spanIcon = document.createElement('span');
-        spanIcon.className = 'fas fa-expand-arrows-alt fa-fw'; // egy „széthúzás” ikon
+        spanIcon.className = 'fas fa-expand-arrows-alt fa-fw';
         btn.appendChild(spanIcon);
         btn.appendChild(document.createTextNode(' Széles nézet'));
 
-        const setLabel = () => {
-            btn.title = isActive()
-                ? 'Vissza az eredeti szélességre'
-                : 'Szélesebb nézet bekapcsolása';
-            if (isActive()) {
-                btn.classList.add('btn-primary');
-            } else {
-                btn.classList.remove('btn-primary');
-            }
+        const updateUI = () => {
+            btn.title = isActive() ? 'Eredeti szélesség' : 'Szélesebb nézet';
+            if (isActive()) btn.classList.add('btn-primary');
+            else btn.classList.remove('btn-primary');
         };
-        setLabel();
 
         btn.addEventListener('click', () => {
             if (isActive()) {
                 removeLayout();
+                saveState(false);
             } else {
                 applyLayout();
+                saveState(true);
             }
-            setLabel();
+            updateUI();
         });
 
         toolbar.appendChild(btn);
+
+        // --- Kezdeti állapot aktiválása, ha mentve volt ---
+        if (shouldBeActive()) {
+            applyLayout();
+        }
+        updateUI();
+
         return true;
     }
 
