@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Prohardver - link átirányító
+// @name         Prohardver Fórum – Link átirányító
 // @namespace    ph
-// @version      1.0.1
-// @description  A PH-lapcsalád fórumhivatkozásait a jelenlegi oldalra irányítja át
+// @version      1.0.2
+// @description  PH-lapcsalád linkeket az aktuális oldalra irányítja.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*
@@ -10,6 +10,7 @@
 // @match        https://logout.hu/cikk/*
 // @match        https://fototrend.hu/tema/*
 // @grant        none
+// @run-at       document-idle
 // ==/UserScript==
 
 (function () {

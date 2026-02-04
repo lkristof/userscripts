@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Prohardver Fórum - Széles nézet
+// @name         Prohardver Fórum – Széles nézet
 // @namespace    ph
-// @version      1.2.2
-// @description  Dinamikus széles nézet: képernyőszélesség -20%
+// @version      1.2.3
+// @description  Dinamikus széles nézet (ablakméret -20%).
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*

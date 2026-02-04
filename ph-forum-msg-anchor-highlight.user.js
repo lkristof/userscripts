@@ -1,15 +1,14 @@
 // ==UserScript==
-// @name         Prohardver – msg anchor highlight
+// @name         Prohardver Fórum – Üzenet hivatkozás kiemelés
 // @namespace    ph
-// @version      1.1.0
-// @description  Kiemeli az aktuális #msg hozzászólást, ha nincs jelen akkor a legközelebbit.
+// @version      1.1.1
+// @description  Kiemeli az aktuális #msg hozzászólást; ha nincs, a legközelebbit.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
-// @match        https://itcafe.hu/tema/*
-// @match        https://gamepod.hu/tema/*
 // @match        https://logout.hu/tema/*
 // @match        https://fototrend.hu/tema/*
 // @grant        none
+// @run-at       document-idle
 // ==/UserScript==
 
 (function () {

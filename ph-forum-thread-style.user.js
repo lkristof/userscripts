@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    ph
-// @version      1.3.0
-// @description  Reddit-style thread elrendezés
+// @version      1.3.1
+// @description  Reddit-style thread megjelenítés.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*
