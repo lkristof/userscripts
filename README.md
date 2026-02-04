@@ -37,7 +37,7 @@ A scriptek futtatásához kell egy userscript kezelő:
 Több kisebb fejlesztést egyesít egyetlen scriptben.
 
 👉 **Telepítés:**  
-https://raw.githubusercontent.com/lkristof/userscripts/main/prohardver.user.js
+https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-colorize.user.js
 
 ---
 
@@ -46,7 +46,7 @@ Az `[OFF]` jelölésű hozzászólások elrejtése és visszakapcsolása gombnyo
 Hasznos, ha a témán belüli zajt szeretnéd csökkenteni.
 
 👉 **Telepítés:**  
-https://raw.githubusercontent.com/lkristof/userscripts/main/prohardver-off-hider.user.js
+https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-off-hider.user.js
 
 ---
 
@@ -64,7 +64,7 @@ A PH-lapcsaládhoz tartozó fórumlinkeket automatikusan az aktuális oldalra ir
 Megszünteti az oldalak közti felesleges átugrálást.
 
 👉 **Telepítés:**  
-https://raw.githubusercontent.com/lkristof/userscripts/main/prohardver-link-redirect.user.js
+https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-link-redirect.user.js
 
 ---
 
@@ -82,7 +82,7 @@ Hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenít�
 Könnyebbé teszi a beszélgetések követését.
 
 👉 **Telepítés:**  
-https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-thread-style.user.js
+https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-thread-view.user.js
 
 ---
 
