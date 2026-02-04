@@ -33,7 +33,8 @@ A scriptek futtatásához kell egy userscript kezelő:
 ### 🟠 Prohardver
 
 #### 🔹 Prohardver – fő kiegészítő script
-Különböző fórum UX javítások (kiemelések, fókusz, extra funkciók).
+Általános fórum UX javítások: kiemelések, fókusz, extra vizuális és kényelmi funkciók.  
+Több kisebb fejlesztést egyesít egyetlen scriptben.
 
 👉 **Telepítés:**  
 https://raw.githubusercontent.com/lkristof/userscripts/main/prohardver.user.js
@@ -41,15 +42,26 @@ https://raw.githubusercontent.com/lkristof/userscripts/main/prohardver.user.js
 ---
 
 #### 🔹 Prohardver – OFF hozzászólások elrejtése
-Az OFF jelölésű hozzászólások elrejtése gombnyomásra.
+Az `[OFF]` jelölésű hozzászólások elrejtése és visszakapcsolása gombnyomásra.  
+Hasznos, ha a témán belüli zajt szeretnéd csökkenteni.
 
 👉 **Telepítés:**  
 https://raw.githubusercontent.com/lkristof/userscripts/main/prohardver-off-hider.user.js
 
 ---
 
+#### 🔹 Prohardver – szélesebb fórum nézet
+A fórum maximális szélességének kibővítése gombnyomásra.  
+Jobb helykihasználás nagy felbontású kijelzőkön és hosszabb hozzászólásoknál.
+
+👉 **Telepítés:**  
+https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-wide-view.user.js
+
+---
+
 #### 🔹 Prohardver – link átirányító
-PH-családba tartozó linkeket az aktuális oldalra irányítja át.
+A PH-lapcsaládhoz tartozó fórumlinkeket automatikusan az aktuális oldalra irányítja.  
+Megszünteti az oldalak közti felesleges átugrálást.
 
 👉 **Telepítés:**  
 https://raw.githubusercontent.com/lkristof/userscripts/main/prohardver-link-redirect.user.js
@@ -57,7 +69,8 @@ https://raw.githubusercontent.com/lkristof/userscripts/main/prohardver-link-redi
 ---
 
 #### 🔹 PH fórum – üzenet hivatkozás kiemelés
-`#msgXXXX` linkkel hivatkozott hozzászólás automatikus kiemelése.
+`#msgXXXX` hivatkozással megjelölt hozzászólás automatikus kiemelése.  
+Gyorsabb kontextusértés hosszabb threadeknél.
 
 👉 **Telepítés:**  
 https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-msg-anchor-highlight.user.js
@@ -65,7 +78,8 @@ https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-msg-anchor-
 ---
 
 #### 🔹 PH fórum – Reddit-szerű thread megjelenítés
-Hozzászólás-láncok vizuális összekötése, jobb követhetőség.
+Hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése.  
+Könnyebbé teszi a beszélgetések követését.
 
 👉 **Telepítés:**  
 https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-thread-style.user.js
@@ -75,7 +89,8 @@ https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-thread-styl
 ### 🟢 Egyéb oldalak
 
 #### 🔹 nCore kiegészítő script
-Letöltések nézetben 3 vagy több + jellel rendelkező torrentek kiemelése
+A letöltések listájában kiemeli a több pozitív visszajelzéssel rendelkező torrenteket.  
+Segít gyorsabban megtalálni a népszerű tartalmakat.
 
 👉 **Telepítés:**  
 https://raw.githubusercontent.com/lkristof/userscripts/main/ncore.user.js
