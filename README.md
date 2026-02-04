@@ -93,7 +93,7 @@ A letöltések listájában kiemeli a több pozitív visszajelzéssel rendelkez�
 Segít gyorsabban megtalálni a népszerű tartalmakat.
 
 👉 **Telepítés:**  
-https://raw.githubusercontent.com/lkristof/userscripts/main/ncore.user.js
+https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-torrent-highlight.user.js
 
 ---
 
