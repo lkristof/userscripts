@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum - Széles nézet
 // @namespace    ph
-// @version      1.2.1
+// @version      1.2.2
 // @description  Dinamikus széles nézet: képernyőszélesség -20%
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -30,7 +30,7 @@
     // ---- Számítás ----
     function calculateLayout() {
         const viewport = window.innerWidth;
-        const usable = Math.floor(viewport * (1 - SIDE_MARGIN_RATIO));
+        const usable = viewport * (1 - getSideMarginRatio());
         const center = Math.max(
             MIN_CENTER_PX,
             usable - LEFT_PX - RIGHT_PX - (2 * GAP_PX)
@@ -40,6 +40,13 @@
             total: LEFT_PX + center + RIGHT_PX + (2 * GAP_PX),
             center
         };
+    }
+
+    function getSideMarginRatio() {
+        const w = window.innerWidth;
+        if (w < 1400) return 0.10;
+        if (w < 1800) return 0.15;
+        return SIDE_MARGIN_RATIO;
     }
 
     function buildCSS() {
