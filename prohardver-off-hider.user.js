@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Prohardver - OFF elrejtő
+// @name         Prohardver Fórum – OFF hozzászólások elrejtése
 // @namespace    ph
-// @version      1.2.0
-// @description  Elrejti az OFF hozzászólásokat
+// @version      1.2.1
+// @description  Elrejti az OFF jelölésű hozzászólásokat.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*

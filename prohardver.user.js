@@ -1,15 +1,14 @@
 // ==UserScript==
-// @name         Prohardver – fórum színezés
+// @name         Prohardver Fórum – Hozzászólás színezés
 // @namespace    ph
-// @version      4.1.0
-// @description  Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés, világos/sötét módban
+// @version      4.1.1
+// @description  Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
-// @match        https://itcafe.hu/tema/*
-// @match        https://gamepod.hu/tema/*
 // @match        https://logout.hu/tema/*
 // @match        https://fototrend.hu/tema/*
 // @grant        none
+// @run-at       document-idle
 // ==/UserScript==
 
 (function () {
