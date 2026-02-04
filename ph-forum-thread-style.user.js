@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    ph
-// @version      1.1.0
+// @version      1.2.0
 // @description  Reddit-style thread elrendezés
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*
 // @match        https://fototrend.hu/tema/*
-// @run-at       document-idle
 // @grant        none
+// @run-at       document-idle
 // ==/UserScript==
 
 (function () {
@@ -23,7 +23,7 @@
 
     let threadContainerHeader = null;
     let threadActive = false;
-    let originalHTML = ''; // itt mentjük a HTML snapshotot
+    let originalHTML = '';
 
     /* ===== CSS ===== */
     const style = document.createElement('style');
@@ -63,7 +63,7 @@
     `;
     document.head.appendChild(style);
 
-    /* ===== Thread renderelés ===== */
+    /* ===== Thread render ===== */
     function renderThreading() {
         if (!threadContainerHeader) return;
 
@@ -73,16 +73,12 @@
         }
         if (!ul) return;
 
-        // első kattintáskor mentjük az eredeti HTML-t
-        if (!threadActive) {
-            originalHTML = ul.innerHTML;
-        }
+        if (!threadActive) originalHTML = ul.innerHTML;
 
         const pinned = [...ul.querySelectorAll('li.media')]
             .find(li => li.textContent.includes(PINNED_TEXT));
         const pinnedNext = pinned?.nextSibling;
 
-        // csak a threadelhető elemek
         const items = [...ul.querySelectorAll('li.media[data-id]')]
             .filter(li => li !== pinned);
 
@@ -166,7 +162,7 @@
         threadActive = true;
     }
 
-    /* ===== Visszaállítás az eredeti HTML-re ===== */
+    /* ===== Reset ===== */
     function restoreOriginalHTML() {
         if (!threadContainerHeader || !originalHTML) return;
 
@@ -180,7 +176,7 @@
         threadActive = false;
     }
 
-    /* ===== Gomb létrehozása ===== */
+    /* ===== Enhanced toggle button ===== */
     function addThreadButton() {
         const container = document.querySelector('h4.list-message');
         if (!container) return;
@@ -190,12 +186,27 @@
         const btn = document.createElement('a');
         btn.href = 'javascript:;';
         btn.className = 'btn btn-forum';
-        btn.innerHTML = `<span class="fas fa-project-diagram"></span> Thread nézet`;
         btn.style.marginLeft = '5px';
+        btn.id = 'ph-thread-toggle';
+        btn.innerHTML = `<span class="fas fa-project-diagram fa-fw"></span> Thread nézet`;
+
+        function updateAppearance() {
+            if (threadActive) {
+                btn.classList.add('btn-primary');
+                btn.title = 'Thread nézet kikapcsolása';
+            } else {
+                btn.classList.remove('btn-primary');
+                btn.title = 'Thread nézet bekapcsolása';
+            }
+        }
+
+        updateAppearance();
 
         btn.addEventListener('click', () => {
             if (threadActive) restoreOriginalHTML();
             else renderThreading();
+
+            updateAppearance();
         });
 
         container.appendChild(btn);
