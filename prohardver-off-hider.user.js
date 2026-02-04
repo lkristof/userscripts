@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver - OFF elrejtő
 // @namespace    ph
-// @version      1.1.0
+// @version      1.2.0
 // @description  Elrejti az OFF hozzászólásokat
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -14,7 +14,10 @@
 (function () {
     'use strict';
 
-    let offHidden = false;
+    const STORAGE_KEY = "ph_hide_off";
+    const STATUS = { ON: 'enabled', OFF: 'disabled' };
+
+    let offHidden = localStorage.getItem(STORAGE_KEY) === STATUS.ON;
 
     // ===== Gomb létrehozása =====
     const btn = document.createElement('a');
@@ -59,6 +62,9 @@
     // ===== Toggle =====
     function toggleOff() {
         offHidden = !offHidden;
+
+        localStorage.setItem(STORAGE_KEY, offHidden ? STATUS.ON : STATUS.OFF);
+
         applyVisibility();
         updateButtonAppearance();
     }

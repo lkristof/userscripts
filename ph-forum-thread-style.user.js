@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    ph
-// @version      1.2.0
+// @version      1.3.0
 // @description  Reddit-style thread elrendezés
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -20,6 +20,8 @@
     const LINE_OPACITY = 1;
     const LINE_THICK   = 1;
     const PINNED_TEXT  = '(rögzített hozzászólás)';
+    const STORAGE_KEY  = 'ph_thread_view'; // A kért kulcs
+    const STATUS       = { ON: 'enabled', OFF: 'disabled' }; // Új konstans
 
     let threadContainerHeader = null;
     let threadActive = false;
@@ -63,6 +65,15 @@
     `;
     document.head.appendChild(style);
 
+    /* ===== Mentés és Betöltés ===== */
+    function saveState(active) {
+        localStorage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
+    }
+
+    function shouldBeActive() {
+        return localStorage.getItem(STORAGE_KEY) === STATUS.ON;
+    }
+
     /* ===== Thread render ===== */
     function renderThreading() {
         if (!threadContainerHeader) return;
@@ -73,6 +84,7 @@
         }
         if (!ul) return;
 
+        // Csak akkor mentsük el az eredetit, ha még nem aktív a nézet
         if (!threadActive) originalHTML = ul.innerHTML;
 
         const pinned = [...ul.querySelectorAll('li.media')]
@@ -159,7 +171,9 @@
         }
 
         (childrenMap[null] || []).forEach(id => renderThread(id, 0, []));
+
         threadActive = true;
+        saveState(true);
     }
 
     /* ===== Reset ===== */
@@ -174,12 +188,13 @@
 
         ul.innerHTML = originalHTML;
         threadActive = false;
+        saveState(false);
     }
 
-    /* ===== Enhanced toggle button ===== */
-    function addThreadButton() {
+    /* ===== Toggle gomb és inicializálás ===== */
+    function init() {
         const container = document.querySelector('h4.list-message');
-        if (!container) return;
+        if (!container) return false;
 
         threadContainerHeader = container;
 
@@ -190,7 +205,7 @@
         btn.id = 'ph-thread-toggle';
         btn.innerHTML = `<span class="fas fa-project-diagram fa-fw"></span> Thread nézet`;
 
-        function updateAppearance() {
+        function updateButtonUI() {
             if (threadActive) {
                 btn.classList.add('btn-primary');
                 btn.title = 'Thread nézet kikapcsolása';
@@ -200,18 +215,29 @@
             }
         }
 
-        updateAppearance();
-
         btn.addEventListener('click', () => {
             if (threadActive) restoreOriginalHTML();
             else renderThreading();
-
-            updateAppearance();
+            updateButtonUI();
         });
 
         container.appendChild(btn);
+
+        // --- Automatikus aktiválás, ha el volt mentve ---
+        if (shouldBeActive()) {
+            renderThreading();
+            updateButtonUI();
+        }
+
+        return true;
     }
 
-    addThreadButton();
+    // Indítás
+    if (!init()) {
+        const observer = new MutationObserver(() => {
+            if (init()) observer.disconnect();
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
 
 })();
