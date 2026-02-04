@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         nCore – 3+ pluszos torrentek kiemelése
 // @namespace    ncore
-// @version      1.0.1
+// @version      1.0.2
 // @description  3 vagy több + jel esetén kiszínezi a torrent sort
-// @match        https://ncore.pro/*
+// @match        https://ncore.pro/torrents.php*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
