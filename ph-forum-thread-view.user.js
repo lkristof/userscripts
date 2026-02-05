@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    ph
-// @version      1.4.0
+// @version      1.4.1
 // @description  Reddit-style thread megjelenítés.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -269,6 +269,10 @@
         }
 
         document.addEventListener('keydown', (e) => {
+            // --- ha layer-gallery aktív, nincs navigáció ---
+            const gallery = document.querySelector('.layer-gallery');
+            if (gallery) return;
+
             const active = document.activeElement;
             if (
                 !active ||
