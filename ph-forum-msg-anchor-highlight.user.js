@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Üzenet hivatkozás kiemelés
 // @namespace    ph
-// @version      1.1.1
+// @version      1.1.2
 // @description  Kiemeli az aktuális #msg hozzászólást; ha nincs, a legközelebbit.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -131,6 +131,12 @@
     function init() {
         lastHash = window.location.hash;
         highlightHashMsg();
+
+        if (lastHash) {
+            setTimeout(() => {
+                window.location.hash = lastHash;
+            }, 0);
+        }
     }
 
     window.addEventListener("hashchange", onHashChange);
