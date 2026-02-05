@@ -97,6 +97,22 @@ https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-torrent-highli
 
 ---
 
+#### 🔹 nCore – qBittorrent Add
+A torrent oldalakhoz **qBittorrent letöltés gombot** ad, lehetővé téve a torrentek közvetlen hozzáadását a qBittorrent WebUI-hoz.
+
+👉 **Telepítés:**  
+https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-qbittorrent-add.user.js
+
+---
+
+#### 🔹 nCore – Láttam már!
+Dupla kattintással elhalványíthatod a már látott torrenteket a listában, a jelölést pedig vissza is vonhatod.
+
+👉 **Telepítés:**  
+https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-seen.user.js
+
+---
+
 ## ⭐ Tipp
 
 Ha egy script nem működik:
