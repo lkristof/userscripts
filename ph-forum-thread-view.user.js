@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    ph
-// @version      1.3.1
+// @version      1.4.0
 // @description  Reddit-style thread megjelenítés.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -229,7 +229,106 @@
             updateButtonUI();
         }
 
+        initKeyboardNavigation();
+
         return true;
+    }
+
+    /* ===== Billentyűzetes navigáció ===== */
+    function initKeyboardNavigation() {
+        function getMinMaxPostId() {
+            const posts = getPosts();
+            const ids = posts.map(p => parseInt(p.dataset.id, 10));
+            const min = Math.min(...ids);
+            const max = Math.max(...ids);
+            return { min, max };
+        }
+
+        function getPosts() {
+            return [...document.querySelectorAll('li.media[data-id]')];
+        }
+
+        function getCurrentIndex(posts) {
+            const hash = location.hash.replace('#msg', '');
+            return posts.findIndex(li => li.dataset.id === hash);
+        }
+
+        function jumpToIndex(posts, index) {
+            if (index < 0 || index >= posts.length) return;
+            location.hash = '#msg' + posts[index].dataset.id;
+        }
+
+        function getMsgIdFromHash() {
+            const m = location.hash.match(/^#msg(\d+)$/);
+            return m ? parseInt(m[1], 10) : null;
+        }
+
+        function setMsgId(id) {
+            if (id < 0) return;
+            location.hash = '#msg' + id;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            if (
+                !active ||
+                active.isContentEditable ||
+                ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)
+            ) return;
+
+            const posts = getPosts();
+            if (!posts.length) return;
+
+            let currentIndex = getCurrentIndex(posts);
+            if (currentIndex === -1) currentIndex = 0;
+
+            const current = posts[currentIndex];
+            const currentId = current.dataset.id;
+
+            /* ===== SHIFT: thread logika ===== */
+            // --- SHIFT + ↑ / ↓ : URL msg id +/- 1 ---
+            if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                const currentId = getMsgIdFromHash();
+                if (currentId === null) return;
+
+                const { min, max } = getMinMaxPostId();
+
+                e.preventDefault();
+
+                let newId = currentId + (e.key === 'ArrowUp' ? -1 : 1);
+
+                // határok ellenőrzése
+                if (newId < min) newId = min;
+                if (newId > max) newId = max;
+
+                setMsgId(newId);
+                return;
+            }
+
+
+            /* ===== ALAP: lineáris navigáció ===== */
+            switch (e.key) {
+                case 'ArrowUp': // előző komment
+                    e.preventDefault();
+                    jumpToIndex(posts, Math.max(0, currentIndex - 1));
+                    break;
+
+                case 'ArrowDown': // következő komment
+                    e.preventDefault();
+                    jumpToIndex(posts, Math.min(posts.length - 1, currentIndex + 1));
+                    break;
+
+                case 'ArrowLeft': // első
+                    e.preventDefault();
+                    jumpToIndex(posts, 0);
+                    break;
+
+                case 'ArrowRight': // utolsó
+                    e.preventDefault();
+                    jumpToIndex(posts, posts.length - 1);
+                    break;
+            }
+        });
     }
 
     // Indítás
