@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Link átirányító
 // @namespace    ph
-// @version      1.0.2
+// @version      1.1.0
 // @description  PH-lapcsalád linkeket az aktuális oldalra irányítja.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -20,38 +20,57 @@
         .replace(/^www\./, '')
         .replace(/^m\./, '');
 
-    function replace_links(elem) {
+    const phSites = ["prohardver", "mobilarena", "gamepod", "itcafe", "logout", "fototrend"];
+    const forbiddenPaths = [
+        "/nyeremenyjatek",
+        "/cikk",
+        "/hir"
+    ];
+
+    const re = new RegExp(
+        `^(https?:\\/\\/)?(www\\.)?(m\\.)?(${phSites.join('|')})\\.hu(\\/.*)$`,
+        "i"
+    );
+
+    function shouldReplace(site, path) {
+        // logout.hu → csak fórum témák
+        if (site === "logout" && !path.startsWith("/tema")) {
+            return false;
+        }
+
+        // tiltott tartalomtípusok
+        if (forbiddenPaths.some(p => path.startsWith(p))) {
+            return false;
+        }
+
+        return true;
+    }
+
+    function replace_links(root) {
         const links = document.evaluate(
             './/a[@href]',
-            elem,
+            root,
             null,
             XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
             null
         );
-
-        const phSites = ["prohardver","mobilarena","gamepod","itcafe","logout","fototrend"];
-        const re = new RegExp(`^(https?:\\/\\/)?(www\\.)?(m\\.)?(${phSites.join('|')})\\.hu(\\/.*)$`, "i");
 
         for (let i = 0; i < links.snapshotLength; i++) {
             const link = links.snapshotItem(i);
             const match = link.href.match(re);
             if (!match) continue;
 
-            const site = match[4];       // pl. logout
+            const site = match[4];        // pl. logout
+            const path = match[5];        // pl. /tema/xyz
             const originalSite = site + ".hu";
-            const path = match[5];       // pl. /tema/xyz
 
-            // 🔒 logout.hu → csak /tema kezdetűeket cseréljük
-            if (site === "logout" && !path.startsWith("/tema")) {
-                continue;
-            }
+            if (!shouldReplace(site, path)) continue;
+            if (originalSite === currentSite) continue;
 
-            // csak ha másik site-ra mutat
-            if (originalSite !== currentSite) {
-                link.href = "https://" + currentSite + path;
-            }
+            link.href = "https://" + currentSite + path;
         }
     }
 
     replace_links(document);
 })();
+
