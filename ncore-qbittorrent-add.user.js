@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – qBittorrent Add
 // @namespace    ncore
-// @version      1.0.0
+// @version      1.1.0
 // @description  Override torrent() to add qBittorrent button and remove ads
 // @include      https://ncore.pro/torrents.php*
 // @exclude      https://ncore.pro/torrents.php?action*
@@ -74,6 +74,20 @@
                     .replace(/<div class="hr_stuff"><\/div>/gi, '');
 
                 $e.html(cleanData);
+
+                // banner + fancybox újrainit
+                if (typeof BannerEventHandler !== 'undefined') {
+                    BannerEventHandler.init();
+                }
+
+                const $imgs = $e.find('.fancy_groups');
+                if ($imgs.length && typeof $imgs.fancybox === 'function') {
+                    $imgs.fancybox({
+                        onStart: typeof disableKeys === 'function' ? disableKeys : undefined,
+                        onClosed: typeof enableKeys === 'function' ? enableKeys : undefined,
+                        type: 'image'
+                    });
+                }
 
                 const $dlLink = $e.find('.letoltve_txt a[href*="torrents.php?action=download"]');
                 if ($dlLink.length && QB_URL) {
