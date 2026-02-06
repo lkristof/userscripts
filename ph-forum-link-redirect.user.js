@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Link átirányító
 // @namespace    ph
-// @version      1.1.0
+// @version      1.1.1
 // @description  PH-lapcsalád linkeket az aktuális oldalra irányítja.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -34,7 +34,7 @@
 
     function shouldReplace(site, path) {
         // logout.hu → csak fórum témák
-        if (site === "logout" && !path.startsWith("/tema")) {
+        if (site === "logout" && !path.startsWith("/tema") && !path.startsWith("/tag")) {
             return false;
         }
 
@@ -43,10 +43,11 @@
             return false;
         }
 
-        return true;
+        // ha nincs a / után semmi, ne cseréljük
+        return !(path === "/" || path === "");
     }
 
-    function replace_links(root) {
+    function replaceLinks(root) {
         const links = document.evaluate(
             './/a[@href]',
             root,
@@ -71,6 +72,6 @@
         }
     }
 
-    replace_links(document);
+    replaceLinks(document);
 })();
 

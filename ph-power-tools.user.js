@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    ph
-// @version      1.0.3
+// @version      1.0.4
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -437,7 +437,7 @@
 
         function shouldReplace(site, path) {
             // logout.hu → csak fórum témák
-            if (site === "logout" && !path.startsWith("/tema")) {
+            if (site === "logout" && !path.startsWith("/tema") && !path.startsWith("/tag")) {
                 return false;
             }
 
@@ -446,10 +446,11 @@
                 return false;
             }
 
-            return true;
+            // ha nincs a / után semmi, ne cseréljük
+            return !(path === "/" || path === "");
         }
 
-        function replace_links(root) {
+        function replaceLinks(root) {
             const links = document.evaluate(
                 './/a[@href]',
                 root,
@@ -474,7 +475,7 @@
             }
         }
 
-        replace_links(document);
+        replaceLinks(document);
     }
 
     function msgAnchorHighlight() {
