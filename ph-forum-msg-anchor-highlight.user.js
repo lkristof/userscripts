@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Üzenet hivatkozás kiemelés
 // @namespace    ph
-// @version      1.2.0
+// @version      1.2.1
 // @description  Kiemeli az aktuális #msg hozzászólást; hash hiányában a legközelebbit. Dupla katt a fejlécen kijelöli.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -19,16 +19,14 @@
      **********************/
     const style = document.createElement("style");
     style.textContent = `
-        .hash-highlight {
-            transition: background 0.3s, border 0.3s;
-        }
         body[data-theme="light"] .hash-highlight {
             background-color: #FFF6C8 !important;
-            border: 2px solid #FF9800 !important;
         }
         body[data-theme="dark"] .hash-highlight {
             background-color: #4A4015 !important;
-            border: 2px solid #FFB300 !important;
+        }
+        html {
+            scroll-behavior: smooth;
         }
     `;
     document.head.appendChild(style);
