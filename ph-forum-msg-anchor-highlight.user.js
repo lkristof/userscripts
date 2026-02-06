@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Üzenet hivatkozás kiemelés
 // @namespace    ph
-// @version      1.2.1
+// @version      1.2.2
 // @description  Kiemeli az aktuális #msg hozzászólást; hash hiányában a legközelebbit. Dupla katt a fejlécen kijelöli.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -150,6 +150,9 @@
     }
 
     window.addEventListener("hashchange", onHashChange);
+
+    const observer = new MutationObserver(init);
+    observer.observe(document.body, { childList: true, subtree: true });
 
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", init, { once: true });
