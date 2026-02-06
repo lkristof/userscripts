@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    ph
-// @version      1.0.0
+// @version      1.0.1
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -40,14 +40,14 @@
     const style = document.createElement('style');
     style.textContent = `
         @media only screen and (max-width: 991.98px) {
-            .navbar-buttons .dropdown-menu {
+            .ph-power-btn + .dropdown-menu {
                 display: none !important;
                 position: absolute !important;
-                left: 0 !important;        /* mindig a gomb bal széléhez igazítva */
-                min-width: 150px;          /* ne legyen túl keskeny */
-                max-width: 95vw !important;/* max szélesség a képernyőhöz */
+                left: 0 !important;
+                min-width: 150px;
+                max-width: 95vw !important;
             }
-            .navbar-buttons .dropdown-menu.show {
+            .ph-power-btn + .dropdown-menu.show {
                 display: block !important;
             }
         }
@@ -78,7 +78,7 @@
         li.className = 'dropdown';
 
         li.innerHTML = `
-        <a href="javascript:;" class="btn dropdown-toggle"
+        <a href="javascript:;" class="btn dropdown-toggle ph-power-btn"
            data-toggle="dropdown"
            title="PH Power Tools beállítások">
             <span class="fas fa-sliders-h"></span>
@@ -93,7 +93,7 @@
                    data-key="${key}" 
                    style="display: flex; justify-content: space-between; align-items: center; white-space: nowrap; margin-bottom: 4px;">
                     <span>${prettyName(key)}</span>
-                    <span class="ph-check">${draftSettings[key] ? '✔' : ''}</span>
+                    <span class="ph-check">${draftSettings[key] ? '<span class="fas fa-check"></span>' : ''}</span>
                 </a>
             `).join('')}
 
@@ -109,18 +109,17 @@
 
         const applyBtn = li.querySelector('.ph-apply-btn');
 
+        // Dropdown item click
         li.querySelectorAll('.dropdown-item').forEach(item => {
             item.addEventListener('click', e => {
-                e.stopPropagation(); // ne záródjon be a dropdown
+                e.stopPropagation();
 
                 const key = item.dataset.key;
                 draftSettings[key] = !draftSettings[key];
 
-                // Aktív státusz frissítése
                 item.classList.toggle('btn-primary', draftSettings[key]);
-                item.querySelector('.ph-check').textContent = draftSettings[key] ? '✔' : '';
+                item.querySelector('.ph-check').innerHTML = draftSettings[key] ? '<span class="fas fa-check"></span>' : '';
 
-                // Alkalmaz gomb állapota
                 applyBtn.disabled =
                     JSON.stringify(draftSettings) === JSON.stringify(savedSettings);
             });
@@ -135,7 +134,6 @@
             location.reload();
         });
     }
-
 
     function prettyName(key) {
         return {
