@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    ph
-// @version      1.4.2
+// @version      1.4.3
 // @description  Reddit-style thread megjelenítés.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -25,7 +25,6 @@
 
     let threadContainerHeader = null;
     let threadActive = false;
-    let originalHTML = '';
 
     /* ===== CSS ===== */
     const style = document.createElement('style');
@@ -83,9 +82,6 @@
             ul = ul.nextElementSibling;
         }
         if (!ul) return;
-
-        // Csak akkor mentsük el az eredetit, ha még nem aktív a nézet
-        if (!threadActive) originalHTML = ul.innerHTML;
 
         const pinned = [...ul.querySelectorAll('li.media')]
             .find(li => li.textContent.includes(PINNED_TEXT));
@@ -176,9 +172,22 @@
         saveState(true);
     }
 
+    let originalOrder = [];
+
+    function initOriginalOrder() {
+        let ul = threadContainerHeader.nextElementSibling;
+        while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
+            ul = ul.nextElementSibling;
+        }
+        if (!ul) return;
+
+        // Minden li.media elem referencia mentése
+        originalOrder = [...ul.querySelectorAll('li.media')];
+    }
+
     /* ===== Reset ===== */
-    function restoreOriginalHTML() {
-        if (!threadContainerHeader || !originalHTML) return;
+    function restoreOriginalOrder() {
+        if (!threadContainerHeader) return;
 
         let ul = threadContainerHeader.nextElementSibling;
         while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
@@ -186,7 +195,17 @@
         }
         if (!ul) return;
 
-        ul.innerHTML = originalHTML;
+        // Thread-sorok és marginok eltávolítása
+        ul.querySelectorAll('li.media.ph-thread').forEach(li => {
+            li.classList.remove('ph-thread');
+            li.style.marginLeft = '';
+            const box = li.querySelector('.thread-lines');
+            if (box) li.removeChild(box);
+        });
+
+        // Visszaállítjuk az eredeti sorrendet
+        originalOrder.forEach(li => ul.appendChild(li));
+
         threadActive = false;
         saveState(false);
     }
@@ -197,6 +216,7 @@
         if (!container) return false;
 
         threadContainerHeader = container;
+        initOriginalOrder(); // Eredeti sorrend mentése
 
         const btn = document.createElement('a');
         btn.href = 'javascript:;';
@@ -216,7 +236,7 @@
         }
 
         btn.addEventListener('click', () => {
-            if (threadActive) restoreOriginalHTML();
+            if (threadActive) restoreOriginalOrder();
             else renderThreading();
             updateButtonUI();
         });

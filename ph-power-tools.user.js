@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    ph
-// @version      1.0.1
+// @version      1.0.2
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -837,17 +837,16 @@
 
     function threadView() {
         /* ===== Beállítások ===== */
-        const INDENT = 10;
-        const LINE_COLOR = "#C1BFB6";
+        const INDENT       = 10;
+        const LINE_COLOR   = "#C1BFB6";
         const LINE_OPACITY = 1;
-        const LINE_THICK = 1;
-        const PINNED_TEXT = '(rögzített hozzászólás)';
-        const STORAGE_KEY = 'ph_thread_view'; // A kért kulcs
-        const STATUS = {ON: 'enabled', OFF: 'disabled'}; // Új konstans
+        const LINE_THICK   = 1;
+        const PINNED_TEXT  = '(rögzített hozzászólás)';
+        const STORAGE_KEY  = 'ph_thread_view'; // A kért kulcs
+        const STATUS       = { ON: 'enabled', OFF: 'disabled' }; // Új konstans
 
         let threadContainerHeader = null;
         let threadActive = false;
-        let originalHTML = '';
 
         /* ===== CSS ===== */
         const style = document.createElement('style');
@@ -905,9 +904,6 @@
                 ul = ul.nextElementSibling;
             }
             if (!ul) return;
-
-            // Csak akkor mentsük el az eredetit, ha még nem aktív a nézet
-            if (!threadActive) originalHTML = ul.innerHTML;
 
             const pinned = [...ul.querySelectorAll('li.media')]
                 .find(li => li.textContent.includes(PINNED_TEXT));
@@ -998,9 +994,22 @@
             saveState(true);
         }
 
+        let originalOrder = [];
+
+        function initOriginalOrder() {
+            let ul = threadContainerHeader.nextElementSibling;
+            while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
+                ul = ul.nextElementSibling;
+            }
+            if (!ul) return;
+
+            // Minden li.media elem referencia mentése
+            originalOrder = [...ul.querySelectorAll('li.media')];
+        }
+
         /* ===== Reset ===== */
-        function restoreOriginalHTML() {
-            if (!threadContainerHeader || !originalHTML) return;
+        function restoreOriginalOrder() {
+            if (!threadContainerHeader) return;
 
             let ul = threadContainerHeader.nextElementSibling;
             while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
@@ -1008,7 +1017,17 @@
             }
             if (!ul) return;
 
-            ul.innerHTML = originalHTML;
+            // Thread-sorok és marginok eltávolítása
+            ul.querySelectorAll('li.media.ph-thread').forEach(li => {
+                li.classList.remove('ph-thread');
+                li.style.marginLeft = '';
+                const box = li.querySelector('.thread-lines');
+                if (box) li.removeChild(box);
+            });
+
+            // Visszaállítjuk az eredeti sorrendet
+            originalOrder.forEach(li => ul.appendChild(li));
+
             threadActive = false;
             saveState(false);
         }
@@ -1019,6 +1038,7 @@
             if (!container) return false;
 
             threadContainerHeader = container;
+            initOriginalOrder(); // Eredeti sorrend mentése
 
             const btn = document.createElement('a');
             btn.href = 'javascript:;';
@@ -1038,7 +1058,7 @@
             }
 
             btn.addEventListener('click', () => {
-                if (threadActive) restoreOriginalHTML();
+                if (threadActive) restoreOriginalOrder();
                 else renderThreading();
                 updateButtonUI();
             });
@@ -1059,7 +1079,7 @@
             const observer = new MutationObserver(() => {
                 if (init()) observer.disconnect();
             });
-            observer.observe(document.documentElement, {childList: true, subtree: true});
+            observer.observe(document.documentElement, { childList: true, subtree: true });
         }
     }
 
