@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    ph
-// @version      1.0.2
+// @version      1.0.3
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -615,8 +615,11 @@
 
         window.addEventListener("hashchange", onHashChange);
 
+        const observer = new MutationObserver(init);
+        observer.observe(document.body, { childList: true, subtree: true });
+
         if (document.readyState === "loading") {
-            document.addEventListener("DOMContentLoaded", init, {once: true});
+            document.addEventListener("DOMContentLoaded", init, { once: true });
         } else {
             init();
         }
