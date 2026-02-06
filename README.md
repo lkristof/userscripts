@@ -2,11 +2,43 @@
 
 Egyedi **Tampermonkey / Userscript** gyűjtemény, főleg **Prohardver! lapcsalád** fórumokhoz, plusz néhány egyéb oldalhoz.
 
-A scriptek célja:
+---
+
+## 💍 Ajánlott: Prohardver Power Tools (egy script mind fölött)
+
+**`ph-power-tools.user.js`** egy minden-egyben userscript,  
+ami a Prohardver! fórumokhoz készült funkciókat **egyetlen scriptbe gyúrja össze**,  
+külön **beállítómenüvel**, kapcsolható modulokkal.
+
+### Tartalmazza többek között:
+- hozzászólások színezése
+- link átirányítás
+- üzenet kiemelés
+- off hozzászólások elrejtése
+- széles nézet
+- thread nézet
+- billentyűzetes navigáció
+
+### Előnyök
+- 📦 egyetlen telepítés
+- 🔄 frissítéskor csak **egy** scriptet kell karbantartani
+- ⚙️ külön menü, funkciónként ki-/bekapcsolható
+- 🧠 egységes működés
+
+### Fókusz
 - jobb olvashatóság
 - hasznos vizuális kiemelések
-- idegesítő elemek elrejtése
-- fórumhasználat kényelmesebbé tétele
+- kényelmesebb fórumhasználat
+
+👉 **Telepítés:**  
+https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
+
+---
+
+> 💡 **Megjegyzés:**  
+> A projekt eredetileg különálló userscriptekből indult, egy-egy konkrét problémára fókuszálva.  
+> Idővel ezek összeértek, és megszületett a **Prohardver Power Tools** mint egyetlen, egységes megoldás.  
+> A régi scripteket azonban meghagytam külön is, ha valaki csak egy-egy funkciót szeretne használni.
 
 ---
 
@@ -83,6 +115,14 @@ Könnyebbé teszi a beszélgetések követését.
 
 👉 **Telepítés:**  
 https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-thread-view.user.js
+
+---
+
+#### 🔹 Prohardver Fórum – Billentyűzetes navigáció
+Billentyűzetes navigációt ad a PH-lapcsalád fórumaihoz, hogy egér nélkül is gyorsan lehessen mozogni a hozzászólások között.
+
+👉 **Telepítés:**  
+https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-keyboard-navigation.user.js
 
 ---
 
