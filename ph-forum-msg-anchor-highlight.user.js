@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Üzenet hivatkozás kiemelés
 // @namespace    ph
-// @version      1.1.2
-// @description  Kiemeli az aktuális #msg hozzászólást; ha nincs, a legközelebbit.
+// @version      1.2.0
+// @description  Kiemeli az aktuális #msg hozzászólást; hash hiányában a legközelebbit. Dupla katt a fejlécen kijelöli.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*
@@ -99,23 +99,18 @@
             return;
         }
 
-        // korábbi kiemelés törlése
-        document.querySelectorAll(".msg-body.hash-highlight").forEach(b => {
-            b.classList.remove("hash-highlight");
-        });
+        document.querySelectorAll(".msg-body.hash-highlight")
+            .forEach(b => b.classList.remove("hash-highlight"));
 
-        // pontos találat
         let body = document.querySelector(
             `li.media[data-id="${msgId}"] .msg-body`
         );
 
-        // fallback: legközelebbi
         if (!body) {
             body = findClosestMsgBody(msgId);
         }
 
         if (!body) return;
-
         body.classList.add("hash-highlight");
     }
 
@@ -124,6 +119,23 @@
         lastHash = window.location.hash;
         highlightHashMsg();
     }
+
+    /**********************
+     * DUPLA KATT: kijelölés
+     **********************/
+    document.addEventListener("dblclick", (e) => {
+        const header = e.target.closest(".msg-header");
+        if (!header) return;
+
+        const li = header.closest("li.media[data-id]");
+        if (!li) return;
+
+        const id = li.dataset.id;
+        if (!id) return;
+
+        e.preventDefault();
+        location.hash = "#msg" + id;
+    });
 
     /**********************
      * INIT
