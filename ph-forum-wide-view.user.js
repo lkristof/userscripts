@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Széles nézet
 // @namespace    ph
-// @version      1.2.3
+// @version      1.2.4
 // @description  Dinamikus széles nézet (ablakméret -20%).
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -77,7 +77,6 @@
         #center {
             width: ${center}px !important;
             flex: 0 0 ${center}px !important;
-            overflow-x: auto !important;
         }
 
         #right {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    ph
-// @version      1.0.4
+// @version      1.0.5
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -752,7 +752,6 @@
         #center {
             width: ${center}px !important;
             flex: 0 0 ${center}px !important;
-            overflow-x: auto !important;
         }
 
         #right {
