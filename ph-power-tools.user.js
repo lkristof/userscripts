@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    ph
-// @version      1.0.5
+// @version      1.0.6
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -78,36 +78,41 @@
         li.className = 'dropdown';
 
         li.innerHTML = `
-        <a href="javascript:;" class="btn dropdown-toggle ph-power-btn"
-           data-toggle="dropdown"
-           title="PH Power Tools beállítások">
-            <span class="fas fa-sliders-h"></span>
-        </a>
-
-        <div class="dropdown-menu dropdown-menu-right p-2" style="min-width: 240px">
-            <h6 class="dropdown-header">PH Power Tools</h6>
-
-            ${Object.keys(defaultSettings).map(key => `
-                <a href="javascript:;" 
-                   class="btn btn-forum dropdown-item ${draftSettings[key] ? 'btn-primary' : ''}" 
-                   data-key="${key}" 
-                   style="display: flex; justify-content: space-between; align-items: center; white-space: nowrap; margin-bottom: 4px;">
-                    <span>${prettyName(key)}</span>
-                    <span class="ph-check">${draftSettings[key] ? '<span class="fas fa-check"></span>' : ''}</span>
-                </a>
-            `).join('')}
-
-            <div class="dropdown-divider"></div>
-
-            <button class="btn btn-sm btn-primary btn-block ph-apply-btn" disabled>
-                Alkalmaz
-            </button>
-        </div>
-    `;
+            <a href="javascript:;" class="btn dropdown-toggle ph-power-btn"
+               data-toggle="dropdown"
+               title="PH Power Tools beállítások">
+                <span class="fas fa-sliders-h"></span>
+            </a>
+    
+            <div class="dropdown-menu dropdown-menu-right p-2" style="min-width: 240px">
+                <h6 class="dropdown-header">PH Power Tools</h6>
+    
+                ${Object.keys(defaultSettings).map(key => `
+                    <a href="javascript:;" 
+                       class="btn btn-forum dropdown-item ${draftSettings[key] ? 'btn-primary' : ''}" 
+                       data-key="${key}" 
+                       style="display: flex; justify-content: space-between; align-items: center; white-space: nowrap; margin-bottom: 4px;">
+                        <span>${prettyName(key)}</span>
+                        <span class="ph-check">${draftSettings[key] ? '<span class="fas fa-check"></span>' : ''}</span>
+                    </a>
+                `).join('')}
+    
+                <div class="dropdown-divider"></div>
+    
+                <button class="btn btn-sm btn-primary btn-block ph-apply-btn" disabled>
+                    Alkalmaz
+                </button>
+            </div>
+        `;
 
         container.prepend(li);
 
+        const toggleBtn = li.querySelector('.ph-power-btn');
         const applyBtn = li.querySelector('.ph-apply-btn');
+
+        toggleBtn.addEventListener('click', () => {
+            setTimeout(() => toggleBtn.blur(), 50);
+        });
 
         // Dropdown item click
         li.querySelectorAll('.dropdown-item').forEach(item => {
