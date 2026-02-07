@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    ph
-// @version      1.0.6
+// @version      1.0.7
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
-// @match        https://prohardver.hu/tema/*
-// @match        https://mobilarena.hu/tema/*
-// @match        https://logout.hu/tema/*
-// @match        https://fototrend.hu/tema/*
+// @match        https://prohardver.hu/*
+// @match        https://mobilarena.hu/*
+// @match        https://logout.hu/*
+// @match        https://fototrend.hu/*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
@@ -34,6 +34,10 @@
     };
 
     let draftSettings = {...savedSettings};
+
+    function isTemaPage() {
+        return /^\/tema\//.test(location.pathname);
+    }
 
     /************ STYLE ************/
 
@@ -154,13 +158,15 @@
 
     /************ MODULE DISPATCH ************/
 
-    if (savedSettings.colorize) colorize();
-    if (savedSettings.linkRedirect) linkRedirect();
-    if (savedSettings.msgAnchorHighlight) msgAnchorHighlight();
-    if (savedSettings.offHider) offHider();
-    if (savedSettings.wideView) wideView();
-    if (savedSettings.threadView) threadView();
-    if (savedSettings.keyboardNavigation) keyboardNavigation();
+    if (isTemaPage()) {
+        if (savedSettings.colorize) colorize();
+        if (savedSettings.linkRedirect) linkRedirect();
+        if (savedSettings.msgAnchorHighlight) msgAnchorHighlight();
+        if (savedSettings.offHider) offHider();
+        if (savedSettings.wideView) wideView();
+        if (savedSettings.threadView) threadView();
+        if (savedSettings.keyboardNavigation) keyboardNavigation();
+    }
 
     /************ MODULE STUBS ************/
 
