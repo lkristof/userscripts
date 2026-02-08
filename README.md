@@ -61,34 +61,34 @@ A scriptek futtatásához kell egy userscript kezelő:
 
 ### saját/rád válaszoló
 
-[![light](img/own-reply-light-th.jpg)](img/own-reply-light.jpg)
-[![dark](img/own-reply-dark-th.jpg)](img/own-reply-dark.jpg)
+[![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-light.jpg)
+[![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-dark.jpg)
 
 ### akció
-[![light](img/akcio-light-th.jpg)](img/akcio-light.jpg)
-[![dark](img/akcio-dark-th.jpg)](img/akcio-dark.jpg)
+[![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-light.jpg)
+[![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-dark.jpg)
 
 ### arcképre kattintva annak a felhasználónak a hozzászólásai
-[![light](img/avatar-click-light-th.jpg)](img/avatar-click-light.jpg)
-[![dark](img/avatar-click-dark-th.jpg)](img/avatar-click-dark.jpg)
+[![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-light.jpg)
+[![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark.jpg)
 
 ### hozzászólás lánc (🔗 Lánc-ra kattintva)
 
-[![light](img/chain-light-th.jpg)](img/chain-light.jpg)
-[![dark](img/chain-dark-th.jpg)](img/chain-dark.jpg)
+[![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-light.jpg)
+[![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-dark.jpg)
 
 ### `#msgXXXX` kiemelés
 
-[![light](img/msg-highlight-light-th.jpg)](img/msg-highlight-light.jpg)
-[![dark](img/msg-highlight-dark-th.jpg)](img/msg-highlight-dark.jpg)
+[![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-light.jpg)
+[![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-dark.jpg)
 
 ### széles nézet
-[![normal](img/normal-view-light-th.jpg)](img/normal-view-light.jpg)
-[![wide](img/wide-view-light-th.jpg)](img/wide-view-light.jpg)
+[![normal](https://raw.githubusercontent.com/lkristof/userscripts/main/img/normal-view-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/normal-view-light.jpg)
+[![wide](https://raw.githubusercontent.com/lkristof/userscripts/main/img/wide-view-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/wide-view-light.jpg)
 
 ### thread nézet
-[![light](img/thread-view-light-th.jpg)](img/thread-view-light.jpg)
-[![dark](img/thread-view-dark-th.jpg)](img/thread-view-dark.jpg)
+[![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-light.jpg)
+[![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-dark.jpg)
 
 ---
 
