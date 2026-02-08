@@ -58,17 +58,23 @@ A scriptek futtatásához kell egy userscript kezelő:
 ---
 
 ## 📸 Képernyőképek
+> [!NOTE]
+> Így néznek ki a PH Power Tools legfontosabb funkciói a gyakorlatban.
 
-### saját/rád válaszoló
+### menü
+[![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/menu-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/menu-light.jpg)
+[![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/menu-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/menu-dark.jpg)
+
+### saját és rád válaszoló hozzászólások
 
 [![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-light.jpg)
 [![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-dark.jpg)
 
-### akció
+### `#akcio` jelölésű hozzászólások
 [![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-light.jpg)
 [![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-dark.jpg)
 
-### arcképre kattintva annak a felhasználónak a hozzászólásai
+### felhasználó hozzászólásainak kiemelése (arcképre kattintva)
 [![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-light.jpg)
 [![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark.jpg)
 
@@ -82,7 +88,7 @@ A scriptek futtatásához kell egy userscript kezelő:
 [![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-light.jpg)
 [![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-dark.jpg)
 
-### széles nézet
+### normál vs. széles
 [![normal](https://raw.githubusercontent.com/lkristof/userscripts/main/img/normal-view-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/normal-view-light.jpg)
 [![wide](https://raw.githubusercontent.com/lkristof/userscripts/main/img/wide-view-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/wide-view-light.jpg)
 
