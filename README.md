@@ -2,9 +2,7 @@
 
 ## 💍 PH Power Tools (egy script mind fölött)
 
-**`ph-power-tools.user.js`** egy minden-egyben userscript,  
-ami a Prohardver! fórumokhoz készült funkciókat **egyetlen scriptbe gyúrja össze**,  
-külön **beállítómenüvel**, kapcsolható modulokkal.
+**`ph-power-tools.user.js`** egy minden-egyben userscript, ami a Prohardver! fórumokhoz készült funkciókat **egyetlen scriptbe gyúrja össze**, külön **beállítómenüvel**, kapcsolható modulokkal.
 
 ### ⚡ Előnyök
 
@@ -59,6 +57,41 @@ A scriptek futtatásához kell egy userscript kezelő:
 
 ---
 
+## 📸 Képernyőképek
+
+### saját/rád válaszoló
+
+[![light](img/own-reply-light-th.jpg)](img/own-reply-light.jpg)
+[![dark](img/own-reply-dark-th.jpg)](img/own-reply-dark.jpg)
+
+### akció
+[![light](img/akcio-light-th.jpg)](img/akcio-light.jpg)
+[![dark](img/akcio-dark-th.jpg)](img/akcio-dark.jpg)
+
+### arcképre kattintva annak a felhasználónak a hozzászólásai
+[![light](img/avatar-click-light-th.jpg)](img/avatar-click-light.jpg)
+[![dark](img/avatar-click-dark-th.jpg)](img/avatar-click-dark.jpg)
+
+### hozzászólás lánc (🔗 Lánc-ra kattintva)
+
+[![light](img/chain-light-th.jpg)](img/chain-light.jpg)
+[![dark](img/chain-dark-th.jpg)](img/chain-dark.jpg)
+
+### `#msgXXXX` kiemelés
+
+[![light](img/msg-highlight-light-th.jpg)](img/msg-highlight-light.jpg)
+[![dark](img/msg-highlight-dark-th.jpg)](img/msg-highlight-dark.jpg)
+
+### széles nézet
+[![normal](img/normal-view-light-th.jpg)](img/normal-view-light.jpg)
+[![wide](img/wide-view-light-th.jpg)](img/wide-view-light.jpg)
+
+### thread nézet
+[![light](img/thread-view-light-th.jpg)](img/thread-view-light.jpg)
+[![dark](img/thread-view-dark-th.jpg)](img/thread-view-dark.jpg)
+
+---
+
 ## 📦 nCore
 
 ### 🔹 nCore – 3+ pluszos torrentek kiemelése
@@ -107,4 +140,4 @@ Ha hibát találsz, ötleted van vagy továbbfejlesztenéd, **nyugodtan jelezd**
 
 ## 📄 License
 
-MIT License
+[MIT License](LICENSE)
