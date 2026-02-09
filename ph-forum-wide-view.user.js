@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Széles nézet
 // @namespace    ph
-// @version      1.2.4
+// @version      1.2.5
 // @description  Dinamikus széles nézet (ablakméret -20%).
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -14,7 +14,6 @@
 (function () {
     'use strict';
 
-    // ---- Beállítások ----
     const LEFT_PX = 230;
     const RIGHT_PX = 230;
     const GAP_PX = 0;
@@ -23,11 +22,11 @@
 
     const STYLE_ID = 'ph-wide-center-style';
     const ROW_CLASS = 'ph-center-row';
-
     const STORAGE_KEY = 'ph_wide_view';
-    const STATUS = { ON: 'enabled', OFF: 'disabled' };
 
-    // ---- Számítás ----
+    const STATUS = { ON: 'enabled', OFF: 'disabled' };
+    const buttons = [];
+
     function calculateLayout() {
         const viewport = window.innerWidth;
         const usable = viewport * (1 - getSideMarginRatio());
@@ -59,7 +58,6 @@
             margin-left: auto !important;
             margin-right: auto !important;
         }
-
         .${ROW_CLASS} {
             display: flex !important;
             flex-wrap: nowrap !important;
@@ -68,17 +66,14 @@
             margin-left: 0 !important;
             margin-right: 0 !important;
         }
-
         #left {
             width: ${LEFT_PX}px !important;
             flex: 0 0 ${LEFT_PX}px !important;
         }
-
         #center {
             width: ${center}px !important;
             flex: 0 0 ${center}px !important;
         }
-
         #right {
             width: ${RIGHT_PX}px !important;
             flex: 0 0 ${RIGHT_PX}px !important;
@@ -119,46 +114,59 @@
         return localStorage.getItem(STORAGE_KEY) === STATUS.ON;
     }
 
-    // ---- Resize kezelés ----
     window.addEventListener('resize', () => {
         if (isActive()) applyLayout();
     });
 
-    // ---- UI ----
-    function insertButton() {
-        const toolbar = document.querySelector('h4.list-message');
-        if (!toolbar) return false;
-
+    function createToggleButton() {
         const btn = document.createElement('a');
         btn.href = 'javascript:;';
         btn.className = 'btn btn-forum';
         btn.style.marginLeft = '5px';
         btn.innerHTML = `<span class="fas fa-expand-arrows-alt fa-fw"></span> Széles nézet`;
 
-        const updateUI = () => {
+        function updateUI() {
             btn.title = isActive() ? 'Eredeti szélesség' : 'Szélesebb nézet';
             btn.classList.toggle('btn-primary', isActive());
-        };
+        }
 
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', e => {
+            e.preventDefault();
             isActive() ? removeLayout() : applyLayout();
             saveState(isActive());
-            updateUI();
+            updateAllButtons();
         });
 
-        toolbar.appendChild(btn);
-
-        if (shouldBeActive()) applyLayout();
+        btn._update = updateUI;
         updateUI();
+        return btn;
+    }
+
+    function updateAllButtons() { buttons.forEach(btn => btn._update()); }
+
+    function init() {
+        const headers = document.querySelectorAll('h4.list-message');
+        if (!headers.length) return false;
+
+        headers.forEach(header => {
+            const btn = createToggleButton();
+            buttons.push(btn);
+            header.appendChild(btn);
+        });
+
+        if (shouldBeActive()) {
+            applyLayout();
+            updateAllButtons();
+        }
 
         return true;
     }
 
-    function init() {
-        if (insertButton()) return;
-        const obs = new MutationObserver(() => insertButton() && obs.disconnect());
-        obs.observe(document.documentElement, { childList: true, subtree: true });
+    if (!init()) {
+        const observer = new MutationObserver(() => {
+            if (init()) observer.disconnect();
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
     }
 
-    init();
 })();

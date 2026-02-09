@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    ph
-// @version      1.0.7
+// @version      1.0.8
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @match        https://prohardver.hu/*
 // @match        https://mobilarena.hu/*
@@ -639,68 +639,71 @@
 
     function offHider() {
         const STORAGE_KEY = "ph_hide_off";
-        const STATUS = {ON: 'enabled', OFF: 'disabled'};
+        const STATUS = { ON: 'enabled', OFF: 'disabled' };
 
         let offHidden = localStorage.getItem(STORAGE_KEY) === STATUS.ON;
+        const buttons = [];
 
-        // ===== Gomb létrehozása =====
-        const btn = document.createElement('a');
-        btn.href = 'javascript:;';
-        btn.className = 'btn btn-forum';
-        btn.style.marginLeft = '5px';
-        btn.id = 'ph-off-toggle-btn';
-        btn.innerHTML = `<span class="fas fa-ban fa-fw"></span> OFF elrejtése`;
-
-        function updateButtonAppearance() {
-            if (offHidden) {
-                btn.classList.add('btn-primary');
-                btn.title = 'OFF hozzászólások megjelenítése';
-            } else {
-                btn.classList.remove('btn-primary');
-                btn.title = 'OFF hozzászólások elrejtése';
-            }
+        function getOffPosts() {
+            return document.querySelectorAll('.msg, .topic, .msg-off');
         }
-
-        // ===== Beszúrás a headerbe =====
-        const header = document.querySelector('h4.list-message');
-        if (header) {
-            header.appendChild(btn);
-        }
-
-        // ===== OFF posztok kiválasztása =====
-        const offPosts = document.querySelectorAll('.msg, .topic, .msg-off');
-        offPosts.forEach(post => {
-            if (post.textContent.includes('[OFF]') || post.classList.contains('msg-off')) {
-                post.style.display = offHidden ? 'none' : '';
-            }
-        });
 
         function applyVisibility() {
-            offPosts.forEach(post => {
-                if (post.textContent.includes('[OFF]') || post.classList.contains('msg-off')) {
+            getOffPosts().forEach(post => {
+                if (
+                    post.textContent.includes('[OFF]') ||
+                    post.classList.contains('msg-off')
+                ) {
                     post.style.display = offHidden ? 'none' : '';
                 }
             });
         }
 
-        // ===== Toggle =====
-        function toggleOff() {
-            offHidden = !offHidden;
+        function createToggleButton() {
+            const btn = document.createElement('a');
+            btn.href = 'javascript:;';
+            btn.className = 'btn btn-forum';
+            btn.style.marginLeft = '5px';
+            btn.innerHTML = `<span class="fas fa-ban fa-fw"></span> OFF elrejtése`;
 
-            localStorage.setItem(STORAGE_KEY, offHidden ? STATUS.ON : STATUS.OFF);
+            function updateAppearance() {
+                btn.classList.toggle('btn-primary', offHidden);
+                btn.title = offHidden
+                    ? 'OFF hozzászólások megjelenítése'
+                    : 'OFF hozzászólások elrejtése';
+            }
 
-            applyVisibility();
-            updateButtonAppearance();
+            btn.addEventListener('click', () => {
+                offHidden = !offHidden;
+                localStorage.setItem(
+                    STORAGE_KEY,
+                    offHidden ? STATUS.ON : STATUS.OFF
+                );
+                applyVisibility();
+                updateAllButtons();
+            });
+
+            btn._update = updateAppearance;
+            updateAppearance();
+
+            return btn;
         }
 
-        btn.addEventListener('click', toggleOff);
+        function updateAllButtons() {
+            buttons.forEach(btn => btn._update());
+        }
 
-        // Kezdeti állapot
-        updateButtonAppearance();
+        document.querySelectorAll('h4.list-message').forEach(header => {
+            const btn = createToggleButton();
+            buttons.push(btn);
+            header.appendChild(btn);
+        });
+
+        applyVisibility();
+        updateAllButtons();
     }
 
     function wideView() {
-        // ---- Beállítások ----
         const LEFT_PX = 230;
         const RIGHT_PX = 230;
         const GAP_PX = 0;
@@ -709,11 +712,11 @@
 
         const STYLE_ID = 'ph-wide-center-style';
         const ROW_CLASS = 'ph-center-row';
-
         const STORAGE_KEY = 'ph_wide_view';
-        const STATUS = {ON: 'enabled', OFF: 'disabled'};
 
-        // ---- Számítás ----
+        const STATUS = { ON: 'enabled', OFF: 'disabled' };
+        const buttons = [];
+
         function calculateLayout() {
             const viewport = window.innerWidth;
             const usable = viewport * (1 - getSideMarginRatio());
@@ -736,7 +739,7 @@
         }
 
         function buildCSS() {
-            const {total, center} = calculateLayout();
+            const { total, center } = calculateLayout();
 
             return `
         .container, .container-fluid, #container, .site-container {
@@ -745,7 +748,6 @@
             margin-left: auto !important;
             margin-right: auto !important;
         }
-
         .${ROW_CLASS} {
             display: flex !important;
             flex-wrap: nowrap !important;
@@ -754,17 +756,14 @@
             margin-left: 0 !important;
             margin-right: 0 !important;
         }
-
         #left {
             width: ${LEFT_PX}px !important;
             flex: 0 0 ${LEFT_PX}px !important;
         }
-
         #center {
             width: ${center}px !important;
             flex: 0 0 ${center}px !important;
         }
-
         #right {
             width: ${RIGHT_PX}px !important;
             flex: 0 0 ${RIGHT_PX}px !important;
@@ -805,64 +804,75 @@
             return localStorage.getItem(STORAGE_KEY) === STATUS.ON;
         }
 
-        // ---- Resize kezelés ----
         window.addEventListener('resize', () => {
             if (isActive()) applyLayout();
         });
 
-        // ---- UI ----
-        function insertButton() {
-            const toolbar = document.querySelector('h4.list-message');
-            if (!toolbar) return false;
-
+        function createToggleButton() {
             const btn = document.createElement('a');
             btn.href = 'javascript:;';
             btn.className = 'btn btn-forum';
             btn.style.marginLeft = '5px';
             btn.innerHTML = `<span class="fas fa-expand-arrows-alt fa-fw"></span> Széles nézet`;
 
-            const updateUI = () => {
+            function updateUI() {
                 btn.title = isActive() ? 'Eredeti szélesség' : 'Szélesebb nézet';
                 btn.classList.toggle('btn-primary', isActive());
-            };
+            }
 
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', e => {
+                e.preventDefault();
                 isActive() ? removeLayout() : applyLayout();
                 saveState(isActive());
-                updateUI();
+                updateAllButtons();
             });
 
-            toolbar.appendChild(btn);
-
-            if (shouldBeActive()) applyLayout();
+            btn._update = updateUI;
             updateUI();
+            return btn;
+        }
+
+        function updateAllButtons() { buttons.forEach(btn => btn._update()); }
+
+        function init() {
+            const headers = document.querySelectorAll('h4.list-message');
+            if (!headers.length) return false;
+
+            headers.forEach(header => {
+                const btn = createToggleButton();
+                buttons.push(btn);
+                header.appendChild(btn);
+            });
+
+            if (shouldBeActive()) {
+                applyLayout();
+                updateAllButtons();
+            }
 
             return true;
         }
 
-        function init() {
-            if (insertButton()) return;
-            const obs = new MutationObserver(() => insertButton() && obs.disconnect());
-            obs.observe(document.documentElement, {childList: true, subtree: true});
+        if (!init()) {
+            const observer = new MutationObserver(() => {
+                if (init()) observer.disconnect();
+            });
+            observer.observe(document.documentElement, { childList: true, subtree: true });
         }
-
-        init();
     }
 
     function threadView() {
-        /* ===== Beállítások ===== */
         const INDENT       = 10;
         const LINE_COLOR   = "#C1BFB6";
         const LINE_OPACITY = 1;
         const LINE_THICK   = 1;
         const PINNED_TEXT  = '(rögzített hozzászólás)';
-        const STORAGE_KEY  = 'ph_thread_view'; // A kért kulcs
-        const STATUS       = { ON: 'enabled', OFF: 'disabled' }; // Új konstans
+        const STORAGE_KEY  = 'ph_thread_view';
+        const STATUS       = { ON: 'enabled', OFF: 'disabled' };
 
         let threadContainerHeader = null;
         let threadActive = false;
+        const buttons = [];
 
-        /* ===== CSS ===== */
         const style = document.createElement('style');
         style.textContent = `
     li.media.ph-thread { position: relative; }
@@ -900,7 +910,6 @@
     `;
         document.head.appendChild(style);
 
-        /* ===== Mentés és Betöltés ===== */
         function saveState(active) {
             localStorage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
         }
@@ -909,7 +918,6 @@
             return localStorage.getItem(STORAGE_KEY) === STATUS.ON;
         }
 
-        /* ===== Thread render ===== */
         function renderThreading() {
             if (!threadContainerHeader) return;
 
@@ -928,17 +936,12 @@
 
             if (!items.length) return;
 
-            const postMap = {};
-            const childrenMap = {};
-            const allIds = new Set();
-
+            const postMap = {}, childrenMap = {}, allIds = new Set();
             items.forEach(li => allIds.add(li.dataset.id));
-
             items.forEach(li => {
                 const id = li.dataset.id;
                 let parent = li.dataset.rplid || null;
                 if (parent && !allIds.has(parent)) parent = null;
-
                 postMap[id] = li;
                 if (!childrenMap[parent]) childrenMap[parent] = [];
                 childrenMap[parent].push(id);
@@ -1011,17 +1014,16 @@
         let originalOrder = [];
 
         function initOriginalOrder() {
+            if (!threadContainerHeader) return;
             let ul = threadContainerHeader.nextElementSibling;
             while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
                 ul = ul.nextElementSibling;
             }
             if (!ul) return;
 
-            // Minden li.media elem referencia mentése
             originalOrder = [...ul.querySelectorAll('li.media')];
         }
 
-        /* ===== Reset ===== */
         function restoreOriginalOrder() {
             if (!threadContainerHeader) return;
 
@@ -1031,7 +1033,6 @@
             }
             if (!ul) return;
 
-            // Thread-sorok és marginok eltávolítása
             ul.querySelectorAll('li.media.ph-thread').forEach(li => {
                 li.classList.remove('ph-thread');
                 li.style.marginLeft = '';
@@ -1039,56 +1040,62 @@
                 if (box) li.removeChild(box);
             });
 
-            // Visszaállítjuk az eredeti sorrendet
             originalOrder.forEach(li => ul.appendChild(li));
 
             threadActive = false;
             saveState(false);
         }
 
-        /* ===== Toggle gomb és inicializálás ===== */
-        function init() {
-            const container = document.querySelector('h4.list-message');
-            if (!container) return false;
-
-            threadContainerHeader = container;
-            initOriginalOrder(); // Eredeti sorrend mentése
-
+        function createToggleButton() {
             const btn = document.createElement('a');
             btn.href = 'javascript:;';
             btn.className = 'btn btn-forum';
             btn.style.marginLeft = '5px';
-            btn.id = 'ph-thread-toggle';
             btn.innerHTML = `<span class="fas fa-project-diagram fa-fw"></span> Thread nézet`;
 
             function updateButtonUI() {
-                if (threadActive) {
-                    btn.classList.add('btn-primary');
-                    btn.title = 'Thread nézet kikapcsolása';
-                } else {
-                    btn.classList.remove('btn-primary');
-                    btn.title = 'Thread nézet bekapcsolása';
-                }
+                btn.classList.toggle('btn-primary', threadActive);
+                btn.title = threadActive ? 'Thread nézet kikapcsolása' : 'Thread nézet bekapcsolása';
             }
 
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', e => {
+                e.preventDefault();
                 if (threadActive) restoreOriginalOrder();
                 else renderThreading();
-                updateButtonUI();
+                updateAllButtons();
             });
 
-            container.appendChild(btn);
+            btn._update = updateButtonUI;
+            updateButtonUI();
 
-            // --- Automatikus aktiválás, ha el volt mentve ---
+            return btn;
+        }
+
+        function updateAllButtons() {
+            buttons.forEach(btn => btn._update());
+        }
+
+        function init() {
+            const headers = document.querySelectorAll('h4.list-message');
+            if (!headers.length) return false;
+
+            threadContainerHeader = headers[0];
+            initOriginalOrder();
+
+            headers.forEach(header => {
+                const btn = createToggleButton();
+                buttons.push(btn);
+                header.appendChild(btn);
+            });
+
             if (shouldBeActive()) {
                 renderThreading();
-                updateButtonUI();
+                updateAllButtons();
             }
 
             return true;
         }
 
-        // Indítás
         if (!init()) {
             const observer = new MutationObserver(() => {
                 if (init()) observer.disconnect();

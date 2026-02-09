@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    ph
-// @version      1.4.3
+// @version      1.4.4
 // @description  Reddit-style thread megjelenítés.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -14,19 +14,18 @@
 (function () {
     'use strict';
 
-    /* ===== Beállítások ===== */
     const INDENT       = 10;
     const LINE_COLOR   = "#C1BFB6";
     const LINE_OPACITY = 1;
     const LINE_THICK   = 1;
     const PINNED_TEXT  = '(rögzített hozzászólás)';
-    const STORAGE_KEY  = 'ph_thread_view'; // A kért kulcs
-    const STATUS       = { ON: 'enabled', OFF: 'disabled' }; // Új konstans
+    const STORAGE_KEY  = 'ph_thread_view';
+    const STATUS       = { ON: 'enabled', OFF: 'disabled' };
 
     let threadContainerHeader = null;
     let threadActive = false;
+    const buttons = [];
 
-    /* ===== CSS ===== */
     const style = document.createElement('style');
     style.textContent = `
     li.media.ph-thread { position: relative; }
@@ -64,7 +63,6 @@
     `;
     document.head.appendChild(style);
 
-    /* ===== Mentés és Betöltés ===== */
     function saveState(active) {
         localStorage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
     }
@@ -73,7 +71,6 @@
         return localStorage.getItem(STORAGE_KEY) === STATUS.ON;
     }
 
-    /* ===== Thread render ===== */
     function renderThreading() {
         if (!threadContainerHeader) return;
 
@@ -92,17 +89,12 @@
 
         if (!items.length) return;
 
-        const postMap = {};
-        const childrenMap = {};
-        const allIds = new Set();
-
+        const postMap = {}, childrenMap = {}, allIds = new Set();
         items.forEach(li => allIds.add(li.dataset.id));
-
         items.forEach(li => {
             const id = li.dataset.id;
             let parent = li.dataset.rplid || null;
             if (parent && !allIds.has(parent)) parent = null;
-
             postMap[id] = li;
             if (!childrenMap[parent]) childrenMap[parent] = [];
             childrenMap[parent].push(id);
@@ -175,17 +167,16 @@
     let originalOrder = [];
 
     function initOriginalOrder() {
+        if (!threadContainerHeader) return;
         let ul = threadContainerHeader.nextElementSibling;
         while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
             ul = ul.nextElementSibling;
         }
         if (!ul) return;
 
-        // Minden li.media elem referencia mentése
         originalOrder = [...ul.querySelectorAll('li.media')];
     }
 
-    /* ===== Reset ===== */
     function restoreOriginalOrder() {
         if (!threadContainerHeader) return;
 
@@ -195,7 +186,6 @@
         }
         if (!ul) return;
 
-        // Thread-sorok és marginok eltávolítása
         ul.querySelectorAll('li.media.ph-thread').forEach(li => {
             li.classList.remove('ph-thread');
             li.style.marginLeft = '';
@@ -203,56 +193,62 @@
             if (box) li.removeChild(box);
         });
 
-        // Visszaállítjuk az eredeti sorrendet
         originalOrder.forEach(li => ul.appendChild(li));
 
         threadActive = false;
         saveState(false);
     }
 
-    /* ===== Toggle gomb és inicializálás ===== */
-    function init() {
-        const container = document.querySelector('h4.list-message');
-        if (!container) return false;
-
-        threadContainerHeader = container;
-        initOriginalOrder(); // Eredeti sorrend mentése
-
+    function createToggleButton() {
         const btn = document.createElement('a');
         btn.href = 'javascript:;';
         btn.className = 'btn btn-forum';
         btn.style.marginLeft = '5px';
-        btn.id = 'ph-thread-toggle';
         btn.innerHTML = `<span class="fas fa-project-diagram fa-fw"></span> Thread nézet`;
 
         function updateButtonUI() {
-            if (threadActive) {
-                btn.classList.add('btn-primary');
-                btn.title = 'Thread nézet kikapcsolása';
-            } else {
-                btn.classList.remove('btn-primary');
-                btn.title = 'Thread nézet bekapcsolása';
-            }
+            btn.classList.toggle('btn-primary', threadActive);
+            btn.title = threadActive ? 'Thread nézet kikapcsolása' : 'Thread nézet bekapcsolása';
         }
 
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', e => {
+            e.preventDefault();
             if (threadActive) restoreOriginalOrder();
             else renderThreading();
-            updateButtonUI();
+            updateAllButtons();
         });
 
-        container.appendChild(btn);
+        btn._update = updateButtonUI;
+        updateButtonUI();
 
-        // --- Automatikus aktiválás, ha el volt mentve ---
+        return btn;
+    }
+
+    function updateAllButtons() {
+        buttons.forEach(btn => btn._update());
+    }
+
+    function init() {
+        const headers = document.querySelectorAll('h4.list-message');
+        if (!headers.length) return false;
+
+        threadContainerHeader = headers[0];
+        initOriginalOrder();
+
+        headers.forEach(header => {
+            const btn = createToggleButton();
+            buttons.push(btn);
+            header.appendChild(btn);
+        });
+
         if (shouldBeActive()) {
             renderThreading();
-            updateButtonUI();
+            updateAllButtons();
         }
 
         return true;
     }
 
-    // Indítás
     if (!init()) {
         const observer = new MutationObserver(() => {
             if (init()) observer.disconnect();
