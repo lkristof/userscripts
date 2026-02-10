@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Billentyűzetes navigáció
 // @namespace    ph
-// @version      1.0.1
+// @version      1.0.2
 // @description  Hozzászólások közti navigáció billentyűzettel
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -38,14 +38,6 @@
         location.hash = '#msg' + id;
     }
 
-    function getMinMaxPostId(posts) {
-        const ids = posts.map(p => parseInt(p.dataset.id, 10));
-        return {
-            min: Math.min(...ids),
-            max: Math.max(...ids),
-        };
-    }
-
     function findClosestPost(posts, targetId) {
         let closest = null;
         let minDiff = Infinity;
@@ -64,6 +56,31 @@
         return closest;
     }
 
+    function getSortedPostIds(posts) {
+        return posts
+            .map(p => parseInt(p.dataset.id, 10))
+            .filter(id => !Number.isNaN(id))
+            .sort((a, b) => a - b);
+    }
+
+    function getCurrentIdIndex(sortedIds) {
+        const currentId = getMsgIdFromHash();
+        if (currentId === null) return -1;
+        const idx = sortedIds.indexOf(currentId);
+        return idx;
+    }
+
+    function getSafeCurrentIndex(posts) {
+        let index = getCurrentIndex(posts);
+        if (index !== -1) return index;
+
+        const hashId = getMsgIdFromHash();
+        if (hashId === null) return 0;
+
+        const closest = findClosestPost(posts, hashId);
+        return closest ? posts.indexOf(closest) : 0;
+    }
+
     document.addEventListener('keydown', (e) => {
         // gallery / input védelem
         if (document.querySelector('.layer-gallery')) return;
@@ -78,30 +95,38 @@
         const posts = getPosts();
         if (!posts.length) return;
 
-        let currentIndex = getCurrentIndex(posts);
+        let currentIndex = getSafeCurrentIndex(posts);
 
-        if (currentIndex === -1) {
-            const hashId = getMsgIdFromHash();
-            if (hashId !== null) {
-                currentIndex = posts.indexOf(findClosestPost(posts, hashId));
-            } else {
-                currentIndex = 0;
-            }
-        }
-
-        // SHIFT + ↑ / ↓ : msg id +/- 1
+        // SHIFT + ↑ / ↓ : következő létező msgId (ID sorrendben)
         if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-            const currentId = getMsgIdFromHash();
-            if (currentId === null) return;
-
-            const { min, max } = getMinMaxPostId(posts);
-
             e.preventDefault();
-            let newId = currentId + (e.key === 'ArrowUp' ? -1 : 1);
-            if (newId < min) newId = min;
-            if (newId > max) newId = max;
 
-            setMsgId(newId);
+            const sortedIds = getSortedPostIds(posts);
+            if (!sortedIds.length) return;
+
+            let idx = getCurrentIdIndex(sortedIds);
+
+            // ha törölt msg-en állunk → legközelebbi ID
+            if (idx === -1) {
+                const hashId = getMsgIdFromHash();
+                if (hashId === null) return;
+
+                let closestDiff = Infinity;
+                sortedIds.forEach((id, i) => {
+                    const diff = Math.abs(id - hashId);
+                    if (diff < closestDiff) {
+                        closestDiff = diff;
+                        idx = i;
+                    }
+                });
+            }
+
+            const delta = e.key === 'ArrowUp' ? -1 : 1;
+            const newIndex = idx + delta;
+
+            if (newIndex < 0 || newIndex >= sortedIds.length) return;
+
+            setMsgId(sortedIds[newIndex]);
             return;
         }
 
