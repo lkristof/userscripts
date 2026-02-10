@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    ph
-// @version      1.0.10
+// @version      1.0.11
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @match        https://prohardver.hu/*
 // @match        https://mobilarena.hu/*
@@ -866,7 +866,6 @@
         const LINE_COLOR   = "#C1BFB6";
         const LINE_OPACITY = 1;
         const LINE_THICK   = 1;
-        const PINNED_TEXT  = '(rögzített hozzászólás)';
         const STORAGE_KEY  = 'ph_thread_view';
         const STATUS       = { ON: 'enabled', OFF: 'disabled' };
 
@@ -920,6 +919,7 @@
         }
 
         function renderThreading() {
+            if (threadActive) return;
             if (!threadContainerHeader) return;
 
             let ul = threadContainerHeader.nextElementSibling;
@@ -928,84 +928,80 @@
             }
             if (!ul) return;
 
-            const pinned = [...ul.querySelectorAll('li.media')]
-                .find(li => li.textContent.includes(PINNED_TEXT));
-            const pinnedNext = pinned?.nextSibling;
-
-            const items = [...ul.querySelectorAll('li.media[data-id]')]
-                .filter(li => li !== pinned);
+            // Adatgyűjtés
+            const allMedia = [...ul.querySelectorAll('li.media')];
+            const items = allMedia.filter(li => li.dataset.id);
 
             if (!items.length) return;
 
             const postMap = {}, childrenMap = {}, allIds = new Set();
-            items.forEach(li => allIds.add(li.dataset.id));
+            items.forEach(li => {
+                allIds.add(li.dataset.id);
+                postMap[li.dataset.id] = li;
+            });
+
             items.forEach(li => {
                 const id = li.dataset.id;
                 let parent = li.dataset.rplid || null;
                 if (parent && !allIds.has(parent)) parent = null;
-                postMap[id] = li;
                 if (!childrenMap[parent]) childrenMap[parent] = [];
                 childrenMap[parent].push(id);
             });
 
+            // Ürítés és újraépítés
             ul.innerHTML = '';
-            if (pinned) {
-                if (pinnedNext) ul.insertBefore(pinned, pinnedNext);
-                else ul.appendChild(pinned);
-            }
 
+            // Rekurzív renderelő
             function renderThread(id, depth, ancestorPath = []) {
                 const el = postMap[id];
                 if (!el) return;
 
                 el.classList.add('ph-thread');
-                const indent = depth * INDENT;
-                el.style.setProperty('--indent', indent + 'px');
-                el.style.marginLeft = indent + 'px';
+                const currentIndent = depth * INDENT;
+                el.style.setProperty('--indent', currentIndent + 'px');
+                el.style.marginLeft = currentIndent + 'px';
 
-                if (depth === 0) {
-                    ul.appendChild(el);
-                    (childrenMap[id] || []).forEach((childId, i, arr) => {
-                        renderThread(childId, 1, [i === arr.length - 1]);
-                    });
-                    return;
+                if (depth > 0) {
+                    let box = el.querySelector('.thread-lines');
+                    if (!box) {
+                        box = document.createElement('div');
+                        box.className = 'thread-lines';
+                        el.appendChild(box);
+                    }
+                    box.innerHTML = '';
+
+                    for (let d = 0; d < depth - 1; d++) {
+                        if (ancestorPath[d]) continue;
+                        const vert = document.createElement('div');
+                        vert.className = 'thread-line-vert';
+                        vert.style.left = (d * INDENT) + 'px';
+                        box.appendChild(vert);
+                    }
+
+                    if (!ancestorPath[depth - 1]) {
+                        const vert = document.createElement('div');
+                        vert.className = 'thread-line-vert';
+                        vert.style.left = ((depth - 1) * INDENT) + 'px';
+                        box.appendChild(vert);
+                    }
+
+                    // Könyök az aktuális elemhez
+                    const elbow = document.createElement('div');
+                    elbow.className = 'thread-line-horiz';
+                    elbow.style.left = ((depth - 1) * INDENT) + 'px';
+                    box.appendChild(elbow);
                 }
-
-                let box = el.querySelector('.thread-lines');
-                if (!box) {
-                    box = document.createElement('div');
-                    box.className = 'thread-lines';
-                    el.appendChild(box);
-                }
-                box.innerHTML = '';
-
-                for (let d = 0; d < depth - 1; d++) {
-                    if (ancestorPath[d]) continue;
-                    const vert = document.createElement('div');
-                    vert.className = 'thread-line-vert';
-                    vert.style.left = (d * INDENT) + 'px';
-                    box.appendChild(vert);
-                }
-
-                if (!ancestorPath[depth - 1]) {
-                    const vert = document.createElement('div');
-                    vert.className = 'thread-line-vert';
-                    vert.style.left = ((depth - 1) * INDENT) + 'px';
-                    box.appendChild(vert);
-                }
-
-                const elbow = document.createElement('div');
-                elbow.className = 'thread-line-horiz';
-                elbow.style.left = ((depth - 1) * INDENT) + 'px';
-                box.appendChild(elbow);
 
                 ul.appendChild(el);
 
-                (childrenMap[id] || []).forEach((childId, i, arr) => {
-                    renderThread(childId, depth + 1, [...ancestorPath, i === arr.length - 1]);
+                const children = childrenMap[id] || [];
+                children.forEach((childId, i) => {
+                    const isLastChild = (i === children.length - 1);
+                    renderThread(childId, depth + 1, [...ancestorPath, isLastChild]);
                 });
             }
 
+            // Indítás a gyökér szintű elemekkel
             (childrenMap[null] || []).forEach(id => renderThread(id, 0, []));
 
             threadActive = true;
@@ -1038,9 +1034,10 @@
                 li.classList.remove('ph-thread');
                 li.style.marginLeft = '';
                 const box = li.querySelector('.thread-lines');
-                if (box) li.removeChild(box);
+                if (box) box.remove();
             });
 
+            ul.innerHTML = '';
             originalOrder.forEach(li => ul.appendChild(li));
 
             threadActive = false;
@@ -1078,7 +1075,7 @@
 
         function init() {
             const headers = document.querySelectorAll('h4.list-message');
-            if (!headers.length) return false;
+            if (!headers.length || buttons.length > 0) return false;
 
             threadContainerHeader = headers[0];
             initOriginalOrder();
@@ -1101,7 +1098,7 @@
             const observer = new MutationObserver(() => {
                 if (init()) observer.disconnect();
             });
-            observer.observe(document.documentElement, { childList: true, subtree: true });
+            observer.observe(document.body, { childList: true, subtree: true });
         }
     }
 
