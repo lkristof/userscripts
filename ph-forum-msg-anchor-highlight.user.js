@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Üzenet hivatkozás kiemelés
 // @namespace    ph
-// @version      1.2.2
+// @version      1.2.3
 // @description  Kiemeli az aktuális #msg hozzászólást; hash hiányában a legközelebbit. Dupla katt a fejlécen kijelöli.
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -59,25 +59,26 @@
     let lastHashMsgId = null;
     let lastHash = null;
 
-    function findClosestMsgBody(targetId) {
-        const items = [...document.querySelectorAll("li.media[data-id]")];
-        if (!items.length) return null;
+    function getPosts() {
+        return [...document.querySelectorAll('li.media[data-id]')];
+    }
 
+    function findClosestPost(posts, targetId) {
         let closest = null;
         let minDiff = Infinity;
 
-        for (const li of items) {
-            const id = Number(li.dataset.id);
-            if (Number.isNaN(id)) continue;
+        posts.forEach(li => {
+            const id = parseInt(li.dataset.id, 10);
+            if (Number.isNaN(id)) return;
 
             const diff = Math.abs(id - targetId);
             if (diff < minDiff) {
                 minDiff = diff;
                 closest = li;
             }
-        }
+        });
 
-        return closest?.querySelector(".msg-body") || null;
+        return closest;
     }
 
     function highlightHashMsg() {
@@ -105,7 +106,7 @@
         );
 
         if (!body) {
-            body = findClosestMsgBody(msgId);
+            body = findClosestPost(getPosts(), msgId)?.querySelector('.msg-body');
         }
 
         if (!body) return;

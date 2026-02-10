@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Billentyűzetes navigáció
 // @namespace    ph
-// @version      1.0.0
+// @version      1.0.1
 // @description  Hozzászólások közti navigáció billentyűzettel
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
@@ -46,6 +46,24 @@
         };
     }
 
+    function findClosestPost(posts, targetId) {
+        let closest = null;
+        let minDiff = Infinity;
+
+        posts.forEach(li => {
+            const id = parseInt(li.dataset.id, 10);
+            if (Number.isNaN(id)) return;
+
+            const diff = Math.abs(id - targetId);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closest = li;
+            }
+        });
+
+        return closest;
+    }
+
     document.addEventListener('keydown', (e) => {
         // gallery / input védelem
         if (document.querySelector('.layer-gallery')) return;
@@ -61,7 +79,15 @@
         if (!posts.length) return;
 
         let currentIndex = getCurrentIndex(posts);
-        if (currentIndex === -1) currentIndex = 0;
+
+        if (currentIndex === -1) {
+            const hashId = getMsgIdFromHash();
+            if (hashId !== null) {
+                currentIndex = posts.indexOf(findClosestPost(posts, hashId));
+            } else {
+                currentIndex = 0;
+            }
+        }
 
         // SHIFT + ↑ / ↓ : msg id +/- 1
         if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {

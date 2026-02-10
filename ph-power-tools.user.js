@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    ph
-// @version      1.0.8
+// @version      1.0.9
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @match        https://prohardver.hu/*
 // @match        https://mobilarena.hu/*
@@ -535,25 +535,26 @@
         let lastHashMsgId = null;
         let lastHash = null;
 
-        function findClosestMsgBody(targetId) {
-            const items = [...document.querySelectorAll("li.media[data-id]")];
-            if (!items.length) return null;
+        function getPosts() {
+            return [...document.querySelectorAll('li.media[data-id]')];
+        }
 
+        function findClosestPost(posts, targetId) {
             let closest = null;
             let minDiff = Infinity;
 
-            for (const li of items) {
-                const id = Number(li.dataset.id);
-                if (Number.isNaN(id)) continue;
+            posts.forEach(li => {
+                const id = parseInt(li.dataset.id, 10);
+                if (Number.isNaN(id)) return;
 
                 const diff = Math.abs(id - targetId);
                 if (diff < minDiff) {
                     minDiff = diff;
                     closest = li;
                 }
-            }
+            });
 
-            return closest?.querySelector(".msg-body") || null;
+            return closest;
         }
 
         function highlightHashMsg() {
@@ -581,7 +582,7 @@
             );
 
             if (!body) {
-                body = findClosestMsgBody(msgId);
+                body = findClosestPost(getPosts(), msgId)?.querySelector('.msg-body');
             }
 
             if (!body) return;
@@ -1137,6 +1138,24 @@
             };
         }
 
+        function findClosestPost(posts, targetId) {
+            let closest = null;
+            let minDiff = Infinity;
+
+            posts.forEach(li => {
+                const id = parseInt(li.dataset.id, 10);
+                if (Number.isNaN(id)) return;
+
+                const diff = Math.abs(id - targetId);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closest = li;
+                }
+            });
+
+            return closest;
+        }
+
         document.addEventListener('keydown', (e) => {
             // gallery / input védelem
             if (document.querySelector('.layer-gallery')) return;
@@ -1152,14 +1171,22 @@
             if (!posts.length) return;
 
             let currentIndex = getCurrentIndex(posts);
-            if (currentIndex === -1) currentIndex = 0;
+
+            if (currentIndex === -1) {
+                const hashId = getMsgIdFromHash();
+                if (hashId !== null) {
+                    currentIndex = posts.indexOf(findClosestPost(posts, hashId));
+                } else {
+                    currentIndex = 0;
+                }
+            }
 
             // SHIFT + ↑ / ↓ : msg id +/- 1
             if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
                 const currentId = getMsgIdFromHash();
                 if (currentId === null) return;
 
-                const {min, max} = getMinMaxPostId(posts);
+                const { min, max } = getMinMaxPostId(posts);
 
                 e.preventDefault();
                 let newId = currentId + (e.key === 'ArrowUp' ? -1 : 1);
