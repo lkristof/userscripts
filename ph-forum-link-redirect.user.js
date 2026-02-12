@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Link átirányító
 // @namespace    ph
-// @version      1.1.1
-// @description  PH-lapcsalád linkeket az aktuális oldalra irányítja.
+// @version      2.0.0
+// @description  PH-lapcsalád linkeket az aktuális oldalra irányítja
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*
@@ -10,68 +10,89 @@
 // @match        https://logout.hu/cikk/*
 // @match        https://fototrend.hu/tema/*
 // @grant        none
-// @run-at       document-idle
+// @run-at       document-end
 // ==/UserScript==
 
 (function () {
     'use strict';
 
-    const currentSite = location.hostname
-        .replace(/^www\./, '')
-        .replace(/^m\./, '');
+    // Konfiguráció
+    const phDomains = ["prohardver.hu", "mobilarena.hu", "gamepod.hu", "itcafe.hu", "logout.hu", "fototrend.hu"];
+    const forbiddenPaths = ["/fooldal", "/nyeremenyjatek", "/cikk", "/hir", "/teszt"];
 
-    const phSites = ["prohardver", "mobilarena", "gamepod", "itcafe", "logout", "fototrend"];
-    const forbiddenPaths = [
-        "/nyeremenyjatek",
-        "/cikk",
-        "/hir"
-    ];
-
-    const re = new RegExp(
-        `^(https?:\\/\\/)?(www\\.)?(m\\.)?(${phSites.join('|')})\\.hu(\\/.*)$`,
-        "i"
-    );
-
-    function shouldReplace(site, path) {
-        // logout.hu → csak fórum témák
-        if (site === "logout" && !path.startsWith("/tema") && !path.startsWith("/tag")) {
-            return false;
-        }
-
-        // tiltott tartalomtípusok
-        if (forbiddenPaths.some(p => path.startsWith(p))) {
-            return false;
-        }
-
-        // ha nincs a / után semmi, ne cseréljük
-        return !(path === "/" || path === "");
-    }
-
-    function replaceLinks(root) {
-        const links = document.evaluate(
-            './/a[@href]',
-            root,
-            null,
-            XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE,
-            null
+    // Segédfüggvény: Eldönti, hogy a linket cserélni kell-e
+    function shouldRedirect(urlObj) {
+        // 1. Ha nem a PH! családból való, ne bántsuk
+        const isPhSite = phDomains.some(d =>
+            urlObj.hostname === d || urlObj.hostname.endsWith("." + d)
         );
 
-        for (let i = 0; i < links.snapshotLength; i++) {
-            const link = links.snapshotItem(i);
-            const match = link.href.match(re);
-            if (!match) continue;
+        if (!isPhSite) return false;
 
-            const site = match[4];        // pl. logout
-            const path = match[5];        // pl. /tema/xyz
-            const originalSite = site + ".hu";
+        // 2. Ha már eleve a jó domainen vagyunk, ne bántsuk
+        if (urlObj.hostname === location.hostname) return false;
 
-            if (!shouldReplace(site, path)) continue;
-            if (originalSite === currentSite) continue;
-
-            link.href = "https://" + currentSite + path;
+        // 3. Logout specifikus kivétel (csak a fórum témákat irányítjuk át, a cikkeket nem)
+        if ((urlObj.hostname === "logout.hu" || urlObj.hostname.endsWith(".logout.hu")) &&
+            !urlObj.pathname.startsWith("/tema") &&
+            !urlObj.pathname.startsWith("/tag")) {
+            return false;
         }
+
+        // 4. Tiltott útvonalak (pl. cikkek, amik nem léteznek a másik domainen)
+        if (forbiddenPaths.some(p => urlObj.pathname.startsWith(p))) {
+            return false;
+        }
+
+        // 5. Ha a főoldalra mutat (nincs útvonal), ne cseréljük
+        if (urlObj.pathname === "/" || urlObj.pathname === "") {
+            return false;
+        }
+
+        return true;
     }
 
-    replaceLinks(document);
-})();
+    // A tényleges csere logikája
+    function processLinks(rootNode) {
+        const links = rootNode.querySelectorAll('a[href^="http"]');
 
+        links.forEach(link => {
+            try {
+                const url = new URL(link.href);
+
+                if (shouldRedirect(url)) {
+                    url.hostname = location.hostname;
+                    link.href = url.href;
+
+                    // Opcionális: jelöljük meg, hogy lássuk, mit cseréltünk (debug)
+                    // link.style.borderBottom = "2px dotted green";
+                }
+            } catch (e) {
+                // Érvénytelen URL esetén ne omoljon össze
+            }
+        });
+    }
+
+    // 1. Futás az oldal betöltésekor
+    processLinks(document.body);
+
+    // 2. MutationObserver a dinamikusan betöltődő kommentekhez (AJAX)
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.addedNodes.length) {
+                mutation.addedNodes.forEach((node) => {
+                    // Csak elem típusú node-okkal foglalkozunk (pl. div, span), text node-okkal nem
+                    if (node.nodeType === 1) {
+                        processLinks(node);
+                    }
+                });
+            }
+        });
+    });
+
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+
+})();
