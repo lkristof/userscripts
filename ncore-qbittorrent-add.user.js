@@ -1,10 +1,9 @@
 // ==UserScript==
 // @name         nCore – qBittorrent Add
 // @namespace    ncore
-// @version      1.1.0
+// @version      1.2.0
 // @description  Override torrent() to add qBittorrent button and remove ads
 // @include      https://ncore.pro/torrents.php*
-// @exclude      https://ncore.pro/torrents.php?action*
 // @grant        unsafeWindow
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
@@ -15,10 +14,14 @@
 (function() {
     'use strict';
 
-    // --- qBittorrent URL init ---
     let QB_URL = GM_getValue('qb_url', '');
+
     const askForQBURL = () => {
-        const userInput = window.prompt('Enter qBittorrent WebUI URL (e.g., http://127.0.0.1:8080):', QB_URL || 'http://127.0.0.1:8080') || '';
+        const userInput = window.prompt(
+            'Enter qBittorrent WebUI URL (e.g., http://127.0.0.1:8080):',
+            QB_URL || 'http://127.0.0.1:8080'
+        ) || '';
+
         try {
             QB_URL = new URL(userInput).origin;
             if (QB_URL) GM_setValue('qb_url', QB_URL);
@@ -30,17 +33,45 @@
 
     if (!QB_URL) askForQBURL();
 
-    // --- Menüpont a QB URL módosításához ---
     if (typeof GM_registerMenuCommand !== 'undefined') {
         GM_registerMenuCommand('Set qBittorrent WebUI URL', askForQBURL);
     }
+
+    function sendToQB(dlUrl) {
+        if (!QB_URL) {
+            showToast("qBittorrent WebUI URL not set!", "error");
+            return;
+        }
+
+        GM_xmlhttpRequest({
+            method: "POST",
+            url: QB_URL + "/api/v2/torrents/add",
+            data: "urls=" + encodeURIComponent(dlUrl),
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+
+            onload: function(resp) {
+                if (resp.status === 200) {
+                    showToast("Torrent sent to qBittorrent!", "success");
+                } else {
+                    showToast("Failed: " + resp.status, "error");
+                }
+            },
+
+            onerror: function() {
+                showToast("Error sending torrent to qBittorrent", "error");
+            }
+        });
+    }
+
 
     const key = $("link[rel=alternate]").attr("href")?.slice(-32) || '';
 
     const form = $('#kereses_mezo')[0];
     if (form) form.method = 'GET';
 
-    // --- Torrent override ---
+    // ============================================================
+    // LISTA NÉZET
+    // ============================================================
     unsafeWindow.torrent = function(id) {
         const $e = $('#' + id);
         if (!$e.length) return;
@@ -75,7 +106,6 @@
 
                 $e.html(cleanData);
 
-                // banner + fancybox újrainit
                 if (typeof BannerEventHandler !== 'undefined') {
                     BannerEventHandler.init();
                 }
@@ -90,24 +120,15 @@
                 }
 
                 const $dlLink = $e.find('.letoltve_txt a[href*="torrents.php?action=download"]');
-                if ($dlLink.length && QB_URL) {
+
+                if ($dlLink.length) {
                     const dlUrl = new URL($dlLink.attr('href'), window.location.origin).href;
+
                     const $separator = $('<span> | </span>');
                     const $qbLink = $('<a href="javascript:void(0);">qBittorrent</a>');
 
                     $qbLink.on('click', function() {
-                        GM_xmlhttpRequest({
-                            method: "POST",
-                            url: QB_URL + "/api/v2/torrents/add",
-                            data: "urls=" + encodeURIComponent(dlUrl),
-                            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                            onload: function(resp) {
-                                alert(resp.status === 200 ? "Torrent sent to qBittorrent!" : "Failed: " + resp.status);
-                            },
-                            onerror: function() {
-                                alert("Error sending torrent to qBittorrent");
-                            }
-                        });
+                        sendToQB(dlUrl);
                     });
 
                     $dlLink.after($qbLink).after($separator);
@@ -117,4 +138,100 @@
             $e.toggle(0);
         }
     };
+
+    // ============================================================
+    // DETAILS OLDAL
+    // ============================================================
+    if (window.location.search.includes('action=details')) {
+        const params = new URLSearchParams(window.location.search);
+        const torrentId = params.get('id');
+
+        if (torrentId) {
+            const $container = $('.torrent_reszletek_konyvjelzo');
+            if ($container.length && !$container.find('.qbittorrent-add-btn').length) {
+                const dlUrl = `${window.location.origin}/torrents.php?action=download&id=${torrentId}&key=${key}`;
+
+                const $qbLink = $(`
+                    <a style="font-weight:normal;"
+                       href="javascript:void(0);"
+                       class="qbittorrent-add-btn"
+                       title="Küldés qBittorrentbe">
+                       [qBittorrent]
+                    </a>
+                `);
+
+                $qbLink.on('click', function() {
+                    sendToQB(dlUrl);
+                });
+
+                $container.append($qbLink);
+            }
+        }
+    }
+
+    // ============================================================
+    // STACKELT TOAST RENDSZER
+    // ============================================================
+
+    let toastContainer = null;
+
+    function getToastContainer() {
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+
+            Object.assign(toastContainer.style, {
+                position: 'fixed',
+                bottom: '20px',
+                right: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                zIndex: 99999
+            });
+
+            document.body.appendChild(toastContainer);
+        }
+        return toastContainer;
+    }
+
+    function showToast(message, type = 'success') {
+        const container = getToastContainer();
+
+        const toast = document.createElement('div');
+        toast.textContent = message;
+
+        Object.assign(toast.style, {
+            padding: '12px 18px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            color: '#fff',
+            minWidth: '220px',
+            opacity: '0',
+            transform: 'translateX(20px)',
+            transition: 'all 0.3s ease',
+            backgroundColor: type === 'success' ? '#2ecc71' : '#e74c3c',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
+        });
+
+        container.appendChild(toast);
+
+        // animáció be
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(0)';
+        });
+
+        // max 5 toast
+        if (container.children.length > 5) {
+            container.removeChild(container.firstChild);
+        }
+
+        // eltűnés 3 mp után
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(20px)';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
 })();
