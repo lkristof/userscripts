@@ -129,6 +129,16 @@ Dupla kattintással elhalványíthatod a már látott filmeket a listában, a je
 
 ---
 
+### 🔹 nCore – No thanks
+
+Elrejti az nCore köszönéseket a torrent oldalon.
+
+> 👉 **Telepítés:**  
+> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-no-thanks.user.js
+
+---
+
+
 ## ⭐ Tipp
 
 Ha egy script nem működik:
