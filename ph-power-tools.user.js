@@ -1,12 +1,20 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
-// @namespace    ph
+// @namespace    https://github.com/lkristof/userscripts
 // @version      1.1.0
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
+// @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
+//
 // @match        https://prohardver.hu/*
 // @match        https://mobilarena.hu/*
 // @match        https://logout.hu/*
 // @match        https://fototrend.hu/*
+//
+// @homepageURL  https://github.com/lkristof/userscripts
+// @supportURL   https://github.com/lkristof/userscripts/issues
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
+//
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==

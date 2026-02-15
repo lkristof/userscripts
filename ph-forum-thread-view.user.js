@@ -1,12 +1,20 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
-// @namespace    ph
+// @namespace    https://github.com/lkristof/userscripts
 // @version      1.4.5
 // @description  Reddit-style thread megjelenítés.
+// @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
+//
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*
 // @match        https://fototrend.hu/tema/*
+//
+// @homepageURL  https://github.com/lkristof/userscripts
+// @supportURL   https://github.com/lkristof/userscripts/issues
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-thread-view.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-thread-view.user.js
+//
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==

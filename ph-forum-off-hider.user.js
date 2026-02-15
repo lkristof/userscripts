@@ -1,12 +1,20 @@
 // ==UserScript==
 // @name         Prohardver Fórum – OFF hozzászólások elrejtése
-// @namespace    ph
+// @namespace    https://github.com/lkristof/userscripts
 // @version      1.2.2
 // @description  Elrejti az OFF jelölésű hozzászólásokat.
+// @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
+//
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*
 // @match        https://fototrend.hu/tema/*
+//
+// @homepageURL  https://github.com/lkristof/userscripts
+// @supportURL   https://github.com/lkristof/userscripts/issues
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-off-hider.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-off-hider.user.js
+//
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==

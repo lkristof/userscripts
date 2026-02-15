@@ -1,14 +1,22 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Link átirányító
-// @namespace    ph
+// @namespace    https://github.com/lkristof/userscripts
 // @version      2.0.0
 // @description  PH-lapcsalád linkeket az aktuális oldalra irányítja
+// @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
+//
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*
 // @match        https://logout.hu/bejegyzes/*
 // @match        https://logout.hu/cikk/*
 // @match        https://fototrend.hu/tema/*
+//
+// @homepageURL  https://github.com/lkristof/userscripts
+// @supportURL   https://github.com/lkristof/userscripts/issues
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-link-redirect.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-link-redirect.user.js
+//
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==

@@ -1,10 +1,18 @@
 // ==UserScript==
 // @name         nCore – Láttam már!
-// @namespace    ncore
+// @namespace    https://github.com/lkristof/userscripts
 // @version      1.0.0
 // @description  Megjelölheted a már látott filmeket (IMDB ID alapján)
+// @icon         https://static.ncore.pro/styles/ncore.ico
+//
 // @match        https://ncore.pro/torrents.php*
 // @exclude      https://ncore.pro/torrents.php?action*
+//
+// @homepageURL  https://github.com/lkristof/userscripts
+// @supportURL   https://github.com/lkristof/userscripts/issues
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-seen.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-seen.user.js
+//
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==

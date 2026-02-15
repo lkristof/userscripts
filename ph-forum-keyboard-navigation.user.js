@@ -1,12 +1,20 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Billentyűzetes navigáció
-// @namespace    ph
+// @namespace    https://github.com/lkristof/userscripts
 // @version      1.0.2
 // @description  Hozzászólások közti navigáció billentyűzettel
+// @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
+//
 // @match        https://prohardver.hu/tema/*
 // @match        https://mobilarena.hu/tema/*
 // @match        https://logout.hu/tema/*
 // @match        https://fototrend.hu/tema/*
+//
+// @homepageURL  https://github.com/lkristof/userscripts
+// @supportURL   https://github.com/lkristof/userscripts/issues
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-keyboard-navigation.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-keyboard-navigation.user.js
+//
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==

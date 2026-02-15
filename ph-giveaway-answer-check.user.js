@@ -1,11 +1,20 @@
 // ==UserScript==
 // @name         PH! lapcsalád nyereményjáték - helyes válasz ellenőrző
-// @namespace    ph
+// @namespace    https://github.com/lkristof/userscripts
 // @version      1.0.0
 // @description  PH! lapcsalád nyereményjáték - helyes válasz ellenőrző
+// @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
+//
 // @match        https://prohardver.hu/nyeremenyjatek/*
 // @match        https://mobilarena.hu/nyeremenyjatek/*
+//
+// @homepageURL  https://github.com/lkristof/userscripts
+// @supportURL   https://github.com/lkristof/userscripts/issues
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-giveaway-answer-check.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-giveaway-answer-check.user.js
+//
 // @grant        GM_xmlhttpRequest
+// @run-at       document-idle
 // ==/UserScript==
 
 (function () {
