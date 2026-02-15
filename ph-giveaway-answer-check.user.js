@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PH! lapcsalád nyereményjáték - helyes válasz ellenőrző
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.0
+// @version      1.0.1
 // @description  PH! lapcsalád nyereményjáték - helyes válasz ellenőrző
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -127,24 +127,34 @@
 
     $(".check_answers").click(checkAnswers);
 
-    function highlightCurrentUser(listParagraph) {
-        listParagraph.find("a").each(function () {
+    function highlightCurrentUser(container) {
+        let isFound = false;
+
+        container.find("a").each(function () {
             const a = $(this);
             if (a.text().trim() === USER) {
                 a.css({
                     "font-weight": "bold",
                     "color": "#ffffff",
                     "background-color": "#ff6600",
-                    "padding": "4px 6px",
-                    "border-radius": "6px",
-                    "box-shadow": "0 0 8px rgba(255,102,0,0.7)",
-                    "font-size": "1.1em",
+                    "padding": "2px 8px",
+                    "border-radius": "4px",
+                    "display": "inline-block",
+                    "box-shadow": "0 0 10px rgba(255,102,0,0.8)",
+                    "text-decoration": "none",
+                    "border": "1px solid #fff"
                 });
+                isFound = true;
             }
         });
+        return isFound;
     }
 
     function watchWinnersList() {
+        const alreadyFound = checkAndHighlight();
+
+        if (alreadyFound) return;
+
         const targetNode = document.body;
         const observerOptions = {
             childList: true,
@@ -152,14 +162,23 @@
         };
 
         const observer = new MutationObserver((mutations, obs) => {
-            const listParagraph = $("p:contains('helyes választ adók listája')");
-            if (listParagraph.length) {
-                highlightCurrentUser(listParagraph);
-                obs.disconnect();
-            }
+            checkAndHighlight(obs);
         });
 
         observer.observe(targetNode, observerOptions);
+    }
+
+    function checkAndHighlight(observerInstance = null) {
+        const contentBody = $(".content-body");
+
+        if (contentBody.length) {
+            const found = highlightCurrentUser(contentBody);
+            if (found && observerInstance) {
+                observerInstance.disconnect();
+            }
+            return found;
+        }
+        return false;
     }
 
     function showEpicFireworks(duration = 7000, message = "Gratulálunk! 🎉") {
