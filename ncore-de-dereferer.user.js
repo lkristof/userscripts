@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         nCore – De-dereferer
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.0
+// @version      1.1.0
 // @description  Dereferer linkek eltávolítása
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
-// @match        https://ncore.pro/torrents.php*
+// @match        https://ncore.pro/*
 //
 // @homepageURL  https://github.com/lkristof/userscripts
 // @supportURL   https://github.com/lkristof/userscripts/issues
@@ -33,10 +33,28 @@
         return href;
     }
 
+    function ensureRel(link) {
+        const existing = (link.getAttribute('rel') || '')
+            .split(/\s+/)
+            .filter(Boolean);
+
+        const needed = ['nofollow', 'noreferrer'];
+
+        for (const value of needed) {
+            if (!existing.includes(value)) {
+                existing.push(value);
+            }
+        }
+
+        link.setAttribute('rel', existing.join(' '));
+    }
+
     function processLink(link) {
         const cleaned = cleanHref(link.href);
+
         if (cleaned !== link.href) {
             link.href = cleaned;
+            ensureRel(link);
         }
     }
 
