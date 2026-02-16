@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – 3+ pluszos torrentek kiemelése
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.2
+// @version      1.0.3
 // @description  3 vagy több + jel esetén kiszínezi a torrent sort
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
@@ -19,7 +19,20 @@
 (function () {
     'use strict';
 
-    const HIGHLIGHT_BG = "#600A0A"; // ténylegesen használt szín
+    const HIGHLIGHT_BG = "#600A0A";
+    const HIGHLIGHT_HOVER_BG = "#8A1515";
+
+    const style = document.createElement("style");
+    style.textContent = `
+        .ncore-plus-highlight {
+            background: linear-gradient(${HIGHLIGHT_BG}, ${HIGHLIGHT_BG});
+        }
+
+        .ncore-plus-highlight:hover {
+            background: linear-gradient(${HIGHLIGHT_HOVER_BG}, ${HIGHLIGHT_HOVER_BG});
+        }
+    `;
+    document.head.appendChild(style);
 
     function highlight(box) {
         const plusEl = box.querySelector(".box_d2");
@@ -31,11 +44,7 @@
             const main = box.querySelector(".box_nagy, .box_nagy2");
             if (!main) return;
 
-            main.style.setProperty(
-                "background",
-                `linear-gradient(${HIGHLIGHT_BG}, ${HIGHLIGHT_BG})`,
-                "important"
-            );
+            main.classList.add("ncore-plus-highlight");
         }
     }
 
