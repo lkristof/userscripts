@@ -60,32 +60,32 @@
         const { total, center } = calculateLayout();
 
         return `
-        .container, .container-fluid, #container, .site-container {
-            max-width: ${total}px !important;
-            width: ${total}px !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
-        }
-        .${ROW_CLASS} {
-            display: flex !important;
-            flex-wrap: nowrap !important;
-            justify-content: center !important;
-            gap: ${GAP_PX}px !important;
-            margin-left: 0 !important;
-            margin-right: 0 !important;
-        }
-        #left {
-            width: ${LEFT_PX}px !important;
-            flex: 0 0 ${LEFT_PX}px !important;
-        }
-        #center {
-            width: ${center}px !important;
-            flex: 0 0 ${center}px !important;
-        }
-        #right {
-            width: ${RIGHT_PX}px !important;
-            flex: 0 0 ${RIGHT_PX}px !important;
-        }
+            .container, .container-fluid, #container, .site-container {
+                max-width: ${total}px !important;
+                width: ${total}px !important;
+                margin-left: auto !important;
+                margin-right: auto !important;
+            }
+            .${ROW_CLASS} {
+                display: flex !important;
+                flex-wrap: nowrap !important;
+                justify-content: center !important;
+                gap: ${GAP_PX}px !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+            }
+            #left {
+                width: ${LEFT_PX}px !important;
+                flex: 0 0 ${LEFT_PX}px !important;
+            }
+            #center {
+                width: ${center}px !important;
+                flex: 0 0 ${center}px !important;
+            }
+            #right {
+                width: ${RIGHT_PX}px !important;
+                flex: 0 0 ${RIGHT_PX}px !important;
+            }
         `;
     }
 

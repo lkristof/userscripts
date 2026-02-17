@@ -35,38 +35,38 @@
 
     const style = document.createElement('style');
     style.textContent = `
-    li.media.ph-thread { position: relative; }
-
-    .thread-lines {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        pointer-events: none;
-        left: calc(-1 * var(--indent));
-    }
-
-    .thread-line-vert {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: ${LINE_THICK}px;
-        background: ${LINE_COLOR};
-        opacity: ${LINE_OPACITY};
-        border-radius: ${LINE_THICK}px;
-    }
-
-    .thread-line-horiz {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: ${INDENT}px;
-        height: 50%;
-        border-left: ${LINE_THICK}px solid ${LINE_COLOR};
-        border-bottom: ${LINE_THICK}px solid ${LINE_COLOR};
-        border-bottom-left-radius: ${INDENT}px;
-        opacity: ${LINE_OPACITY};
-        box-sizing: border-box;
-    }
+        li.media.ph-thread { position: relative; }
+    
+        .thread-lines {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            pointer-events: none;
+            left: calc(-1 * var(--indent));
+        }
+    
+        .thread-line-vert {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: ${LINE_THICK}px;
+            background: ${LINE_COLOR};
+            opacity: ${LINE_OPACITY};
+            border-radius: ${LINE_THICK}px;
+        }
+    
+        .thread-line-horiz {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: ${INDENT}px;
+            height: 50%;
+            border-left: ${LINE_THICK}px solid ${LINE_COLOR};
+            border-bottom: ${LINE_THICK}px solid ${LINE_COLOR};
+            border-bottom-left-radius: ${INDENT}px;
+            opacity: ${LINE_OPACITY};
+            box-sizing: border-box;
+        }
     `;
     document.head.appendChild(style);
 
