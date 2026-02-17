@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Felhasználó elrejtése
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.0
+// @version      1.1.0
 // @description  Megadott felhasználók hozzászólásait elrejti
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -23,7 +23,12 @@
     "use strict";
 
     const STORAGE_KEY = "ph_hidden_users";
-    let hiddenUsers = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    let hiddenUsers;
+    try {
+        hiddenUsers = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    } catch {
+        hiddenUsers = [];
+    }
 
     // ===== TÉMA FELISMERÉS =====
     function detectDark() {
@@ -176,6 +181,7 @@
     // ===== Dual-list szerkesztő =====
     function openEditor(onSave) {
         const buttonPlaceholder = document.querySelector(".list-message");
+        if (!buttonPlaceholder) return;
         const btnForum = buttonPlaceholder.querySelector(".btn-forum");
         const btnPrimary = buttonPlaceholder.querySelector(".btn-primary");
         const btnForumColor = btnForum ? getComputedStyle(btnForum).color : "white";
@@ -184,8 +190,15 @@
         const bg = buttonPlaceholder ? getComputedStyle(buttonPlaceholder).backgroundColor : "white";
         const color = buttonPlaceholder ? getComputedStyle(buttonPlaceholder).color : "black";
 
-        const style = document.createElement("style");
+        let style = document.querySelector("#ph-dual-list-style");
+        if (!style) {
+            style = document.createElement("style");
+            style.id = "ph-dual-list-style";
+            document.head.appendChild(style);
+        }
         style.textContent = `
+            .ph-editor-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center; }
+            .ph-editor-panel { background: ${bg}; padding: 20px; border-radius: 5px; min-width: 400px; max-width: 600px; color: ${color}; }
             .dual-list-container { display: flex; gap: 10px; margin-top: 10px; }
             .dual-list { flex: 1; border: 1px solid #fff; min-height: 141px; max-height: 273px; padding: 5px; background: ${bg}; overflow-y: auto; }
             .dual-list-item { padding: 4px 6px; cursor: pointer; border-radius: 3px; margin: 2px 0; background: ${btnForumBackgroundColor}; color: ${btnForumColor}; border: 1px solid #fff; }
@@ -194,22 +207,12 @@
             .dual-list-buttons button { width: 36px; height: 36px; font-weight: bold; border-radius: 3px; cursor: pointer; }
             .editor-buttons { margin-top: 10px; display: flex; gap: 5px; justify-content: flex-end; }
         `;
-        document.head.appendChild(style);
 
         const overlay = document.createElement("div");
-        overlay.style = `
-            position: fixed; top: 0; left: 0; width: 100%; height:100%;
-            background: rgba(0,0,0,0.5); z-index: 9999;
-            display: flex; justify-content: center; align-items: center;
-        `;
+        overlay.className = "ph-editor-overlay";
 
         const panel = document.createElement("div");
-
-        panel.style = `
-            background: ${bg}; padding: 20px; border-radius: 5px;
-            min-width: 400px; max-width: 600px;
-            color: ${color};
-        `;
+        panel.className = "ph-editor-panel";
 
         const title = document.createElement("h3");
         title.textContent = "Rejtett felhasználók szerkesztése";
@@ -240,7 +243,6 @@
         // ===== Gombok mentés / mégse =====
         const editorButtonsDiv = document.createElement("div");
         editorButtonsDiv.className = "editor-buttons";
-        editorButtonsDiv.style.marginTop = "10px";
 
         const saveBtn = document.createElement("button");
         saveBtn.textContent = "Mentés";
@@ -266,7 +268,7 @@
 
             const domAuthors = Array.from(new Set(getPosts().map(li => getAuthor(li))))
                 .filter(a => !tempHiddenUsers.includes(a))
-                .sort((a,b) => a.localeCompare(b));;
+                .sort((a,b) => a.localeCompare(b));
 
             domAuthors.forEach(user => {
                 const div = document.createElement("div");
@@ -309,12 +311,34 @@
             hiddenUsers = Array.from(new Set(tempHiddenUsers));
             localStorage.setItem(STORAGE_KEY, JSON.stringify(hiddenUsers));
             updateHiddenComments();
-            document.body.removeChild(overlay);
+            closeEditor();
             if (onSave) onSave();
         });
 
         // ===== Mégse – bezár, temp változás elvész =====
-        cancelBtn.addEventListener("click", () => document.body.removeChild(overlay));
+        cancelBtn.addEventListener("click", closeEditor);
+
+        function escListener(e) {
+            if (e.key === "Escape") {
+                closeEditor();
+            }
+        }
+
+        document.addEventListener("keydown", escListener);
+
+        function closeEditor() {
+            document.removeEventListener("keydown", escListener);
+            if (document.body.contains(overlay)) {
+                document.body.removeChild(overlay);
+            }
+        }
+
+        // ===== Háttérre kattintás = Mégse =====
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) {
+                closeEditor();
+            }
+        });
     }
 
     // ===== Init =====
@@ -324,7 +348,14 @@
         updateHiddenComments();
     }
 
-    const observer = new MutationObserver(init);
+    const observer = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+            if (m.addedNodes.length) {
+                init();
+                break;
+            }
+        }
+    });
     observer.observe(document.body, { childList: true, subtree: true });
 
     if (document.readyState === "loading") {
