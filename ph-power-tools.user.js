@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.4.0
+// @version      1.5.0
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -54,6 +54,16 @@
         }
     };
 
+    const tooltips = {
+        colorize: 'A hozzászólások hátterét színezi a könnyebb olvashatóság érdekében.',
+        linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
+        msgAnchorHighlight: 'Kiemeli az URL-ben szereplő #msg hozzászólást.\nHa nem létezik, a hozzá legközelebbit jelöli ki.',
+        offHider: 'Az OFF hozzászólásokat a megjelenő gomb segítségével elrejtheted.',
+        keyboardNavigation: '← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
+        hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
+        markSeenPosts: 'Az olvasott hozzászólások fejléce szürkeárnyalatosan jelenik meg.'
+    };
+
     const savedSettings = {
         ...defaultSettings,
         ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
@@ -96,6 +106,28 @@
             min-width: 260px;
             max-height: 70vh;
             overflow-y: auto;
+        }
+        .ph-tooltip {
+            white-space: pre-line;
+            hyphens: auto;
+            overflow-wrap: break-word;
+            position: fixed;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 9999;
+            display: none;
+            pointer-events: none;
+            max-width: 280px;
+        }
+        .ph-tooltip-icon {
+            margin-left: 5px;
+            cursor: pointer;
+        }
+        .ph-tooltip-icon:hover {
+            color: #343a40;
         }
         @media only screen and (max-width: 991.98px) {
             .ph-power-btn + .dropdown-menu {
@@ -156,8 +188,13 @@
                                     <a href="javascript:;" 
                                         class="btn btn-forum dropdown-item ${draftSettings[key] ? 'btn-primary' : ''}" 
                                         data-key="${key}">
-                                        <span>${prettyName(key)}</span>
-                                        <span class="ph-toggle-state">${draftSettings[key] ? '<span class="fas fa-toggle-on"></span>' : '<span class="fas fa-toggle-off"></span>'}</span>
+                                        <span>
+                                            ${prettyName(key)}
+                                            ${tooltips[key] ? `<i class="fas fa-info-circle ph-tooltip-icon" data-tooltip="${tooltips[key]}"></i>` : ''}
+                                        </span>
+                                        <span class="ph-toggle-state">
+                                            ${draftSettings[key] ? '<span class="fas fa-toggle-on"></span>' : '<span class="fas fa-toggle-off"></span>'}
+                                        </span>
                                     </a>
                                 `).join('')}
                             </div>
@@ -172,6 +209,25 @@
         `;
 
         container.prepend(li);
+
+        // Egyszerű custom tooltip
+        document.querySelectorAll('.ph-tooltip-icon').forEach(icon => {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'ph-tooltip';
+            tooltip.lang = "hu";
+            tooltip.textContent = icon.dataset.tooltip;
+            document.body.appendChild(tooltip);
+
+            icon.addEventListener('mouseenter', e => {
+                tooltip.style.display = 'block';
+                const rect = icon.getBoundingClientRect();
+                tooltip.style.left = rect.right + 5 + 'px';
+                tooltip.style.top = rect.top + 'px';
+            });
+            icon.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
+        });
 
         const toggleBtn = li.querySelector('.ph-power-btn');
         const applyBtn = li.querySelector('.ph-apply-btn');
