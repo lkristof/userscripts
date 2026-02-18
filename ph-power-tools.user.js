@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.2.1
+// @version      1.3.0
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -37,6 +37,22 @@
         hideUsers: true
     };
 
+    const settingGroups = {
+        appearance: {
+            label: 'Megjelenés',
+            keys: ['colorize', 'wideView', 'threadView'],
+            defaultOpen: true
+        },
+        filtering: {
+            label: 'Szűrés',
+            keys: ['offHider', 'hideUsers'],
+        },
+        interaction: {
+            label: 'Interakció',
+            keys: ['linkRedirect', 'msgAnchorHighlight', 'keyboardNavigation']
+        }
+    };
+
     const savedSettings = {
         ...defaultSettings,
         ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
@@ -52,16 +68,45 @@
 
     const style = document.createElement('style');
     style.textContent = `
+        .ph-acc-header {
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+        .ph-acc-header:hover {
+            background: color-mix(in srgb, currentColor 8%, transparent);
+        }
+        .ph-acc-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+        .ph-acc-body .dropdown-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+            padding: 4px 10px;
+        }
+        .ph-power-menu {
+            min-width: 260px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
         @media only screen and (max-width: 991.98px) {
             .ph-power-btn + .dropdown-menu {
                 display: none !important;
                 position: absolute !important;
                 left: 0 !important;
-                min-width: 150px;
-                max-width: 95vw !important;
             }
             .ph-power-btn + .dropdown-menu.show {
                 display: block !important;
+            }
+            .ph-acc-body .dropdown-item {
+                padding: 10px 10px;
             }
         }
     `;
@@ -92,26 +137,33 @@
 
         li.innerHTML = `
             <a href="javascript:;" class="btn dropdown-toggle ph-power-btn"
-               data-toggle="dropdown"
-               title="PH Power Tools beállítások">
+                data-toggle="dropdown"
+                title="PH Power Tools beállítások">
                 <span class="fas fa-sliders-h"></span>
             </a>
-    
-            <div class="dropdown-menu dropdown-menu-right p-2" style="min-width: 240px">
+            <div class="dropdown-menu dropdown-menu-right p-2 ph-power-menu">
                 <h6 class="dropdown-header">PH Power Tools</h6>
-    
-                ${Object.keys(defaultSettings).map(key => `
-                    <a href="javascript:;" 
-                       class="btn btn-forum dropdown-item ${draftSettings[key] ? 'btn-primary' : ''}" 
-                       data-key="${key}" 
-                       style="display: flex; justify-content: space-between; align-items: center; white-space: nowrap; margin-bottom: 4px;">
-                        <span>${prettyName(key)}</span>
-                        <span class="ph-check">${draftSettings[key] ? '<span class="fas fa-check"></span>' : ''}</span>
-                    </a>
-                `).join('')}
-    
+                <div class="ph-accordion">
+                    ${Object.entries(settingGroups).map(([groupKey, group], index) => `
+                        <div class="ph-acc-group">
+                            <div class="ph-acc-header" data-group="${groupKey}">
+                                ${group.label}
+                                <i class="ph-acc-arrow fas ${group.defaultOpen ? 'fa-caret-down' : 'fa-caret-right'} fa-fw"></i>
+                            </div>
+                            <div class="ph-acc-body ${group.defaultOpen ? 'open' : ''}">
+                                ${group.keys.map(key => `
+                                    <a href="javascript:;" 
+                                        class="btn btn-forum dropdown-item ${draftSettings[key] ? 'btn-primary' : ''}" 
+                                        data-key="${key}">
+                                        <span>${prettyName(key)}</span>
+                                        <span class="ph-toggle-state">${draftSettings[key] ? '<span class="fas fa-toggle-on"></span>' : '<span class="fas fa-toggle-off"></span>'}</span>
+                                    </a>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
                 <div class="dropdown-divider"></div>
-    
                 <button class="btn btn-sm btn-primary btn-block ph-apply-btn" disabled>
                     Alkalmaz
                 </button>
@@ -124,7 +176,13 @@
         const applyBtn = li.querySelector('.ph-apply-btn');
 
         toggleBtn.addEventListener('click', () => {
-            setTimeout(() => toggleBtn.blur(), 50);
+            setTimeout(() => {
+                toggleBtn.blur();
+
+                li.querySelectorAll('.ph-acc-body.open').forEach(body => {
+                    body.style.maxHeight = body.scrollHeight + "px";
+                });
+            }, 50);
         });
 
         // Dropdown item click
@@ -136,7 +194,7 @@
                 draftSettings[key] = !draftSettings[key];
 
                 item.classList.toggle('btn-primary', draftSettings[key]);
-                item.querySelector('.ph-check').innerHTML = draftSettings[key] ? '<span class="fas fa-check"></span>' : '';
+                item.querySelector('.ph-toggle-state').innerHTML = draftSettings[key] ? '<span class="fas fa-toggle-on"></span>' : '<span class="fas fa-toggle-off"></span>';
 
                 applyBtn.disabled =
                     JSON.stringify(draftSettings) === JSON.stringify(savedSettings);
@@ -150,6 +208,41 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(draftSettings));
             li.querySelector('.dropdown-toggle').click();
             location.reload();
+        });
+
+        // Accordion toggle (animated)
+        li.querySelectorAll('.ph-acc-header').forEach(header => {
+            header.addEventListener('click', (e) => {
+
+                e.stopPropagation(); // fontos a dropdown miatt
+
+                const allBodies = li.querySelectorAll('.ph-acc-body');
+                const allArrows = li.querySelectorAll('.ph-acc-arrow');
+
+                const body = header.nextElementSibling;
+                const arrow = header.querySelector('.ph-acc-arrow');
+
+                const isOpen = body.classList.contains('open');
+
+                // close all
+                allBodies.forEach(b => {
+                    b.style.maxHeight = null;
+                    b.classList.remove('open');
+                });
+
+                allArrows.forEach(a => {
+                    a.classList.remove('fa-caret-down');
+                    a.classList.add('fa-caret-right');
+                });
+
+                // open clicked if it wasn't open
+                if (!isOpen) {
+                    body.classList.add('open');
+                    body.style.maxHeight = body.scrollHeight + "px";
+                    arrow.classList.remove('fa-caret-right');
+                    arrow.classList.add('fa-caret-down');
+                }
+            });
         });
     }
 
