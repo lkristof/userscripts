@@ -54,6 +54,8 @@ A scriptek futtatásához kell egy userscript kezelő:
 | **Széles nézet**                | a fórum maximális szélességének kibővítése nagy felbontású kijelzőkön                                                                       | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-wide-view.user.js)            |
 | **Thread nézet**                | hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése                                                                     | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-thread-view.user.js)          |
 | **Billentyűzetes navigáció**    | gyors navigáció a fórumon billentyűzet segítségével                                                                                         | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-keyboard-navigation.user.js)  |
+| **Felhasználók elrejtése**      | megadott felhasználók hozzászólásait elrejti                                                                                                | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-hide-users.user.js)           |
+| **Olvasottság jelölése**        | az olvasott hozzászólások fejléce szürkeárnyalatosan jelenik meg                                                                            | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-mark-seen.user.js)            |
 
 ---
 
@@ -135,6 +137,15 @@ Elrejti az nCore köszönéseket a torrent oldalon.
 
 > 👉 **Telepítés:**  
 > https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-no-thanks.user.js
+
+---
+
+### 🔹 nCore – De-dereferer
+
+Dereferer linkek eltávolítása, de az anonimitás megtartása
+
+> 👉 **Telepítés:**  
+> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-de-dereferer.user.js
 
 ---
 
