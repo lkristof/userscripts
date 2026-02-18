@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Topik olvasottság jelölő
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.1
+// @version      1.0.2
 // @description  Topikonként eltárolja a legnagyobb hozzászólás ID-t és a msg-header részeket halványítja
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -28,7 +28,7 @@
     const style = document.createElement("style");
     style.textContent = `
         .ph-seen-header {
-            filter: grayscale(100%); 
+            filter: grayscale(100%);
             transition: filter 1s ease;
         }
     `;
@@ -54,10 +54,10 @@
         // Legnagyobb eddig olvasott ID
         let savedMaxId = parseInt(localStorage.getItem(topicKey) || "0", 10);
 
-        // Ha még nincs savedMaxId, próbáljuk a #msgNNNN-t URL-ből (-1)
-        if (!savedMaxId) {
-            const urlMax = getMaxFromURL();
-            if (urlMax) savedMaxId = urlMax;
+        // Mindig vizsgáljuk a #msgNNN-t
+        const urlMax = getMaxFromURL();
+        if (urlMax && urlMax > savedMaxId) {
+            savedMaxId = urlMax;
         }
 
         const comments = Array.from(document.querySelectorAll("li.media[data-id]"));
