@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Topik olvasottság jelölő
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.0
+// @version      1.0.1
 // @description  Topikonként eltárolja a legnagyobb hozzászólás ID-t és a msg-header részeket halványítja
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -28,9 +28,8 @@
     const style = document.createElement("style");
     style.textContent = `
         .ph-seen-header {
-            opacity: 0.45;
-            filter: grayscale(20%); 
-            transition: opacity 0.3s ease, filter 0.3s ease;
+            filter: grayscale(100%); 
+            transition: filter 1s ease;
         }
     `;
     document.head.appendChild(style);
