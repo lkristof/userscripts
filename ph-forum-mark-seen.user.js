@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Topik olvasottság jelölő
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.2
-// @description  Topikonként eltárolja a legnagyobb hozzászólás ID-t és a msg-header részeket halványítja
+// @version      1.0.3
+// @description  Topikonként eltárolja a legnagyobb hozzászólás ID-t és a msg-header részeket halványítja.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
 // @match        https://prohardver.hu/tema/*

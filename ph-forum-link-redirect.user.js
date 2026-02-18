@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Link átirányító
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.0.0
-// @description  PH-lapcsalád linkeket az aktuális oldalra irányítja
+// @version      2.0.1
+// @description  PH! lapcsalád linkeket az aktuális oldalra irányítja.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
 // @match        https://prohardver.hu/tema/*

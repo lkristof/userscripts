@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         nCore – No thanks
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.0
-// @description  Elrejti az nCore köszönéseket a torrent oldalon
+// @version      1.0.1
+// @description  Elrejti az nCore köszönéseket a torrent oldalon.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
 // @match        https://ncore.pro/torrents.php*

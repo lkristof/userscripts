@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.5.0
-// @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal
+// @version      1.5.1
+// @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
 // @match        https://prohardver.hu/*

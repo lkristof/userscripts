@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         nCore – De-dereferer
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.1.0
-// @description  Dereferer linkek eltávolítása
+// @version      1.1.1
+// @description  Dereferer linkek eltávolítása.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
 // @match        https://ncore.pro/*

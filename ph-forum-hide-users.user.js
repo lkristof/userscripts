@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Felhasználó elrejtése
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.1.0
-// @description  Megadott felhasználók hozzászólásait elrejti
+// @version      1.1.1
+// @description  Megadott felhasználók hozzászólásait elrejti.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
 // @match        https://prohardver.hu/tema/*

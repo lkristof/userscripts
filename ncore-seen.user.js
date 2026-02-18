@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         nCore – Láttam már!
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.0
-// @description  Megjelölheted a már látott filmeket (IMDB ID alapján)
+// @version      1.0.1
+// @description  Megjelölheted a már látott filmeket. (IMDB ID alapján)
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
 // @match        https://ncore.pro/torrents.php*

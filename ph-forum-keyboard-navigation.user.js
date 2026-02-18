@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Billentyűzetes navigáció
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.2
-// @description  Hozzászólások közti navigáció billentyűzettel
+// @version      1.0.3
+// @description  Hozzászólások közti navigáció billentyűzettel.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
 // @match        https://prohardver.hu/tema/*

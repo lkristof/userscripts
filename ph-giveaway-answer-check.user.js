@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         PH! lapcsalád nyereményjáték - helyes válasz ellenőrző
+// @name         PH! lapcsalád nyereményjáték – helyes válasz ellenőrző
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.1
-// @description  PH! lapcsalád nyereményjáték - helyes válasz ellenőrző
+// @version      1.0.2
+// @description  Gombnyomással ellenőrizheted a helyes válaszaidat, és ha a nyertesek között vagy, kiemeli a felhasználóneved.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
 // @match        https://prohardver.hu/nyeremenyjatek/*

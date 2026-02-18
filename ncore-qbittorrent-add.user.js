@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         nCore – qBittorrent Add
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.2.0
-// @description  Override torrent() to add qBittorrent button and remove ads
+// @version      1.2.1
+// @description  Override torrent() to add qBittorrent button and remove ads.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
 // @include      https://ncore.pro/torrents.php*
