@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Felhasználó elrejtése
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.1.1
+// @version      1.2.0
 // @description  Megadott felhasználók hozzászólásait elrejti.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -24,6 +24,7 @@
 
     const STORAGE_KEY = "ph_hidden_users";
     let hiddenUsers;
+    const dropdownRefreshers = [];
     try {
         hiddenUsers = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
     } catch {
@@ -73,14 +74,19 @@
                 cursor: pointer;
                 position: sticky;
                 top: 0;
-                z-index: 10;
+                z-index: 105;
                 text-align: center;
                 transition: background 0.2s ease;
             }
             .hidden-bar:hover {
                 background: ${hover};
             }
-            .ph-collapsible { overflow: hidden; transition: max-height 0.4s ease; }
+            .ph-collapsible {
+                transition: max-height 0.4s ease;
+            }
+            .ph-collapsible[data-collapsed="true"] {
+                overflow: hidden;
+            }
         `;
     }
 
@@ -100,6 +106,7 @@
         const { base, hover, color } = getHiddenBarColors();
 
         getPosts().forEach(li => {
+            injectDropdownToggle(li);
             const msg = li.querySelector(".msg");
             if (!msg) return;
             const author = getAuthor(msg);
@@ -146,6 +153,75 @@
                 delete msg.dataset.collapsed;
             }
         });
+    }
+
+    function toggleUserHidden(author) {
+        if (!author) return;
+
+        if (hiddenUsers.includes(author)) {
+            hiddenUsers = hiddenUsers.filter(u => u !== author);
+        } else {
+            hiddenUsers.push(author);
+        }
+
+        hiddenUsers = Array.from(new Set(hiddenUsers));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(hiddenUsers));
+
+        // 1. Elrejtjük/megjelenítjük a kommenteket
+        updateHiddenComments();
+
+        // 2. Frissítjük az ÖSSZES eddigi dropdown menü szövegét
+        dropdownRefreshers.forEach(refresh => refresh());
+
+        // 3. fejléc gomb frissítése
+        editButtons.forEach(btn => {
+            const count = hiddenUsers.length;
+            btn.innerHTML = count > 0
+                ? `<span class="fas fa-eye-slash fa-fw"></span> Rejtettek (${count})`
+                : `<span class="fas fa-eye-slash fa-fw"></span> Rejtettek`;
+            btn.classList.toggle("btn-primary", count > 0);
+        });
+    }
+    
+    function injectDropdownToggle(li) {
+        const msg = li.querySelector(".msg");
+        if (!msg) return;
+
+        const author = getAuthor(msg);
+        if (!author) return;
+
+        const dropdown = li.querySelector(".dropdown-menu");
+        if (!dropdown) return;
+
+        if (dropdown.querySelector(".ph-hide-user-toggle")) return;
+
+        const divider = document.createElement("div");
+        divider.className = "dropdown-divider";
+
+        const a = document.createElement("a");
+        a.className = "dropdown-item ph-hide-user-toggle";
+        a.href = "javascript:;";
+
+        function refreshText() {
+            // Megkeressük az aktuális szerzőt (mert a gomb szövege attól függ, ő rejtett-e)
+            const currentAuthor = getAuthor(li.querySelector(".msg"));
+            const hidden = hiddenUsers.includes(currentAuthor);
+            a.innerHTML = hidden
+                ? `<span class="fas fa-eye fa-fw"></span> Felhasználó feloldása`
+                : `<span class="fas fa-eye-slash fa-fw"></span> Felhasználó elrejtése`;
+        }
+
+        refreshText();
+
+        // Elmentjük a listába, hogy később kívülről is frissíthessük
+        dropdownRefreshers.push(refreshText);
+
+        a.addEventListener("click", e => {
+            e.preventDefault();
+            toggleUserHidden(author);
+        });
+
+        dropdown.append(divider, a);
     }
 
     // ===== Gomb a szerkesztőhöz =====
@@ -311,6 +387,7 @@
             hiddenUsers = Array.from(new Set(tempHiddenUsers));
             localStorage.setItem(STORAGE_KEY, JSON.stringify(hiddenUsers));
             updateHiddenComments();
+            dropdownRefreshers.forEach(refresh => refresh());
             closeEditor();
             if (onSave) onSave();
         });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.5.0
+// @version      1.5.1
 // @description  Reddit-style thread megjelenítés.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -41,6 +41,14 @@
         }
         li.media.ph-thread {
             position: relative;
+            z-index: 1;
+        }
+        li.media.ph-thread:hover {
+            z-index: 10;
+        }
+        li.media.ph-thread:has(.dropdown-menu.show),
+        li.media.ph-thread:focus-within {
+            z-index: 100 !important;
         }
         .thread-lines {
             position: absolute;
