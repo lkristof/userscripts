@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Topik olvasottság jelölő
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.3
-// @description  Topikonként eltárolja a legnagyobb hozzászólás ID-t és a msg-header részeket halványítja.
+// @version      1.0.4
+// @description  Topikonként megjegyzi az utoljára olvasott hozzászólást és vizuálisan jelöli a már látott hozzászólások fejlécét.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
 // @match        https://prohardver.hu/tema/*
@@ -28,8 +28,16 @@
     const style = document.createElement("style");
     style.textContent = `
         .ph-seen-header {
-            filter: grayscale(100%);
-            transition: filter 1s ease;
+            background-color: #d6d6d6 !important;
+            border-bottom: 1px solid #bebebe !important;
+            border-top: 1px solid #bebebe !important;
+            transition: background-color 1s ease, border-color 1s ease !important;
+        }
+        [data-theme="dark"] .ph-seen-header {
+            background-color: #212121 !important;
+            border-bottom: 1px solid #1a1a1a !important;
+            border-top: 1px solid #1a1a1a !important;
+            transition: background-color 1s ease, border-color 1s ease !important;
         }
     `;
     document.head.appendChild(style);
