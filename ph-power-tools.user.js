@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.5.2
+// @version      1.5.3
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -823,6 +823,27 @@
     }
 
     function offHider() {
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .off-post-animate {
+                transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                overflow: hidden !important;
+                display: block !important;
+            }
+            .off-post-hidden {
+                opacity: 0 !important;
+                max-height: 0 !important;
+                margin-top: 0 !important;
+                margin-bottom: 0 !important;
+                padding-top: 0 !important;
+                padding-bottom: 0 !important;
+                border-top-width: 0 !important;
+                border-bottom-width: 0 !important;
+                pointer-events: none !important;
+            }
+        `;
+        document.head.appendChild(style);
+
         const STORAGE_KEY = "ph_hide_off";
         const STATUS = { ON: 'enabled', OFF: 'disabled' };
 
@@ -830,16 +851,51 @@
         const buttons = [];
 
         function getOffPosts() {
-            return document.querySelectorAll('.msg, .topic, .msg-off');
+            return Array.from(document.querySelectorAll('.msg, .topic, .msg-off')).filter(post =>
+                post.textContent.includes('[OFF]') || post.classList.contains('msg-off')
+            );
         }
 
-        function applyVisibility() {
+        function applyVisibility(isInitial = false) {
             getOffPosts().forEach(post => {
-                if (
-                    post.textContent.includes('[OFF]') ||
-                    post.classList.contains('msg-off')
-                ) {
-                    post.style.display = offHidden ? 'none' : '';
+                if (offHidden) {
+                    if (isInitial) {
+                        post.style.display = 'none';
+                        post.classList.add('off-post-hidden');
+                    } else {
+                        // Elrejtés animációval
+                        post.style.maxHeight = post.scrollHeight + "px";
+                        post.classList.add('off-post-animate');
+                        requestAnimationFrame(() => {
+                            post.classList.add('off-post-hidden');
+                        });
+                    }
+                } else {
+                    // Megjelenítés animációval
+                    if (isInitial) {
+                        post.style.display = '';
+                        post.classList.remove('off-post-hidden');
+                    } else {
+                        if (post.style.display === 'none') {
+                            post.style.display = '';
+                        }
+                        post.classList.add('off-post-animate');
+                        // Kiszámoljuk a célmagasságot
+                        const targetHeight = post.scrollHeight;
+
+                        requestAnimationFrame(() => {
+                            post.classList.remove('off-post-hidden');
+                            post.style.maxHeight = targetHeight + "px";
+                        });
+
+                        // Tisztítás az animáció végén
+                        setTimeout(() => {
+                            if (!offHidden) {
+                                post.classList.remove('off-post-animate');
+                                post.style.maxHeight = '';
+                            }
+                        }, 500);
+                    }
                 }
             });
         }
@@ -884,7 +940,7 @@
             header.appendChild(btn);
         });
 
-        applyVisibility();
+        applyVisibility(true);
         updateAllButtons();
     }
 
