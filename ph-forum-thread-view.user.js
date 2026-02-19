@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Thread nézet
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.4.5
+// @version      1.5.0
 // @description  Reddit-style thread megjelenítés.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -35,8 +35,13 @@
 
     const style = document.createElement('style');
     style.textContent = `
-        li.media.ph-thread { position: relative; }
-    
+        li.media {
+            transition: transform 300ms ease, opacity 200ms ease;
+            will-change: transform;
+        }
+        li.media.ph-thread {
+            position: relative;
+        }
         .thread-lines {
             position: absolute;
             top: 0;
@@ -44,7 +49,6 @@
             pointer-events: none;
             left: calc(-1 * var(--indent));
         }
-    
         .thread-line-vert {
             position: absolute;
             top: 0;
@@ -54,7 +58,6 @@
             opacity: ${LINE_OPACITY};
             border-radius: ${LINE_THICK}px;
         }
-    
         .thread-line-horiz {
             position: absolute;
             top: 0;
@@ -109,7 +112,12 @@
         });
 
         // Ürítés és újraépítés
-        ul.innerHTML = '';
+        animateReorder(ul, () => {
+            ul.innerHTML = '';
+            (childrenMap[null] || []).forEach(id =>
+                renderThread(id, 0, [])
+            );
+        });
 
         // Rekurzív renderelő
         function renderThread(id, depth, ancestorPath = []) {
@@ -190,15 +198,21 @@
         }
         if (!ul) return;
 
-        ul.querySelectorAll('li.media.ph-thread').forEach(li => {
-            li.classList.remove('ph-thread');
-            li.style.marginLeft = '';
-            const box = li.querySelector('.thread-lines');
-            if (box) box.remove();
-        });
+        // A teljes folyamatot az animateReorder-re bízzuk
+        animateReorder(ul, () => {
+            // 1. Töröljük a threading-hez kapcsolódó stílusokat és elemeket
+            originalOrder.forEach(li => {
+                li.classList.remove('ph-thread');
+                li.style.marginLeft = '';
+                li.style.setProperty('--indent', '0px');
+                const box = li.querySelector('.thread-lines');
+                if (box) box.remove();
+            });
 
-        ul.innerHTML = '';
-        originalOrder.forEach(li => ul.appendChild(li));
+            // 2. Visszahelyezzük őket az eredeti sorrendbe
+            ul.innerHTML = '';
+            originalOrder.forEach(li => ul.appendChild(li));
+        });
 
         threadActive = false;
         saveState(false);
@@ -254,11 +268,47 @@
         return true;
     }
 
+    function animateReorder(ul, reorderFn) {
+        const items = [...ul.querySelectorAll('li.media')];
+
+        // FIRST – pozíció mentése
+        const firstRects = new Map();
+        items.forEach(el => {
+            firstRects.set(el, el.getBoundingClientRect());
+            // Ideiglenesen kikapcsoljuk az átmenetet, hogy ne zavarja a mérést
+            el.style.transition = 'none';
+        });
+
+        // DOM átrendezés (ezt te adod át a reorderFn-ben)
+        reorderFn();
+
+        // LAST – új pozíció
+        items.forEach(el => {
+            const first = firstRects.get(el);
+            const last = el.getBoundingClientRect();
+
+            const dx = first.left - last.left;
+            const dy = first.top  - last.top;
+
+            if (dx || dy) {
+                el.style.transform = `translate(${dx}px, ${dy}px)`;
+            }
+        });
+
+        // PLAY – kényszerített reflow után visszaengedjük az animációt
+        requestAnimationFrame(() => {
+            items.forEach(el => {
+                // Visszaadjuk a CSS-ben definiált transition-t
+                el.style.transition = '';
+                el.style.transform = '';
+            });
+        });
+    }
+
     if (!init()) {
         const observer = new MutationObserver(() => {
             if (init()) observer.disconnect();
         });
         observer.observe(document.body, { childList: true, subtree: true });
     }
-
 })();
