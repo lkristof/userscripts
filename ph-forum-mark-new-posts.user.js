@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Új hozzászólás jelölő
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.1.0
+// @version      1.1.1
 // @description  Topikonként megjegyzi az utoljára olvasott hozzászólást és vizuálisan jelöli az új hozzászólások fejlécét.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -135,5 +135,9 @@
     updateMarkColor();
     observeThemeChanges();
 
-    window.addEventListener("load", process);
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", process, { once: true });
+    } else {
+        process();
+    }
 })();
