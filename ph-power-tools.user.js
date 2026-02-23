@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.0.3
+// @version      2.0.4
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -172,6 +172,8 @@
         let pushTimer = null;
         let inited = false;
 
+        const dirtyDeletes = new Set(); // ✅ explicit törlések nyilvántartása
+
         function keyShouldSync(key) {
             return SYNC_KEYS.includes(key);
         }
@@ -203,23 +205,28 @@
             if (!ENABLE_GIST_SYNC) return;
 
             try {
-                if (!gistCache) {
-                    try { gistCache = await fetchGistBlob(); }
-                    catch { gistCache = {}; }
-                }
+                try { gistCache = await fetchGistBlob(); }
+                catch { gistCache = {}; }
 
                 const keysToSync = listLocalKeysToSync();
 
                 keysToSync.forEach(k => {
                     const raw = localStorage.getItem(k);
+
                     if (raw == null) {
-                        delete gistCache[k];
+                        // ✅ csak akkor törlünk remote-on, ha tényleg mi töröltük
+                        if (dirtyDeletes.has(k)) {
+                            delete gistCache[k];
+                        } else {
+                            // nincs meg lokálban, de nem explicit törlés → remote marad
+                        }
                     } else {
                         gistCache[k] = safeJsonParse(raw, raw);
                     }
                 });
 
                 await pushGistBlob(gistCache);
+                dirtyDeletes.clear(); // ✅ sikeresen felment, reseteljük
             } catch (e) {
                 console.warn('[PH Power Tools] Gist sync (push) failed:', e);
             }
@@ -244,11 +251,17 @@
             getItem(key) { return localStorage.getItem(key); },
             setItem(key, value) {
                 localStorage.setItem(key, value);
-                if (keyShouldSync(key)) schedulePush();
+                if (keyShouldSync(key)) {
+                    dirtyDeletes.delete(key); // ✅ ha újra létrejött, már nem "törlés"
+                    schedulePush();
+                }
             },
             removeItem(key) {
                 localStorage.removeItem(key);
-                if (keyShouldSync(key)) schedulePush();
+                if (keyShouldSync(key)) {
+                    dirtyDeletes.add(key); // ✅ explicit törlés
+                    schedulePush();
+                }
             }
         };
     }
@@ -409,7 +422,9 @@
     }
 
     function insertSettingsDropdown(container) {
+        if (container.querySelector('#ph-power-tools-dropdown')) return;
         const li = document.createElement('li');
+        li.id = 'ph-power-tools-dropdown';
         li.className = 'dropdown';
 
         li.innerHTML = `
@@ -612,10 +627,15 @@
         });
 
         // ESC = bezár (csak egyszer!)
-        function escListener(e) {
-            if (e.key === 'Escape' && modal?.style.display === 'flex') closeSecretsModal();
+        if (!document.body.dataset.phSecretsEscBound) {
+            document.body.dataset.phSecretsEscBound = "1";
+            document.addEventListener('keydown', (e) => {
+                const modal = document.getElementById('ph-secrets-modal');
+                if (e.key === 'Escape' && modal?.style.display === 'flex') {
+                    modal.style.display = 'none';
+                }
+            });
         }
-        document.addEventListener('keydown', escListener);
 
         // mentés
         modal?.querySelector('#ph-secret-save')?.addEventListener('click', async (e) => {
@@ -2496,7 +2516,7 @@
             });
 
             // Mentés frissítése: mindig a legnagyobbat jegyezzük meg
-            if (!stored || pageMaxId > stored) {
+            if (stored === null || pageMaxId > stored) {
                 map[slug] = pageMaxId;
                 writeMap(map);
             }
