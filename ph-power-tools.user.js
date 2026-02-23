@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.0.0
+// @version      2.0.1
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -2273,7 +2273,6 @@
             { code: ':grinning:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_vbqtpqdq5dxgang5_grinning.gif' },
             { code: ':hehe:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_fxhv6towsjxuacnw_hehe.gif' },
             { code: ':hehehe:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_i6ikyt0sdzjfcysz_hehehe.gif' },
-            { code: ':hmm:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_pma0dcwqso0oowhk_hmm.gif' },
             { code: ':huha:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_qpd2yhifajqpzrzg_huha.gif' },
             { code: ':idiota:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_dtauyqcahbvgtafk_idiota.gif' },
             { code: ':idiota2:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_htknjkdfz0pttnmf_idiota2.gif' },
@@ -2319,49 +2318,71 @@
             { code: ':koccint:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_lv15ria9cnmxtoty_koccint.gif' }
         ];
 
+        // --- Segédfüggvény: van-e kód bármelyik szövegcsomópontban ---
+        function hasCodeInText(root, code) {
+            const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+            let n;
+            while ((n = tw.nextNode())) {
+                if (n.textContent.includes(code)) return true;
+            }
+            return false;
+        }
+
+        // --- Szmájli csere: csak szöveg-node-okban, per-smiley writeback ---
         function checkAndReplace(editor) {
             let html = editor.innerHTML;
-            let changed = false;
+            let anyChange = false;
 
             EXTRA_SMILIES.forEach(smiley => {
-                if (html.includes(smiley.code)) {
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = html;
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = html;
 
+                let changedThisSmiley = false;
+
+                if (hasCodeInText(tempDiv, smiley.code)) {
                     const walk = document.createTreeWalker(tempDiv, NodeFilter.SHOW_TEXT, null, false);
                     let node;
-                    while(node = walk.nextNode()) {
-                        if (node.textContent.includes(smiley.code)) {
-                            const img = document.createElement('img');
-                            img.src = smiley.src;
-                            img.alt = smiley.code;
-                            img.dataset.mceSrc = smiley.src;
+                    while ((node = walk.nextNode())) {
+                        if (!node.parentNode) continue;
 
-                            // Kicseréljük a szöveges részt a képre
+                        // (Opcionális) Ha bizonyos tagekben nem akarsz cserét:
+                        // if (node.parentNode.closest('code, pre')) continue;
+
+                        if (node.textContent.includes(smiley.code)) {
                             const parts = node.textContent.split(smiley.code);
                             const fragment = document.createDocumentFragment();
 
                             parts.forEach((part, i) => {
                                 fragment.appendChild(document.createTextNode(part));
                                 if (i < parts.length - 1) {
-                                    fragment.appendChild(img.cloneNode(true));
+                                    const img = document.createElement('img');
+                                    img.src = smiley.src;
+                                    img.alt = smiley.code;
+                                    img.setAttribute('data-mce-src', smiley.src);
+                                    img.style.verticalAlign = 'middle';
+                                    fragment.appendChild(img);
                                 }
                             });
 
                             node.parentNode.replaceChild(fragment, node);
-                            changed = true;
+                            changedThisSmiley = true;
+                            anyChange = true;
                         }
                     }
-                    if (changed) html = tempDiv.innerHTML;
+                }
+
+                if (changedThisSmiley) {
+                    html = tempDiv.innerHTML; // csak akkor írjuk vissza, ha tényleg volt csere ebben a körben
                 }
             });
 
-            if (changed) {
+            if (anyChange) {
                 editor.innerHTML = html;
                 placeCaretAtEnd(editor);
             }
         }
 
+        // --- Caret a végére (egyszerű és megbízható TinyMCE alatt is) ---
         function placeCaretAtEnd(el) {
             el.focus();
             const range = document.createRange();
@@ -2372,19 +2393,49 @@
             sel.addRange(range);
         }
 
-        function attachEditorEvents() {
+        // --- Duplázás elleni beszúrás gombos kattintásra ---
+        function insertSmileyImage(smiley) {
             const editor = document.querySelector('.mce-content-body[contenteditable="true"]');
-            if (editor && !editor.dataset.smileyEventsAttached) {
-                editor.addEventListener('keyup', (e) => {
-                    // Ha befejeztük a kódot (kettőspont) vagy szóközt nyomtunk
-                    if (e.key === ':' || e.key === ' ' || e.key === 'Enter') {
-                        checkAndReplace(editor);
-                    }
-                });
-                editor.dataset.smileyEventsAttached = 'true';
+            if (!editor) return;
+            editor.focus();
+
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount) {
+                // fallback: a végére szúrjuk
+                editor.insertAdjacentHTML('beforeend',
+                    `<img src="${smiley.src}" alt="${smiley.code}" data-mce-src="${smiley.src}" style="vertical-align: middle;">`
+                );
+                placeCaretAtEnd(editor);
+                return;
             }
+
+            const range = sel.getRangeAt(0);
+
+            // Ellenőrizzük, hogy a caret közvetlen közelében már ott van-e pont ugyanaz a kép
+            let refNode = range.startContainer;
+            if (refNode.nodeType === Node.TEXT_NODE) {
+                // Nézzük az előző testvért (ha van)
+                const prev = refNode.previousSibling;
+                if (prev && prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'IMG' && prev.getAttribute('src') === smiley.src) {
+                    return; // Már ott van ugyanaz a szmájli közvetlenül előtte
+                }
+            } else if (refNode.nodeType === Node.ELEMENT_NODE) {
+                // Ha elem a startContainer, nézzük az előtte lévő csomót
+                const idx = range.startOffset - 1;
+                if (idx >= 0 && refNode.childNodes[idx]) {
+                    const n = refNode.childNodes[idx];
+                    if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'IMG' && n.getAttribute('src') === smiley.src) {
+                        return;
+                    }
+                }
+            }
+
+            // Beszúrás (TinyMCE kompatibilis)
+            const imgHTML = `<img src="${smiley.src}" alt="${smiley.code}" data-mce-src="${smiley.src}" style="vertical-align: middle;">`;
+            document.execCommand('insertHTML', false, imgHTML);
         }
 
+        // --- Gombok létrehozása a kiterjesztett szmájlisorhoz ---
         function createSmileyElement(smiley) {
             const link = document.createElement('a');
             link.href = 'javascript:;';
@@ -2392,17 +2443,27 @@
             link.innerHTML = `<img src="${smiley.src}" alt="${smiley.code}" title="${smiley.code}" style="vertical-align: middle;">`;
             link.addEventListener('click', (e) => {
                 e.preventDefault();
-                const editor = document.querySelector('.mce-content-body[contenteditable="true"]');
-                if (editor) {
-                    editor.focus();
-                    // Itt sima HTML-ként szúrjuk be, a PH szerkesztője tudni fogja
-                    const imgHTML = `<img src="${smiley.src}" alt="${smiley.code}" data-mce-src="${smiley.src}">`;
-                    document.execCommand('insertHTML', false, imgHTML);
-                }
+                insertSmileyImage(smiley);
             });
             return link;
         }
 
+        // --- Események csatolása az editorhoz (debounce-olva) ---
+        function attachEditorEvents() {
+            const editor = document.querySelector('.mce-content-body[contenteditable="true"]');
+            if (editor && !editor.dataset.smileyEventsAttached) {
+                let replaceDebounce;
+                editor.addEventListener('keyup', (e) => {
+                    if (e.key === ':' || e.key === ' ' || e.key === 'Enter') {
+                        clearTimeout(replaceDebounce);
+                        replaceDebounce = setTimeout(() => checkAndReplace(editor), 40);
+                    }
+                });
+                editor.dataset.smileyEventsAttached = 'true';
+            }
+        }
+
+        // --- Extra szmájlisor befűzése az eredeti mellé ---
         function enhanceSmileyContainer(container) {
             if (!container || container.dataset.phExtraSmiliesInjected) return;
 
@@ -2410,6 +2471,7 @@
             extraRow.style.cssText = 'display: block; width: 100%; margin-top: 10px; padding-top: 5px; border-top: 1px dashed #aaa; clear: both;';
 
             const label = document.createElement('div');
+            label.textContent = ''; // ha kell felirat, ide írd
             label.style.cssText = 'font-size: 10px; color: #888; margin-bottom: 4px;';
             extraRow.appendChild(label);
 
@@ -2422,6 +2484,7 @@
             attachEditorEvents();
         }
 
+        // --- Figyeljük, mikor jelenik meg az editor/smiley panel ---
         const observer = new MutationObserver(() => {
             const target = document.querySelector('.rtif-smiles');
             if (target) enhanceSmileyContainer(target);
@@ -2430,6 +2493,7 @@
 
         observer.observe(document.body, { childList: true, subtree: true });
 
+        // Első próbálkozás kényszerítése
         setTimeout(attachEditorEvents, 1000);
     }
 
