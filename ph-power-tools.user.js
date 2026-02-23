@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.0.4
+// @version      2.0.5
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -201,41 +201,115 @@
             }
         }
 
+        function mergeForKey(key, remoteVal, localVal) {
+            // ha valamelyik hiányzik
+            if (remoteVal == null) return localVal;
+            if (localVal == null) return remoteVal;
+
+            // 1) Topic max id map: slug -> maxId (itt kell a MAX merge!)
+            if (key === "ph_topic_max_id_map") {
+                const r = (remoteVal && typeof remoteVal === "object") ? remoteVal : {};
+                const l = (localVal && typeof localVal === "object") ? localVal : {};
+                const out = { ...r };
+
+                for (const [slug, id] of Object.entries(l)) {
+                    const li = parseInt(id, 10);
+                    const ri = parseInt(out[slug], 10);
+                    if (!Number.isFinite(li)) continue;
+                    if (!Number.isFinite(ri) || li > ri) out[slug] = li;
+                }
+                return out;
+            }
+
+            // 2) kek gallery: unió URL alapján, friss rendezés, majd limit
+            if (key === "ph_kek_gallery") {
+                const r = Array.isArray(remoteVal) ? remoteVal : [];
+                const l = Array.isArray(localVal) ? localVal : [];
+                const byUrl = new Map();
+
+                for (const it of [...r, ...l]) {
+                    if (!it?.url) continue;
+                    const prev = byUrl.get(it.url);
+                    // tartsuk meg a "jobb" metaadatot (pl. későbbi createdAt)
+                    if (!prev) byUrl.set(it.url, it);
+                    else {
+                        const pT = Date.parse(prev.createdAt || 0) || 0;
+                        const iT = Date.parse(it.createdAt || 0) || 0;
+                        byUrl.set(it.url, (iT >= pT) ? { ...prev, ...it } : { ...it, ...prev });
+                    }
+                }
+
+                const merged = Array.from(byUrl.values())
+                    .sort((a, b) => (Date.parse(b.createdAt || 0) || 0) - (Date.parse(a.createdAt || 0) || 0));
+
+                return merged;
+            }
+
+            // Default: maradhat a "local wins" (beállításoknál ez oké)
+            return localVal;
+        }
+
+        function deepEqualJson(a, b) {
+            return JSON.stringify(a) === JSON.stringify(b);
+        }
+
         async function doPushNow() {
             if (!ENABLE_GIST_SYNC) return;
 
-            try {
-                try { gistCache = await fetchGistBlob(); }
-                catch { gistCache = {}; }
+            const keysToSync = listLocalKeysToSync();
+            const maxAttempts = 3;
 
-                const keysToSync = listLocalKeysToSync();
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                let remote;
+                try {
+                    remote = await fetchGistBlob();
+                } catch (e) {
+                    console.warn('[PH Power Tools] Push aborted (pull failed):', e);
+                    return;
+                }
+
+                // merge lokál + remote
+                const merged = { ...(remote || {}) };
 
                 keysToSync.forEach(k => {
                     const raw = localStorage.getItem(k);
 
                     if (raw == null) {
-                        // ✅ csak akkor törlünk remote-on, ha tényleg mi töröltük
-                        if (dirtyDeletes.has(k)) {
-                            delete gistCache[k];
-                        } else {
-                            // nincs meg lokálban, de nem explicit törlés → remote marad
-                        }
+                        if (dirtyDeletes.has(k)) delete merged[k];
                     } else {
-                        gistCache[k] = safeJsonParse(raw, raw);
+                        const localVal = safeJsonParse(raw, raw);
+                        const remoteVal = merged[k];
+                        merged[k] = mergeForKey(k, remoteVal, localVal);
                     }
                 });
 
-                await pushGistBlob(gistCache);
-                dirtyDeletes.clear(); // ✅ sikeresen felment, reseteljük
-            } catch (e) {
-                console.warn('[PH Power Tools] Gist sync (push) failed:', e);
+                try {
+                    await pushGistBlob(merged);
+                    dirtyDeletes.clear();
+                } catch (e) {
+                    console.warn('[PH Power Tools] Push failed:', e);
+                    return;
+                }
+
+                // verify: visszaolvasunk, és megnézzük, tényleg azt látjuk-e, amit felküldtünk
+                try {
+                    const after = await fetchGistBlob();
+                    if (deepEqualJson(after, merged)) return; // kész
+                } catch {
+                    // ha verify nem sikerül, próbáljuk újra (ritka)
+                }
+
+                // kis várakozás + retry (jitter)
+                await new Promise(r => setTimeout(r, 150 + Math.floor(Math.random() * 250)));
             }
+
+            console.warn('[PH Power Tools] Push gave up after retries (possible concurrent edits).');
         }
 
         function schedulePush() {
             if (!ENABLE_GIST_SYNC) return;
             if (pushTimer) clearTimeout(pushTimer);
-            pushTimer = setTimeout(() => { doPushNow(); }, 600);
+            pushTimer = setTimeout(() => { doPushNow(); }, 2000);
         }
 
         return {
