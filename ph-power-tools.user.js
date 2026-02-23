@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.6.3
+// @version      2.0.0
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -15,16 +15,28 @@
 // @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
 // @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
 //
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      kek.sh
+// @connect      api.github.com
 // @run-at       document-idle
 // ==/UserScript==
 
-(function () {
+(async function () {
     'use strict';
 
     /************ CONFIG ************/
 
     const STORAGE_KEY = 'ph_forum_settings';
+
+    // --- Gist sync (opcionális) ---
+    const GIST_TOKEN = "";      // GitHub token (fine-grained / PAT)
+    const GIST_ID = "";         // Gist ID
+    const GIST_FILENAME = "";   // pl. "ph_forum_settings.json"
+
+    const KEK_SH_API_KEY = "IDE_IRD_A_KEK_SH_API_KULCSODAT"; // https://kek.sh/settings/api
+
+    // csak akkor megy a sync, ha MIND ki van töltve:
+    const ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
 
     const defaultSettings = {
         colorize: true,
@@ -35,9 +47,149 @@
         threadView: true,
         keyboardNavigation: true,
         hideUsers: true,
-        markNewPosts: false,
-        extraSmilies: true
+        markNewPosts: true,
+        extraSmilies: true,
+        kekShUploader: true
     };
+
+    const SYNC_KEYS = [
+        'ph_forum_settings',
+        'ph_hidden_users',
+        'ph_topic_max_id_map',
+        'ph_kek_gallery'
+    ];
+
+    function safeJsonParse(str, fallback) {
+        try { return JSON.parse(str); } catch { return fallback; }
+    }
+
+    async function fetchGistBlob() {
+        const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            headers: {
+                'Accept': 'application/vnd.github+json',
+                'Authorization': `token ${GIST_TOKEN}`
+            }
+        });
+        if (!res.ok) throw new Error(`Gist fetch failed: ${res.status} ${res.statusText}`);
+        const data = await res.json();
+        const file = data?.files?.[GIST_FILENAME];
+        if (!file || typeof file.content !== 'string') return {};
+        const blob = safeJsonParse(file.content, {});
+        return (blob && typeof blob === 'object') ? blob : {};
+    }
+
+    async function pushGistBlob(blob) {
+        const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+            method: 'PATCH',
+            headers: {
+                'Accept': 'application/vnd.github+json',
+                'Authorization': `token ${GIST_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                files: {
+                    [GIST_FILENAME]: {
+                        content: JSON.stringify(blob, null, 2)
+                    }
+                }
+            })
+        });
+        if (!res.ok) throw new Error(`Gist update failed: ${res.status} ${res.statusText}`);
+    }
+
+    function createSyncedStorage() {
+        let gistCache = null;
+        let pushTimer = null;
+        let inited = false;
+
+        function keyShouldSync(key) {
+            return SYNC_KEYS.includes(key);
+        }
+
+        function listLocalKeysToSync() {
+            return Array.from(new Set(SYNC_KEYS));
+        }
+
+        async function init() {
+            if (inited) return;
+            inited = true;
+
+            if (!ENABLE_GIST_SYNC) return;
+
+            try {
+                gistCache = await fetchGistBlob();
+
+                const remoteKeys = Object.keys(gistCache || {});
+                remoteKeys.forEach(k => {
+                    if (!keyShouldSync(k)) return;
+                    localStorage.setItem(k, JSON.stringify(gistCache[k]));
+                });
+            } catch (e) {
+                console.warn('[PH Power Tools] Gist sync (pull) failed:', e);
+            }
+        }
+
+        async function doPushNow() {
+            if (!ENABLE_GIST_SYNC) return;
+
+            try {
+                if (!gistCache) {
+                    try { gistCache = await fetchGistBlob(); }
+                    catch { gistCache = {}; }
+                }
+
+                const keysToSync = listLocalKeysToSync();
+
+                keysToSync.forEach(k => {
+                    const raw = localStorage.getItem(k);
+                    if (raw == null) {
+                        delete gistCache[k];
+                    } else {
+                        gistCache[k] = safeJsonParse(raw, raw);
+                    }
+                });
+
+                await pushGistBlob(gistCache);
+            } catch (e) {
+                console.warn('[PH Power Tools] Gist sync (push) failed:', e);
+            }
+        }
+
+        function schedulePush() {
+            if (!ENABLE_GIST_SYNC) return;
+            if (pushTimer) clearTimeout(pushTimer);
+            pushTimer = setTimeout(() => { doPushNow(); }, 600);
+        }
+
+        return {
+            init,
+            async flush() {
+                // ha van ütemezett push, azt most azonnal futtatjuk
+                if (pushTimer) {
+                    clearTimeout(pushTimer);
+                    pushTimer = null;
+                }
+                await doPushNow();
+            },
+            getItem(key) { return localStorage.getItem(key); },
+            setItem(key, value) {
+                localStorage.setItem(key, value);
+                if (keyShouldSync(key)) schedulePush();
+            },
+            removeItem(key) {
+                localStorage.removeItem(key);
+                if (keyShouldSync(key)) schedulePush();
+            }
+        };
+    }
+
+    const storage = createSyncedStorage();
+    await storage.init();
+
+    function getMergedSettings() {
+        const local = safeJsonParse(storage.getItem(STORAGE_KEY) || '{}', {});
+        return { ...defaultSettings, ...local };
+    }
 
     const settingGroups = {
         appearance: {
@@ -51,9 +203,25 @@
         },
         interaction: {
             label: 'Interakció',
-            keys: ['extraSmilies', 'linkRedirect', 'msgAnchorHighlight', 'keyboardNavigation']
+            keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight', 'keyboardNavigation']
         }
     };
+
+    function prettyName(key) {
+        return {
+            colorize: 'Hozzászólások színezése',
+            linkRedirect: 'Link átirányítás',
+            msgAnchorHighlight: 'Üzenet kiemelés',
+            offHider: 'OFF hozzászólások elrejtése',
+            wideView: 'Széles nézet',
+            threadView: 'Thread nézet',
+            keyboardNavigation: 'Billentyűzetes navigáció',
+            hideUsers: 'Felhasználók elrejtése',
+            markNewPosts: 'Új hozzászólás jelölése',
+            extraSmilies: 'Extra smiley-k',
+            kekShUploader: 'kek.sh képfeltöltő'
+        }[key] || key;
+    }
 
     const tooltips = {
         colorize: 'Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés.',
@@ -65,11 +233,7 @@
         markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.'
     };
 
-    const savedSettings = {
-        ...defaultSettings,
-        ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
-    };
-
+    const savedSettings = getMergedSettings();
     let draftSettings = {...savedSettings};
 
     function isOnPage(path) {
@@ -271,8 +435,9 @@
         const menu = li.querySelector('.dropdown-menu');
         menu.addEventListener('click', e => e.stopPropagation());
 
-        applyBtn.addEventListener('click', () => {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(draftSettings));
+        applyBtn.addEventListener('click', async () => {
+            storage.setItem(STORAGE_KEY, JSON.stringify(draftSettings));
+            await storage.flush();
             li.querySelector('.dropdown-toggle').click();
             location.reload();
         });
@@ -281,7 +446,7 @@
         li.querySelectorAll('.ph-acc-header').forEach(header => {
             header.addEventListener('click', (e) => {
 
-                e.stopPropagation(); // fontos a dropdown miatt
+                e.stopPropagation();
 
                 const allBodies = li.querySelectorAll('.ph-acc-body');
                 const allArrows = li.querySelectorAll('.ph-acc-arrow');
@@ -313,21 +478,6 @@
         });
     }
 
-    function prettyName(key) {
-        return {
-            colorize: 'Hozzászólások színezése',
-            linkRedirect: 'Link átirányítás',
-            msgAnchorHighlight: 'Üzenet kiemelés',
-            offHider: 'OFF hozzászólások elrejtése',
-            wideView: 'Széles nézet',
-            threadView: 'Thread nézet',
-            keyboardNavigation: 'Billentyűzetes navigáció',
-            hideUsers: 'Felhasználók elrejtése',
-            markNewPosts: 'Új hozzászólás jelölése',
-            extraSmilies: 'Extra smiley-k'
-        }[key] || key;
-    }
-
     /************ MODULE DISPATCH ************/
 
     if (isOnPage("tema") || isOnPage("privat")) {
@@ -343,6 +493,7 @@
             if (savedSettings.hideUsers) hideUsers();
         }
         if (savedSettings.extraSmilies) extraSmilies();
+        if (savedSettings.kekShUploader) kekShUploader();
     }
 
     /************ MODULE STUBS ************/
@@ -524,7 +675,6 @@
             const author = getAuthor(msg);
             if (!author) return;
 
-            // HA AVATART KATTINTASZ: Töröljük a láncot
             activeChainIds.clear();
 
             selectedUser = (selectedUser === author) ? null : author;
@@ -861,7 +1011,7 @@
         const STORAGE_KEY = "ph_hide_off";
         const STATUS = { ON: 'enabled', OFF: 'disabled' };
 
-        let offHidden = localStorage.getItem(STORAGE_KEY) === STATUS.ON;
+        let offHidden = storage.getItem(STORAGE_KEY) === STATUS.ON;
         const buttons = [];
 
         function getOffPosts() {
@@ -930,7 +1080,7 @@
 
             btn.addEventListener('click', () => {
                 offHidden = !offHidden;
-                localStorage.setItem(
+                storage.setItem(
                     STORAGE_KEY,
                     offHidden ? STATUS.ON : STATUS.OFF
                 );
@@ -1052,11 +1202,11 @@
         }
 
         function saveState(active) {
-            localStorage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
+            storage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
         }
 
         function shouldBeActive() {
-            return localStorage.getItem(STORAGE_KEY) === STATUS.ON;
+            return storage.getItem(STORAGE_KEY) === STATUS.ON;
         }
 
         window.addEventListener('resize', () => {
@@ -1176,11 +1326,11 @@
         document.head.appendChild(style);
 
         function saveState(active) {
-            localStorage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
+            storage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
         }
 
         function shouldBeActive() {
-            return localStorage.getItem(STORAGE_KEY) === STATUS.ON;
+            return storage.getItem(STORAGE_KEY) === STATUS.ON;
         }
 
         function renderThreading() {
@@ -1562,7 +1712,7 @@
         let hiddenUsers;
         const dropdownRefreshers = [];
         try {
-            hiddenUsers = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+            hiddenUsers = JSON.parse(storage.getItem(STORAGE_KEY)) || [];
         } catch {
             hiddenUsers = [];
         }
@@ -1639,8 +1789,6 @@
         }
 
         function updateHiddenComments() {
-            const { base, hover, color } = getHiddenBarColors();
-
             getPosts().forEach(li => {
                 injectDropdownToggle(li);
                 const msg = li.querySelector(".msg");
@@ -1701,7 +1849,7 @@
             }
 
             hiddenUsers = Array.from(new Set(hiddenUsers));
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(hiddenUsers));
+            storage.setItem(STORAGE_KEY, JSON.stringify(hiddenUsers));
 
             // 1. Elrejtjük/megjelenítjük a kommenteket
             updateHiddenComments();
@@ -1739,7 +1887,6 @@
             a.href = "javascript:;";
 
             function refreshText() {
-                // Megkeressük az aktuális szerzőt (mert a gomb szövege attól függ, ő rejtett-e)
                 const currentAuthor = getAuthor(li.querySelector(".msg"));
                 const hidden = hiddenUsers.includes(currentAuthor);
                 a.innerHTML = hidden
@@ -1748,8 +1895,6 @@
             }
 
             refreshText();
-
-            // Elmentjük a listába, hogy később kívülről is frissíthessük
             dropdownRefreshers.push(refreshText);
 
             a.addEventListener("click", e => {
@@ -1921,7 +2066,7 @@
             // ===== Mentés – csak itt frissítjük a valódi hiddenUsers-t =====
             saveBtn.addEventListener("click", () => {
                 hiddenUsers = Array.from(new Set(tempHiddenUsers));
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(hiddenUsers));
+                storage.setItem(STORAGE_KEY, JSON.stringify(hiddenUsers));
                 updateHiddenComments();
                 dropdownRefreshers.forEach(refresh => refresh());
                 closeEditor();
@@ -1979,7 +2124,7 @@
     }
 
     function markNewPosts() {
-        const STORAGE_PREFIX = "ph_topic_max_id:";
+        const MAP_KEY = "ph_topic_max_id_map";
 
         /* =========================
            COLOR HANDLING
@@ -2019,9 +2164,9 @@
            MAIN LOGIC
         ========================== */
 
-        function getTopicKey() {
+        function getTopicSlug() {
             const match = location.pathname.match(/\/tema\/([^/]+)/);
-            return match ? STORAGE_PREFIX + match[1] : null;
+            return match ? match[1] : null;
         }
 
         function getMaxFromURL() {
@@ -2033,11 +2178,20 @@
             return null;
         }
 
-        function process() {
-            const topicKey = getTopicKey();
-            if (!topicKey) return;
+        function readMap() {
+            return safeJsonParse(storage.getItem(MAP_KEY) || "{}", {});
+        }
 
-            const rawStored = localStorage.getItem(topicKey);
+        function writeMap(map) {
+            storage.setItem(MAP_KEY, JSON.stringify(map));
+        }
+
+        function process() {
+            const slug = getTopicSlug();
+            if (!slug) return;
+
+            const map = readMap();
+
             const urlMax = getMaxFromURL();
             const comments = Array.from(document.querySelectorAll("li.media[data-id]"));
 
@@ -2048,17 +2202,20 @@
                 return Math.max(max, id);
             }, 0);
 
+            const stored = Number.isFinite(map[slug]) ? parseInt(map[slug], 10) : null;
+
             let baseId;
 
-            if (rawStored !== null) {
+            if (stored !== null) {
                 // 1. Van mentett adatunk: azt használjuk bázisnak
-                baseId = parseInt(rawStored, 10);
+                baseId = stored;
             } else if (urlMax !== null) {
                 // 2. Nincs mentett adat, DE van #msg az URL-ben: az URL-ből jövő ID a bázis
                 baseId = urlMax;
             } else {
                 // 3. Se mentett adat, se URL paraméter: első sima megnyitás, nem jelölünk semmit
-                localStorage.setItem(topicKey, pageMaxId);
+                map[slug] = pageMaxId;
+                writeMap(map);
                 return;
             }
 
@@ -2073,8 +2230,9 @@
             });
 
             // Mentés frissítése: mindig a legnagyobbat jegyezzük meg
-            if (pageMaxId > (parseInt(rawStored, 10) || 0)) {
-                localStorage.setItem(topicKey, pageMaxId);
+            if (!stored || pageMaxId > stored) {
+                map[slug] = pageMaxId;
+                writeMap(map);
             }
         }
 
@@ -2273,5 +2431,597 @@
         observer.observe(document.body, { childList: true, subtree: true });
 
         setTimeout(attachEditorEvents, 1000);
+    }
+
+    function kekShUploader() {
+        /* ================= CONFIG ================= */
+
+        const LS_KEY = "ph_kek_gallery";
+        const MAX_ITEMS = 120;
+
+        // UI
+        const GALLERY_MAX_HEIGHT_PX = 420;
+        const GRID_THUMB_SIZE_PX = 120;
+
+        /* ================= STATE ================= */
+
+        function safeJsonParse(str, fallback) {
+            try { return JSON.parse(str); } catch { return fallback; }
+        }
+
+        /* ================= GM REQUEST ================= */
+
+        function gmRequest(opts) {
+            return GM_xmlhttpRequest(opts);
+        }
+
+        /* ================= STORAGE (shared) ================= */
+
+        function loadGallery() {
+            const arr = safeJsonParse(storage.getItem(LS_KEY) || "[]", []);
+            return Array.isArray(arr) ? arr : [];
+        }
+
+        async function saveGallery(data) {
+            let arr = Array.isArray(data) ? data : [];
+            if (arr.length > MAX_ITEMS) arr = arr.slice(0, MAX_ITEMS);
+
+            storage.setItem(LS_KEY, JSON.stringify(arr));
+        }
+
+        async function addToGallery(item) {
+            if (!item?.url) return;
+
+            const arr = loadGallery();
+            if (arr.some(x => x.url === item.url)) return;
+
+            arr.unshift(item);
+            if (arr.length > MAX_ITEMS) arr.length = MAX_ITEMS;
+
+            await saveGallery(arr);
+        }
+
+        async function removeFromGallery(url) {
+            const arr = loadGallery().filter(x => x.url !== url);
+            await saveGallery(arr);
+        }
+
+        async function clearGallery() {
+            await saveGallery([]);
+        }
+
+        /* ================= HELPERS (editor/HTML) ================= */
+
+        function buildImageUrlFromApi(json) {
+            if (json?.filename) return "https://i.kek.sh/" + json.filename;
+            if (json?.url) return json.url;
+            if (json?.data?.url) return json.data.url;
+            if (json?.file?.url) return json.file.url;
+            if (json?.token) return `https://kek.sh/${json.token}`;
+            return null;
+        }
+
+        function findEditorNear(node) {
+            const root = node?.closest?.(".msg-editor-wrapper") || document;
+            return root.querySelector(".rtif-content[contenteditable='true']");
+        }
+
+        function insertHtml(editor, html) {
+            if (!editor) return false;
+            editor.focus();
+            document.execCommand("insertHTML", false, html);
+            return true;
+        }
+
+        function escapeHtml(text) {
+            return String(text)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        function buildLinkHtml(url) {
+            const safeUrl = escapeHtml(url);
+            return `<a href="${safeUrl}" target="_blank" rel="noopener">[kép]</a>`;
+        }
+
+        /* ================= UI ================= */
+
+        function injectCssOnce() {
+            if (document.getElementById("ph-kek-style")) return;
+
+            const style = document.createElement("style");
+            style.id = "ph-kek-style";
+            style.textContent = `
+            #ph-kek-upload .ph-kek-cell { position: relative; }
+            #ph-kek-upload .ph-kek-overlay { opacity: 0; pointer-events: none; }
+            #ph-kek-upload .ph-kek-cell:hover .ph-kek-overlay {
+                opacity: 1 !important;
+                pointer-events: auto !important;
+            }
+            #ph-kek-upload .ph-kek-overlay button.btn {
+                padding: 2px 6px;
+                line-height: 1.1;
+                font-size: 11px;
+            }
+            #ph-kek-upload #ph-kek-sync-badge {
+                font-size: 12px;
+                padding: 2px 6px;
+                border-radius: 10px;
+                background: rgba(0,0,0,0.06);
+            }
+            #ph-kek-sync-badge:empty { display: none; }
+        `;
+            document.head.appendChild(style);
+        }
+
+        function updateSyncBadge() {
+            const el = document.getElementById("ph-kek-sync-badge");
+            if (!el) return;
+
+            if (ENABLE_GIST_SYNC) {
+                el.textContent = "☁️ Cloud";
+                el.style.color = "green";
+            } else {
+                el.textContent = "💾 Local";
+                el.style.color = "gray";
+            }
+        }
+
+        function setActiveTab(wrapper, tab) {
+            const btnGrid = wrapper.querySelector("#ph-kek-tab-grid");
+            const btnList = wrapper.querySelector("#ph-kek-tab-list");
+            const viewGrid = wrapper.querySelector("#ph-kek-view-grid");
+            const viewList = wrapper.querySelector("#ph-kek-view-list");
+
+            wrapper.dataset.activeTab = tab;
+
+            if (tab === "grid") {
+                btnGrid.classList.add("btn-secondary");
+                btnGrid.classList.remove("btn-light");
+                btnList.classList.add("btn-light");
+                btnList.classList.remove("btn-secondary");
+                viewGrid.style.display = "block";
+                viewList.style.display = "none";
+            } else {
+                btnList.classList.add("btn-secondary");
+                btnList.classList.remove("btn-light");
+                btnGrid.classList.add("btn-light");
+                btnGrid.classList.remove("btn-secondary");
+                viewList.style.display = "block";
+                viewGrid.style.display = "none";
+            }
+        }
+
+        function renderGallery(wrapper) {
+            if (!wrapper) return;
+
+            const items = loadGallery();
+
+            const emptyGrid = wrapper.querySelector("#ph-kek-empty-grid");
+            const emptyList = wrapper.querySelector("#ph-kek-empty-list");
+            const gridEl = wrapper.querySelector("#ph-kek-grid");
+            const listEl = wrapper.querySelector("#ph-kek-list");
+
+            gridEl.innerHTML = "";
+            listEl.innerHTML = "";
+
+            if (!items.length) {
+                emptyGrid.style.display = "block";
+                emptyList.style.display = "block";
+                return;
+            }
+            emptyGrid.style.display = "none";
+            emptyList.style.display = "none";
+
+            // GRID
+            for (const it of items) {
+                const cell = document.createElement("div");
+                cell.className = "ph-kek-cell";
+                cell.style.width = `${GRID_THUMB_SIZE_PX}px`;
+                cell.style.height = `${GRID_THUMB_SIZE_PX}px`;
+                cell.style.borderRadius = "8px";
+                cell.style.overflow = "hidden";
+                cell.style.border = "1px solid rgba(0,0,0,0.15)";
+                cell.style.background = "rgba(0,0,0,0.02)";
+
+                const a = document.createElement("a");
+                a.href = it.url;
+                a.target = "_blank";
+                a.rel = "noopener";
+                a.title = "Megnyitás új lapon";
+                a.style.display = "block";
+                a.style.width = "100%";
+                a.style.height = "100%";
+                a.style.position = "absolute";
+                a.style.inset = "0";
+                a.style.zIndex = "1";
+
+                const img = document.createElement("img");
+                img.src = it.url;
+                img.alt = it.filename || "";
+                img.loading = "lazy";
+                img.style.width = "100%";
+                img.style.height = "100%";
+                img.style.objectFit = "cover";
+                a.appendChild(img);
+
+                const overlay = document.createElement("div");
+                overlay.className = "ph-kek-overlay";
+                overlay.style.position = "absolute";
+                overlay.style.left = "0";
+                overlay.style.right = "0";
+                overlay.style.bottom = "0";
+                overlay.style.padding = "8px";
+                overlay.style.display = "flex";
+                overlay.style.gap = "8px";
+                overlay.style.justifyContent = "center";
+                overlay.style.background = "rgba(0,0,0,0.55)";
+                overlay.style.transition = "opacity 120ms ease";
+                overlay.style.zIndex = "2";
+
+                const makeMiniBtn = (action, title, innerHtml, className) => {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.className = className;
+                    b.dataset.action = action;
+                    b.dataset.url = it.url;
+                    b.title = title;
+                    b.innerHTML = innerHtml;
+                    return b;
+                };
+
+                overlay.appendChild(makeMiniBtn("insert-image", "Kép beszúrás", `<span class="fas fa-image"></span>`, "btn btn-light btn-xs"));
+                overlay.appendChild(makeMiniBtn("insert-link", "Link beszúrás ([kép])", `<span class="fas fa-link"></span>`, "btn btn-light btn-xs"));
+                overlay.appendChild(makeMiniBtn("delete", "Törlés", `<span class="fas fa-trash"></span>`, "btn btn-light btn-xs"));
+
+                cell.appendChild(a);
+                cell.appendChild(overlay);
+                gridEl.appendChild(cell);
+            }
+
+            // LISTA
+            for (const it of items) {
+                const row = document.createElement("div");
+                row.style.display = "flex";
+                row.style.alignItems = "center";
+                row.style.gap = "10px";
+                row.style.padding = "6px 0";
+                row.style.borderTop = "1px solid rgba(0,0,0,0.08)";
+
+                const thumbLink = document.createElement("a");
+                thumbLink.href = it.url;
+                thumbLink.target = "_blank";
+                thumbLink.rel = "noopener";
+                thumbLink.title = "Megnyitás új lapon";
+
+                const thumb = document.createElement("img");
+                thumb.src = it.url;
+                thumb.alt = it.filename || "";
+                thumb.loading = "lazy";
+                thumb.style.width = "56px";
+                thumb.style.height = "56px";
+                thumb.style.objectFit = "cover";
+                thumb.style.borderRadius = "4px";
+                thumb.style.border = "1px solid rgba(0,0,0,0.15)";
+                thumbLink.appendChild(thumb);
+
+                const meta = document.createElement("div");
+                meta.style.flex = "1";
+                meta.style.minWidth = "0";
+
+                const title = document.createElement("div");
+                title.textContent = it.originalName || it.filename || it.url.split("/").pop();
+                title.style.fontSize = "12px";
+                title.style.fontWeight = "600";
+                title.style.whiteSpace = "nowrap";
+                title.style.overflow = "hidden";
+                title.style.textOverflow = "ellipsis";
+                title.title = it.url;
+
+                const urlLine = document.createElement("div");
+                urlLine.textContent = it.url;
+                urlLine.style.fontSize = "11px";
+                urlLine.style.color = "#666";
+                urlLine.style.whiteSpace = "nowrap";
+                urlLine.style.overflow = "hidden";
+                urlLine.style.textOverflow = "ellipsis";
+                urlLine.title = it.url;
+
+                meta.appendChild(title);
+                meta.appendChild(urlLine);
+
+                const actions = document.createElement("div");
+                actions.style.display = "flex";
+                actions.style.gap = "6px";
+                actions.style.flexWrap = "wrap";
+                actions.style.justifyContent = "flex-end";
+
+                const mkBtn = (action, icon, label) => {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.className = "btn btn-light btn-xs my-1";
+                    b.dataset.action = action;
+                    b.dataset.url = it.url;
+                    b.innerHTML = `<span class="fas ${icon}"></span> <span class="d-none d-md-inline-block">${label}</span>`;
+                    return b;
+                };
+
+                actions.appendChild(mkBtn("insert-image", "fa-image", "Beszúrás"));
+                actions.appendChild(mkBtn("insert-link", "fa-link", "Link beszúrás"));
+                actions.appendChild(mkBtn("delete", "fa-trash", "Törlés"));
+
+                row.appendChild(thumbLink);
+                row.appendChild(meta);
+                row.appendChild(actions);
+
+                listEl.appendChild(row);
+            }
+        }
+
+        function ensureUi(target) {
+            if (!target) return null;
+            if (target.querySelector("#ph-kek-upload")) return target.querySelector("#ph-kek-upload");
+
+            injectCssOnce();
+
+            const wrapper = document.createElement("div");
+            wrapper.id = "ph-kek-upload";
+            wrapper.style.marginTop = "20px";
+            wrapper.style.paddingTop = "15px";
+            wrapper.style.borderTop = "1px dashed #aaa";
+            wrapper.dataset.activeTab = "grid";
+
+            wrapper.innerHTML = `
+            <h6 style="margin-bottom:10px;">Külső feltöltés (kek.sh)</h6>
+
+            <div id="ph-kek-upload-row" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <input type="file" id="ph-kek-file" accept="image/*" style="flex: 1 1 260px; min-width: 220px;">
+                <button id="ph-kek-upload-btn" class="btn btn-secondary btn-sm" type="button" style="flex: 0 0 auto;">
+                    Feltöltés
+                </button>
+                <span id="ph-kek-status" style="flex: 1 1 200px; min-width: 180px; font-size:0.8rem;"></span>
+            </div>
+
+            <div style="margin-top:14px; padding-top:12px; border-top:1px dashed #aaa;">
+                <div id="ph-kek-gallery-head" style="position: sticky; top: 0; z-index: 2;
+                            padding: 6px 0; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <h6 style="margin:0;">Képeim (kek.sh)</h6>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <button type="button" id="ph-kek-tab-grid" class="btn btn-secondary btn-sm">Rács</button>
+                            <button type="button" id="ph-kek-tab-list" class="btn btn-light btn-sm">Lista</button>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                        <div style="display:flex; align-items:center;">
+                            <span id="ph-kek-sync-badge"></span>
+                        </div>
+                        ${ENABLE_GIST_SYNC ? `<button id="ph-kek-sync-now" class="btn btn-light btn-sm">Szinkronizálás</button>` : ``}
+                        <button type="button" class="btn btn-light btn-sm" id="ph-kek-clear">Mind törlése</button>
+                    </div>
+                </div>
+
+                <div id="ph-kek-view-grid">
+                    <div id="ph-kek-empty-grid" style="font-size:12px; color:#666; display:none;">
+                        Nincs elmentett kép. Feltöltés után itt fognak megjelenni.
+                    </div>
+                    <div id="ph-kek-grid"
+                        style="display:flex; flex-wrap:wrap; gap:12px;
+                                max-height:${GALLERY_MAX_HEIGHT_PX}px; overflow-y:auto;
+                                padding-right:6px;">
+                    </div>
+                </div>
+
+                <div id="ph-kek-view-list" style="display:none;">
+                    <div id="ph-kek-empty-list" style="font-size:12px; color:#666; display:none;">
+                        Nincs elmentett kép. Feltöltés után itt fognak megjelenni.
+                    </div>
+                    <div id="ph-kek-list"
+                        style="max-height:${GALLERY_MAX_HEIGHT_PX}px; overflow-y:auto; padding-right:6px;">
+                    </div>
+                </div>
+            </div>
+        `;
+
+            target.appendChild(wrapper);
+
+            wrapper.querySelector("#ph-kek-tab-grid").addEventListener("click", () => setActiveTab(wrapper, "grid"));
+            wrapper.querySelector("#ph-kek-tab-list").addEventListener("click", () => setActiveTab(wrapper, "list"));
+            setActiveTab(wrapper, "grid");
+
+            renderGallery(wrapper);
+            updateSyncBadge();
+
+            return wrapper;
+        }
+
+        function setStatus(wrapperOrDoc, text) {
+            const status = (wrapperOrDoc instanceof HTMLElement)
+                ? wrapperOrDoc.querySelector("#ph-kek-status")
+                : document.getElementById("ph-kek-status");
+            if (status) status.textContent = text || "";
+        }
+
+        function getWrapperFromEvent(e) {
+            return e.target?.closest?.("#ph-kek-upload") || document.getElementById("ph-kek-upload");
+        }
+
+        /* ================= UPLOAD ================= */
+
+        function handleUpload(e) {
+            const wrapper = getWrapperFromEvent(e);
+            const fileInput = wrapper?.querySelector("#ph-kek-file");
+
+            if (!fileInput?.files?.length) {
+                alert("Nincs kiválasztott fájl.");
+                return;
+            }
+
+            if (!KEK_SH_API_KEY || KEK_SH_API_KEY.includes("IDE_IRD")) {
+                alert("Nincs beállítva API kulcs a scriptben.");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            setStatus(wrapper, "Feltöltés...");
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            gmRequest({
+                method: "POST",
+                url: "https://kek.sh/api/v1/posts",
+                headers: { "x-kek-auth": KEK_SH_API_KEY },
+                data: formData,
+                onload: async function (res) {
+                    if (res.status < 200 || res.status >= 300) {
+                        setStatus(wrapper, `❌ HTTP ${res.status}`);
+                        return;
+                    }
+
+                    const json = safeJsonParse(res.responseText, null);
+                    if (!json) {
+                        setStatus(wrapper, "❌ JSON parse hiba");
+                        return;
+                    }
+
+                    const url = buildImageUrlFromApi(json);
+                    if (!url) {
+                        setStatus(wrapper, "❌ Nem sikerült URL-t találni");
+                        return;
+                    }
+
+                    await addToGallery({
+                        url,
+                        filename: json.filename,
+                        originalName: file.name,
+                        createdAt: json.createdAt || new Date().toISOString(),
+                        size: json.size || file.size || null
+                    });
+
+                    setStatus(wrapper, "✅ Feltöltve (elmentve)");
+                    renderGallery(wrapper);
+                    updateSyncBadge();
+                    fileInput.value = "";
+                },
+                onerror: function () {
+                    setStatus(wrapper, "❌ Feltöltési hiba");
+                }
+            });
+        }
+
+        /* ================= EVENTS ================= */
+
+        document.addEventListener("click", async (e) => {
+            const wrapper = getWrapperFromEvent(e);
+            if (!wrapper) return;
+
+            const uploadBtn = e.target?.closest?.("#ph-kek-upload-btn");
+            const clearBtn = e.target?.closest?.("#ph-kek-clear");
+            const tabGrid = e.target?.closest?.("#ph-kek-tab-grid");
+            const tabList = e.target?.closest?.("#ph-kek-tab-list");
+            const syncNowBtn = e.target?.closest?.("#ph-kek-sync-now");
+
+            const actionBtn = e.target?.closest?.("#ph-kek-upload button[data-action], #ph-kek-grid button[data-action], #ph-kek-list button[data-action]");
+
+            if (uploadBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleUpload(e);
+                return;
+            }
+
+            if (clearBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                await clearGallery();
+                renderGallery(wrapper);
+                setStatus(wrapper, "🗑️ Galéria törölve");
+                updateSyncBadge();
+                return;
+            }
+
+            if (tabGrid) {
+                e.preventDefault();
+                e.stopPropagation();
+                setActiveTab(wrapper, "grid");
+                return;
+            }
+
+            if (tabList) {
+                e.preventDefault();
+                e.stopPropagation();
+                setActiveTab(wrapper, "list");
+                return;
+            }
+
+            if (syncNowBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                // Kézi sync: a shared storage kényszerített push-a
+                if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                    try {
+                        await storage.flush();
+                        setStatus(wrapper, "☁️ Szinkron kész");
+                    } catch {
+                        setStatus(wrapper, "⚠ Szinkron hiba (lásd konzol)");
+                    }
+                    updateSyncBadge();
+                }
+                return;
+            }
+
+            if (actionBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const action = actionBtn.dataset.action;
+                const url = actionBtn.dataset.url;
+                if (!url) return;
+
+                const editor = findEditorNear(wrapper);
+
+                if (action === "insert-image") {
+                    const ok = insertHtml(editor, `<img src="${escapeHtml(url)}" alt="">`);
+                    setStatus(wrapper, ok ? "✅ Kép beszúrva" : "❌ Nem találom az editort");
+                    return;
+                }
+
+                if (action === "insert-link") {
+                    const ok = insertHtml(editor, buildLinkHtml(url));
+                    setStatus(wrapper, ok ? "✅ Link beszúrva" : "❌ Nem találom az editort");
+                    return;
+                }
+
+                if (action === "delete") {
+                    await removeFromGallery(url);
+                    renderGallery(wrapper);
+                    setStatus(wrapper, "🗑️ Törölve");
+                    updateSyncBadge();
+                    return;
+                }
+            }
+        }, true);
+
+        /* ================= INIT / MOUNT ================= */
+
+        function tryMountUi() {
+            const target = document.querySelector(".msg-upload-collapse .rtif-upload");
+            if (!target) return;
+            if (target.querySelector("#ph-kek-upload")) return;
+
+            ensureUi(target);
+            updateSyncBadge();
+        }
+
+        const observer = new MutationObserver(() => { tryMountUi(); });
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        tryMountUi();
     }
 })();
