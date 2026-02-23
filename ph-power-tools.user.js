@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.0.2
+// @version      2.0.3
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -2470,14 +2470,16 @@
 
             let baseId;
 
-            if (stored !== null) {
-                // 1. Van mentett adatunk: azt használjuk bázisnak
+            // Ha van mindkettő, a nagyobbat használjuk (stored vs hash)
+            // (urlMax nálad: #msgN esetén N-1)
+            if (stored !== null && urlMax !== null) {
+                baseId = Math.max(stored, urlMax);
+            } else if (stored !== null) {
                 baseId = stored;
             } else if (urlMax !== null) {
-                // 2. Nincs mentett adat, DE van #msg az URL-ben: az URL-ből jövő ID a bázis
                 baseId = urlMax;
             } else {
-                // 3. Se mentett adat, se URL paraméter: első sima megnyitás, nem jelölünk semmit
+                // első sima megnyitás
                 map[slug] = pageMaxId;
                 writeMap(map);
                 return;
