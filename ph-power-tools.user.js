@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.0.5
+// @version      2.0.6
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -126,7 +126,9 @@
         'ph_forum_settings',
         'ph_hidden_users',
         'ph_topic_max_id_map',
-        'ph_kek_gallery'
+        'ph_kek_gallery',
+        'ph_kek_gallery_reset_ts',
+        'ph_kek_gallery_deleted'
     ];
 
     function safeJsonParse(str, fallback) {
@@ -242,7 +244,23 @@
                 const merged = Array.from(byUrl.values())
                     .sort((a, b) => (Date.parse(b.createdAt || 0) || 0) - (Date.parse(a.createdAt || 0) || 0));
 
-                return merged;
+                const deleted = safeJsonParse(localStorage.getItem("ph_kek_gallery_deleted") || "{}", {});
+                const filtered = merged.filter(it => it?.url && !deleted[it.url]);
+                return filtered;
+            }
+
+            if (key === "ph_kek_gallery_deleted") {
+                const r = (remoteVal && typeof remoteVal === "object") ? remoteVal : {};
+                const l = (localVal && typeof localVal === "object") ? localVal : {};
+                const out = { ...r };
+
+                for (const [url, ts] of Object.entries(l)) {
+                    const lt = parseInt(ts, 10);
+                    const rt = parseInt(out[url], 10);
+                    if (!Number.isFinite(lt)) continue;
+                    if (!Number.isFinite(rt) || lt > rt) out[url] = lt;
+                }
+                return out;
             }
 
             // Default: maradhat a "local wins" (beállításoknál ez oké)
@@ -2861,6 +2879,27 @@
         /* ================= CONFIG ================= */
 
         const LS_KEY = "ph_kek_gallery";
+        const DELETED_KEY = "ph_kek_gallery_deleted";
+
+        function loadDeletedMap() {
+            const obj = safeJsonParse(storage.getItem(DELETED_KEY) || "{}", {});
+            return (obj && typeof obj === "object") ? obj : {};
+        }
+
+        function saveDeletedMap(obj) {
+            const cleaned = cleanupDeletedMap(obj || {});
+            storage.setItem(DELETED_KEY, JSON.stringify(cleaned));
+        }
+
+        function cleanupDeletedMap(map, maxAgeMs = 30 * 24 * 60 * 60 * 1000) {
+            const now = Date.now();
+            const out = {};
+            for (const [url, ts] of Object.entries(map)) {
+                if (now - ts < maxAgeMs) out[url] = ts;
+            }
+            return out;
+        }
+
         const MAX_ITEMS = 120;
 
         // UI
@@ -2910,8 +2949,37 @@
             await saveGallery(arr);
         }
 
+        function deleteRemotePost(id) {
+            if (!id) return Promise.resolve({ ok: false, status: 0, error: "missing id" });
+            if (!KEK_SH_API_KEY) return Promise.resolve({ ok: false, status: 0, error: "missing api key" });
+
+            return new Promise((resolve) => {
+                gmRequest({
+                    method: "DELETE",
+                    url: `https://kek.sh/api/v1/posts/${encodeURIComponent(id)}`,
+                    headers: { "x-kek-auth": KEK_SH_API_KEY },
+                    onload: (res) => resolve({ ok: res.status >= 200 && res.status < 300, status: res.status, body: res.responseText }),
+                    onerror: () => resolve({ ok: false, status: 0, error: "network" })
+                });
+            });
+        }
+
+        function deleteAllRemotePosts() {
+            if (!KEK_SH_API_KEY) return Promise.resolve({ ok: false, status: 0, error: "missing api key" });
+
+            return new Promise((resolve) => {
+                gmRequest({
+                    method: "DELETE",
+                    url: "https://kek.sh/api/v1/posts",
+                    headers: { "x-kek-auth": KEK_SH_API_KEY },
+                    onload: (res) => resolve({ ok: res.status >= 200 && res.status < 300, status: res.status, body: res.responseText }),
+                    onerror: () => resolve({ ok: false, status: 0, error: "network" })
+                });
+            });
+        }
+
         async function clearGallery() {
-            await saveGallery([]);
+            storage.removeItem(LS_KEY);
         }
 
         /* ================= HELPERS (editor/HTML) ================= */
@@ -3019,7 +3087,22 @@
             }
         }
 
+        const RESET_KEY = "ph_kek_gallery_reset_ts";
+        const SEEN_RESET_KEY = "ph_kek_gallery_seen_reset_ts";
+
+        function applyGalleryResetIfNeeded() {
+            const resetTs = parseInt(storage.getItem(RESET_KEY) || "0", 10) || 0;
+            const seenTs = parseInt(localStorage.getItem(SEEN_RESET_KEY) || "0", 10) || 0;
+
+            if (resetTs > 0 && resetTs > seenTs) {
+                // volt egy új “mind törlés” másik gépről → dobjuk a lokális galériát
+                localStorage.removeItem(LS_KEY); // vagy storage.removeItem(LS_KEY) ha elérhető itt
+                localStorage.setItem(SEEN_RESET_KEY, String(resetTs));
+            }
+        }
+
         function renderGallery(wrapper) {
+            applyGalleryResetIfNeeded();
             if (!wrapper) return;
 
             const items = loadGallery();
@@ -3277,6 +3360,7 @@
         /* ================= UPLOAD ================= */
 
         function handleUpload(e) {
+            applyGalleryResetIfNeeded();
             const wrapper = getWrapperFromEvent(e);
             const fileInput = wrapper?.querySelector("#ph-kek-file");
 
@@ -3320,6 +3404,8 @@
                     }
 
                     await addToGallery({
+                        id: json.id,
+                        token: json.token,
                         url,
                         filename: json.filename,
                         originalName: file.name,
@@ -3360,11 +3446,30 @@
             }
 
             if (clearBtn) {
+                if (!confirm("Biztos törlöd az ÖSSZES kek.sh képed a szerverről is?")) {
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
+
+                setStatus(wrapper, "🗑️ Minden törlése a szerveren...");
+                const r = await deleteAllRemotePosts();
+
+                if (!r.ok) {
+                    setStatus(wrapper, `❌ Nem sikerült mindent törölni a szerveren (HTTP ${r.status}).`);
+                    return;
+                }
+
+                storage.setItem("ph_kek_gallery_reset_ts", String(Date.now()));
+                storage.removeItem("ph_kek_gallery_deleted");
                 await clearGallery();
+
+                if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                    await storage.flush(); // ✅ gist azonnal ürül
+                }
+
                 renderGallery(wrapper);
-                setStatus(wrapper, "🗑️ Galéria törölve");
+                setStatus(wrapper, "🗑️ Mind törölve (szerver + galéria)");
                 updateSyncBadge();
                 return;
             }
@@ -3393,7 +3498,7 @@
                         await storage.flush();
                         setStatus(wrapper, "☁️ Szinkron kész");
                     } catch {
-                        setStatus(wrapper, "⚠ Szinkron hiba (lásd konzol)");
+                        setStatus(wrapper, "❌ Szinkron hiba (lásd konzol)");
                     }
                     updateSyncBadge();
                 }
@@ -3423,9 +3528,36 @@
                 }
 
                 if (action === "delete") {
+                    if (!confirm("Biztos törlöd ezt a képet a szerverről is?")) {
+                        return;
+                    }
+                    const items = loadGallery();
+                    const item = items.find(x => x.url === url);
+
+                    if (item?.id) {
+                        setStatus(wrapper, "🗑️ Törlés a szerveren...");
+                        const r = await deleteRemotePost(item.id);
+
+                        if (!r.ok) {
+                            setStatus(wrapper, `❌ Nem sikerült törölni a szerveren (HTTP ${r.status}).`);
+                            return; // ✅ ne törölj lokálból, hogy ne vesszen el a nyoma
+                        }
+                    } else {
+                        setStatus(wrapper, "❌ Nincs id (régi elem) – csak lokál törlés.");
+                    }
+
+                    const deleted = loadDeletedMap();
+                    deleted[url] = Date.now();
+                    saveDeletedMap(deleted);
+
                     await removeFromGallery(url);
+
+                    if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                        await storage.flush();
+                    }
+
                     renderGallery(wrapper);
-                    setStatus(wrapper, "🗑️ Törölve");
+                    setStatus(wrapper, "🗑️ Törölve (szerver + galéria)");
                     updateSyncBadge();
                     return;
                 }
