@@ -15,6 +15,9 @@
 // @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
 // @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
 //
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
 // @grant        GM_xmlhttpRequest
 // @connect      kek.sh
 // @connect      api.github.com
@@ -27,15 +30,82 @@
     /************ CONFIG ************/
 
     const STORAGE_KEY = 'ph_forum_settings';
+    const SECRETS_KEY_GM = "ph_power_tools_secrets";
+    const SECRETS_KEY_LS = "ph_power_tools_secrets";
 
-    // --- Gist sync (opcionális) ---
-    const GIST_TOKEN = "";      // GitHub token (fine-grained / PAT)
-    const GIST_ID = "";         // Gist ID
-    const GIST_FILENAME = "";   // pl. "ph_forum_settings.json"
+    function hasGM() {
+        // Userscripts appnál gyakran nincs GM_* global, vagy csak GM.* van
+        return (typeof GM_getValue === "function" && typeof GM_setValue === "function")
+            || (typeof GM === "object" && typeof GM.getValue === "function" && typeof GM.setValue === "function");
+    }
 
-    const KEK_SH_API_KEY = "IDE_IRD_A_KEK_SH_API_KULCSODAT"; // https://kek.sh/settings/api
+    async function gmGet(key, def) {
+        if (typeof GM_getValue === "function") return GM_getValue(key, def);
+        if (typeof GM === "object" && typeof GM.getValue === "function") return await GM.getValue(key, def);
+        return def;
+    }
 
-    // csak akkor megy a sync, ha MIND ki van töltve:
+    async function gmSet(key, val) {
+        if (typeof GM_setValue === "function") return GM_setValue(key, val);
+        if (typeof GM === "object" && typeof GM.setValue === "function") return await GM.setValue(key, val);
+    }
+
+    async function gmDel(key) {
+        if (typeof GM_deleteValue === "function") return GM_deleteValue(key);
+        if (typeof GM === "object" && typeof GM.deleteValue === "function") return await GM.deleteValue(key);
+    }
+
+    function lsLoad() {
+        try { return JSON.parse(localStorage.getItem(SECRETS_KEY_LS) || "{}") || {}; }
+        catch { return {}; }
+    }
+    function lsSave(obj) {
+        localStorage.setItem(SECRETS_KEY_LS, JSON.stringify(obj || {}));
+    }
+    function lsClear() {
+        localStorage.removeItem(SECRETS_KEY_LS);
+    }
+
+    async function loadSecrets() {
+        // 1) GM ha elérhető
+        if (hasGM()) {
+            const s = await gmGet(SECRETS_KEY_GM, null);
+            if (s && typeof s === "object") return s;
+
+            // migráció LS -> GM (ha volt régi)
+            const legacy = lsLoad();
+            if (legacy && Object.keys(legacy).length) {
+                await gmSet(SECRETS_KEY_GM, legacy);
+                // opcionális: lsClear();
+                return legacy;
+            }
+            return {};
+        }
+
+        // 2) fallback: localStorage (iOS Userscripts alatt valószínűleg ez)
+        return lsLoad();
+    }
+
+    async function saveSecrets(secrets) {
+        if (hasGM()) return gmSet(SECRETS_KEY_GM, secrets || {});
+        return lsSave(secrets);
+    }
+
+    async function clearSecrets() {
+        if (hasGM()) return gmDel(SECRETS_KEY_GM);
+        return lsClear();
+    }
+
+    const secrets = await loadSecrets();
+
+    const GIST_TOKEN = (secrets.gistToken || "").trim();
+    const GIST_ID = (secrets.gistId || "").trim();
+    const DEFAULT_GIST_FILENAME = "ph_forum_settings.json";
+    const GIST_FILENAME = (
+        (secrets.gistFilename || DEFAULT_GIST_FILENAME)
+    ).trim();
+    const KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
+
     const ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
 
     const defaultSettings = {
@@ -349,7 +419,17 @@
                 <span class="fas fa-sliders-h"></span>
             </a>
             <div class="dropdown-menu dropdown-menu-right p-2 ph-power-menu">
-                <h6 class="dropdown-header">PH Power Tools</h6>
+                <h6 class="dropdown-header"
+                    style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                    <span>PH Power Tools</span>
+                    <button type="button"
+                            id="ph-open-secrets"
+                            class="btn btn-forum btn-sm"
+                            title="Kulcsok / Szinkron beállítások"
+                            style="padding:2px 6px;">
+                      <span class="fas fa-cog"></span>
+                    </button>
+                </h6>
                 <div class="ph-accordion">
                     ${Object.entries(settingGroups).map(([groupKey, group], index) => `
                         <div class="ph-acc-group">
@@ -382,7 +462,191 @@
             </div>
         `;
 
+        // ===== Secrets modal (egyszer) =====
+        if (!document.getElementById('ph-secrets-modal')) {
+            const modal = document.createElement('div');
+            modal.id = 'ph-secrets-modal';
+            modal.style.cssText = `
+                position: fixed; inset: 0; z-index: 10050;
+                display: none;
+                background: rgba(0,0,0,0.45);
+                backdrop-filter: blur(2px);
+                align-items: center; justify-content: center;
+                padding: 16px;
+            `;
+
+            modal.innerHTML = `
+                <div id="ph-secrets-panel" style="
+                    width: min(720px, 100%);
+                    background: inherit;
+                    border-radius: 10px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+                    overflow: hidden;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
+                                padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
+                        <div style="font-weight:700;">PH Power Tools – Kulcsok / Szinkron</div>
+                        <button type="button" class="btn btn-sm btn-light" id="ph-secrets-close">✕</button>
+                    </div>
+            
+                    <div style="padding: 14px; display:flex; flex-direction:column; gap:10px;">
+                    <div id="ph-secrets-storage-line"
+                         style="font-size:12px; opacity:0.85; line-height:1.35;">
+                    </div>
+                
+                        <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
+                            <label style="font-size:12px; margin:0;">
+                            GitHub Gist Token
+                            <input id="ph-secret-gist-token" type="text" class="form-control form-control-sm"
+                                   placeholder="ghp_... / fine-grained token">
+                            </label>
+                
+                            <label style="font-size:12px; margin:0;">
+                            Gist ID
+                            <input id="ph-secret-gist-id" type="text" class="form-control form-control-sm"
+                                   placeholder="pl. 0123456789abcdef...">
+                            </label>
+                
+                            <label style="font-size:12px; margin:0;">
+                            Gist fájlnév
+                            <input id="ph-secret-gist-filename" type="text" class="form-control form-control-sm"
+                                 placeholder='pl. ph_forum_settings.json'>
+                            </label>
+                
+                            <label style="font-size:12px; margin:0;">
+                            kek.sh API key
+                            <input id="ph-secret-kek-key" type="text" class="form-control form-control-sm"
+                                   placeholder="https://kek.sh/settings/api">
+                            </label>
+                        </div>
+                
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:6px;">
+                            <button type="button" class="btn btn-sm btn-secondary" id="ph-secret-save">Mentés</button>
+                            <button type="button" class="btn btn-sm btn-light" id="ph-secret-clear">Törlés</button>
+                            <span id="ph-secret-status" style="font-size:12px; opacity:0.85;"></span>
+                            <span style="margin-left:auto; font-size:12px; opacity:0.7;">
+                                Mentés után újratöltés történik.
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+        }
+
+        function applySecretsTheme() {
+            const panel = document.getElementById('ph-secrets-panel');
+            if (!panel) return;
+
+            const darkLink = document.querySelector('link[href*="dark_base"]');
+            let isDark = false;
+
+            if (darkLink) {
+                const media = darkLink.getAttribute("media");
+                if (media === "all") isDark = true;
+                else if (media === "not all") isDark = false;
+                else if (media?.includes("prefers-color-scheme")) {
+                    isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+                }
+            }
+
+            if (isDark) {
+                panel.style.background = "#2b2b2b";
+                panel.style.color = "#f1f1f1";
+                panel.style.border = "1px solid rgba(255,255,255,0.1)";
+            } else {
+                panel.style.background = "#ffffff";
+                panel.style.color = "#212529";
+                panel.style.border = "1px solid rgba(0,0,0,0.1)";
+            }
+        }
+
         container.prepend(li);
+
+        const openBtn = li.querySelector('#ph-open-secrets');
+        const modal = document.getElementById('ph-secrets-modal');
+
+        async function openSecretsModal() {
+            if (!modal) return;
+            applySecretsTheme();
+
+            const storageLine = modal.querySelector('#ph-secrets-storage-line');
+            if (storageLine) {
+                storageLine.innerHTML = hasGM()
+                    ? 'Tárolás: <b>GM storage</b> (közös a lapcsalád domainjei között)'
+                    : 'Tárolás: <b>localStorage</b> (domainenként külön)';
+            }
+
+            const s = await loadSecrets();
+
+            modal.querySelector('#ph-secret-gist-token').value = s.gistToken || '';
+            modal.querySelector('#ph-secret-gist-id').value = s.gistId || '';
+            modal.querySelector('#ph-secret-gist-filename').value =
+                s.gistFilename || DEFAULT_GIST_FILENAME;
+            modal.querySelector('#ph-secret-kek-key').value = s.kekShApiKey || '';
+            modal.querySelector('#ph-secret-status').textContent = '';
+
+            modal.style.display = 'flex';
+        }
+
+        function closeSecretsModal() {
+            if (!modal) return;
+            modal.style.display = 'none';
+        }
+
+        openBtn?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation(); // ne zárja be a dropdownot
+            await openSecretsModal();
+        });
+
+        // háttérre katt = bezár
+        modal?.addEventListener('click', (e) => {
+            if (e.target === modal) closeSecretsModal();
+        });
+
+        // X gomb = bezár
+        modal?.querySelector('#ph-secrets-close')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            closeSecretsModal();
+        });
+
+        // ESC = bezár (csak egyszer!)
+        function escListener(e) {
+            if (e.key === 'Escape' && modal?.style.display === 'flex') closeSecretsModal();
+        }
+        document.addEventListener('keydown', escListener);
+
+        // mentés
+        modal?.querySelector('#ph-secret-save')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+
+            const inToken = modal.querySelector('#ph-secret-gist-token');
+            const inId = modal.querySelector('#ph-secret-gist-id');
+            const inFn = modal.querySelector('#ph-secret-gist-filename');
+            const inKek = modal.querySelector('#ph-secret-kek-key');
+            const st = modal.querySelector('#ph-secret-status');
+
+            await saveSecrets({
+                gistToken: (inToken?.value || '').trim(),
+                gistId: (inId?.value || '').trim(),
+                gistFilename: (inFn?.value || '').trim(),
+                kekShApiKey: (inKek?.value || '').trim(),
+            });
+
+            if (st) st.textContent = '✅ Mentve. Frissítek…';
+            setTimeout(() => location.reload(), 250);
+        });
+
+        // törlés
+        modal?.querySelector('#ph-secret-clear')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await clearSecrets();
+
+            const st = modal.querySelector('#ph-secret-status');
+            if (st) st.textContent = '🗑️ Törölve. Frissítek…';
+            setTimeout(() => location.reload(), 250);
+        });
 
         // Egyszerű custom tooltip
         document.querySelectorAll('.ph-tooltip-icon').forEach(icon => {
@@ -1954,7 +2218,7 @@
                 document.head.appendChild(style);
             }
             style.textContent = `
-                .ph-editor-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center; }
+                .ph-editor-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px);}
                 .ph-editor-panel { background: ${bg}; padding: 20px; border-radius: 5px; min-width: 400px; max-width: 600px; color: ${color}; }
                 .dual-list-container { display: flex; gap: 10px; margin-top: 10px; }
                 .dual-list { flex: 1; border: 1px solid #fff; min-height: 141px; max-height: 273px; padding: 5px; background: ${bg}; overflow-y: auto; }
@@ -2926,7 +3190,7 @@
             }
 
             if (!KEK_SH_API_KEY || KEK_SH_API_KEY.includes("IDE_IRD")) {
-                alert("Nincs beállítva API kulcs a scriptben.");
+                alert("Nincs beállítva kek.sh API kulcs. PH Power Tools → Kulcsok / Szinkron alatt add meg.");
                 return;
             }
 
