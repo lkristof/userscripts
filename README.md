@@ -43,19 +43,22 @@ A scriptek futtatásához kell egy userscript kezelő:
 ### 📦 PH Power Tools összetevői
 
 > [!NOTE]
-> A **PH Power Tools** egyesíti az alábbi Prohardver fórum scripteket, egy beállítási panellel.
+> A **PH Power Tools** egyesíti az alábbi funkciókat, egy beállítási panellel.
 
-| Script                          | Rövid leírás                                                                                                                                | Telepítés / Link                                                                                               |
-|---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
-| **Hozzászólás színezés**        | saját, rád válaszoló és #akció jelölésű hozzászólások + avatar fókusz + hozzászólás-lánc kiemelés                                           | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-colorize.user.js)             |
-| **Link átirányítás**            | PH! lapcsalád linkjeit az aktuális oldalra irányítja                                                                                        | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-link-redirect.user.js)        |
-| **Üzenet kiemelés**             | kiemeli az aktuális `#msgXXXX` hozzászólást<br/>törölt hozzászólás esetén a legközelebbit<br/>dupla katt a fejlécen kijelöli a hozzászólást | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-msg-anchor-highlight.user.js) |
-| **OFF hozzászólások elrejtése** | `[OFF]` jelölésű hozzászólások elrejtése és visszakapcsolása gombnyomásra                                                                   | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-off-hider.user.js)            |
-| **Széles nézet**                | a fórum maximális szélességének kibővítése nagy felbontású kijelzőkön                                                                       | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-wide-view.user.js)            |
-| **Thread nézet**                | hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése                                                                     | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-thread-view.user.js)          |
-| **Billentyűzetes navigáció**    | gyors navigáció a fórumon billentyűzet segítségével                                                                                         | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-keyboard-navigation.user.js)  |
-| **Felhasználók elrejtése**      | megadott felhasználók hozzászólásait elrejti                                                                                                | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-hide-users.user.js)           |
-| **Olvasottság jelölése**        | az olvasott hozzászólások fejléce szürkeárnyalatosan jelenik meg                                                                            | [Telepítés](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-forum-mark-seen.user.js)            |
+| Funkció                         | Rövid leírás                                                                                                                                |
+|---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| **Hozzászólás színezés**        | saját, rád válaszoló és #akció jelölésű hozzászólások + avatar fókusz + hozzászólás-lánc kiemelés                                           |
+| **Link átirányítás**            | PH! lapcsalád linkjeit az aktuális oldalra irányítja                                                                                        |
+| **Üzenet kiemelés**             | kiemeli az aktuális `#msgXXXX` hozzászólást<br/>törölt hozzászólás esetén a legközelebbit<br/>dupla katt a fejlécen kijelöli a hozzászólást |
+| **OFF hozzászólások elrejtése** | `[OFF]` jelölésű hozzászólások elrejtése és visszakapcsolása gombnyomásra                                                                   |
+| **Széles nézet**                | a fórum maximális szélességének kibővítése nagy felbontású kijelzőkön                                                                       |
+| **Thread nézet**                | hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése                                                                     |
+| **Billentyűzetes navigáció**    | gyors navigáció a fórumon billentyűzet segítségével                                                                                         |
+| **Felhasználók elrejtése**      | megadott felhasználók hozzászólásait elrejti                                                                                                |
+| **Olvasottság jelölése**        | az olvasott hozzászólások fejléce szürkeárnyalatosan jelenik meg                                                                            |
+| **Extra smiley-k**              | az alap smiley-k alá egy extra adag smiley                                                                                                  |
+| **Képfeltöltés kek.sh-ra**      | képfeltöltés kek.sh-ra galéria 2 füllel: rács, lista nézet                                                                                  |
+| **Gist szinkronizáció**         | GitHub Gist alapú szinkronizáció, hogy a script beállításai és mentett adatai több eszköz között is szinkronban maradjanak                  |
 
 ---
 
@@ -98,6 +101,17 @@ A scriptek futtatásához kell egy userscript kezelő:
 [![light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-light.jpg)
 [![dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-dark.jpg)
 
+### felhasználó rejtése (elrejtés, rejtve, felfedve, feloldás, menü)
+[![dropdown-hide](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-dropdown-hide-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-dropdown-hide.jpg)
+[![hidden](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-hidden-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-hidden.jpg)
+[![shown](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-shown-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-shown.jpg)
+[![dropdown-unhide](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-dropdown-unhide-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-dropdown-unhide.jpg)
+[![user-menu](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-menu-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-menu.jpg)
+
+### képfeltöltés kek.sh-ra
+[![grid](https://raw.githubusercontent.com/lkristof/userscripts/main/img/keksh-grid-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/keksh-grid.jpg)
+[![list](https://raw.githubusercontent.com/lkristof/userscripts/main/img/keksh-list-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/keksh-list.jpg)
+
 ---
 
 ## 📦 nCore
@@ -108,7 +122,7 @@ A letöltések listájában kiemeli a több pozitív visszajelzéssel rendelkez�
 Segít gyorsabban megtalálni a népszerű tartalmakat.
 
 > 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-torrent-highlight.user.js
+> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-torrent-highlight.user.js
 
 ---
 
@@ -118,7 +132,7 @@ A torrent oldalakhoz **qBittorrent letöltés gombot** ad, lehetővé téve a to
 WebUI-hoz.
 
 > 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-qbittorrent-add.user.js
+> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-qbittorrent-add.user.js
 
 ---
 
@@ -127,7 +141,7 @@ WebUI-hoz.
 Dupla kattintással elhalványíthatod a már látott filmeket a listában, a jelölést pedig vissza is vonhatod.
 
 > 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-seen.user.js
+> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-seen.user.js
 
 ---
 
@@ -136,7 +150,7 @@ Dupla kattintással elhalványíthatod a már látott filmeket a listában, a je
 Elrejti az nCore köszönéseket a torrent oldalon.
 
 > 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-no-thanks.user.js
+> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-no-thanks.user.js
 
 ---
 
