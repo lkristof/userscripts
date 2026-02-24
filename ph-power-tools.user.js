@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.0.6
+// @version      2.0.7
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -405,7 +405,8 @@
         offHider: 'Az OFF hozzászólásokat a megjelenő gomb segítségével elrejtheted.',
         keyboardNavigation: '← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
         hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
-        markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.'
+        markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
+        kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.'
     };
 
     const savedSettings = getMergedSettings();
@@ -527,7 +528,7 @@
             </a>
             <div class="dropdown-menu dropdown-menu-right p-2 ph-power-menu">
                 <h6 class="dropdown-header"
-                    style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                    style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0;">
                     <span>PH Power Tools</span>
                     <button type="button"
                             id="ph-open-secrets"
@@ -604,13 +605,13 @@
                             <label style="font-size:12px; margin:0;">
                             GitHub Gist Token
                             <input id="ph-secret-gist-token" type="text" class="form-control form-control-sm"
-                                   placeholder="ghp_... / fine-grained token">
+                                   placeholder="ghp_0123456789abcdef...">
                             </label>
                 
                             <label style="font-size:12px; margin:0;">
                             Gist ID
                             <input id="ph-secret-gist-id" type="text" class="form-control form-control-sm"
-                                   placeholder="pl. 0123456789abcdef...">
+                                   placeholder="0123456789abcdef...">
                             </label>
                 
                             <label style="font-size:12px; margin:0;">
@@ -621,8 +622,14 @@
                 
                             <label style="font-size:12px; margin:0;">
                             kek.sh API key
+                            <a href="https://kek.sh/settings/api"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style="margin-left:6px; font-size:11px; text-decoration:none;">
+                                [API kulcs itt]
+                            </a>
                             <input id="ph-secret-kek-key" type="text" class="form-control form-control-sm"
-                                   placeholder="https://kek.sh/settings/api">
+                                   placeholder="0123456789abcdef...">
                             </label>
                         </div>
                 
@@ -2631,69 +2638,66 @@
 
     function extraSmilies() {
         const EXTRA_SMILIES = [
-            { code: ':abashed:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_xbjsjrfku7m0up6y_abashed.gif' },
-            { code: ':aggodik:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_ougi96agmsbvcuxy_aggodik.gif' },
-            { code: ':bad:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_ihifbk0cpt5kr74j_bad.gif' },
-            { code: ':bigeyed:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_l4oaf9xntn9hxvqg_bigeyed.gif' },
-            { code: ':bok:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_pzw9hgej6dizwzof_bok.gif' },
-            { code: ':bok2:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_zzalkc4e5rv7hxcq_bok2.gif' },
-            { code: ':angel:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_lhh21mbyli1udl7r_angel.gif' },
-            { code: ':bow:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_ctdyqosir1yivbfw_bow.gif' },
-            { code: ':bunko:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_ztgsr96bn2i9akdm_bunko.gif' },
-            { code: ':cigi:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_iq5eafha9huz36h2_cigi.gif' },
-            { code: ':coco:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_k3d85ztk0objzufp_coco.gif' },
+            { code: ':kacsint:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_zci2vqvz44ogabsm_kacsint.gif' },
+            { code: ':integet:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_x8naxemjfjtk5vvs_integet.gif' },
+            { code: ':yeah:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_as3g9letedztw9ii_yeah.gif' },
+            { code: ':wink:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_klqmlljupav0nmnh_wink.gif' },
+            { code: ':love:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_qpm3lyxagnngl5zt_love.gif' },
+            { code: ':nice:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_o0d1srnco9em5exk_nice.gif' },
             { code: ':elvis:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_m39l0qumdyj43jka_elvis.gif' },
-            { code: ':felmosoly:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_td6vavyd8nv7tbqt_felmosoly.gif' },
-            { code: ':fuck1:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_rtjzdpuv7ilyvc9c_fuck1.gif' },
-            { code: ':fusillader:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_fu077bi7qsxgiyl9_fusillader.gif' },
-            { code: ':gondol:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_khe86mxoxirjery1_gondol.gif' },
             { code: ':grat:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_b6plf8oyffjjeomz_grat.gif' },
+            { code: ':hehehe:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_i6ikyt0sdzjfcysz_hehehe.gif' },
             { code: ':grinning:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_vbqtpqdq5dxgang5_grinning.gif' },
             { code: ':hehe:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_fxhv6towsjxuacnw_hehe.gif' },
-            { code: ':hehehe:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_i6ikyt0sdzjfcysz_hehehe.gif' },
-            { code: ':huha:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_qpd2yhifajqpzrzg_huha.gif' },
-            { code: ':idiota:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_dtauyqcahbvgtafk_idiota.gif' },
-            { code: ':idiota2:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_htknjkdfz0pttnmf_idiota2.gif' },
-            { code: ':idiota3:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_uupi128oj4q3vg1j_idiota3.gif' },
-            { code: ':igen:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_m97zu6ylsflhdw5g_igen.gif' },
-            { code: ':nem:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_occldijkfqjrfjce_nem.gif' },
-            { code: ':ijedt:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_clram2elrcyhtogp_ijedt.gif' },
-            { code: ':integet:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_x8naxemjfjtk5vvs_integet.gif' },
-            { code: ':kacsint:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_zci2vqvz44ogabsm_kacsint.gif' },
-            { code: ':kocsog:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_v0mhygvcf47tipdb_kocsog.gif' },
-            { code: ':lama:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_oknfqsidavmhgeuq_lama.gif' },
-            { code: ':letsplay:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_esm9mjfstdpqnsjm_letsplay.gif' },
-            { code: ':love:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_qpm3lyxagnngl5zt_love.gif' },
-            { code: ':merges:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_dkfnuwxzvxns75ae_merges.gif' },
-            { code: ':morcos:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_egyugzuyiex9nhvo_morcos.gif' },
-            { code: ':nana:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_l6h2tnobeeftpt8j_nana.gif' },
-            { code: ':nice:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_o0d1srnco9em5exk_nice.gif' },
-            { code: ':nyehehe:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_w7aqqj45p9nixmz3_nyehehe.gif' },
-            { code: ':ohnej:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_gfemqrnojxsc6mkv_ohnej.gif' },
-            { code: ':omg:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_isq9dlhjathmavsw_omg.gif' },
-            { code: ':perky:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_vpkbnfhbxaridn7y_perky.gif' },
-            { code: ':pias:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_bw7xdrk9ualzqiw0_pias.gif' },
-            { code: ':pipazik:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_pftlu8qnejpv2rwt_pipazik.gif' },
-            { code: ':puszi:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_pvktjqftgdr0axks_puszi.gif' },
             { code: ':ravasz:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_c0smadwax8yadphm_ravasz.gif' },
             { code: ':rohog:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_wczdpedmrnyr0klm_rohog.gif' },
-            { code: ':sheriff:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_xvjsp9rcfo01odvi_sheriff.gif' },
-            { code: ':sleepy:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_zbjijw303uitokmm_sleepy.gif' },
             { code: ':snotty:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_xpsckzywodnby7sm_snotty.gif' },
-            { code: ':spooky:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_kd20nnb1mn6oev18_spooky.gif' },
-            { code: ':surprised:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_ikgcnrnqpgazruwx_surprised.gif' },
-            { code: ':szaszmarci:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_l7vlmi0908giny1d_szaszmarci.gif' },
-            { code: ':szomoru:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_eiryf0n6po4u3cn1_szomoru.gif' },
-            { code: ':tough:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_zgpshspjbhuuysqu_tough.gif' },
-            { code: ':uncsi:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_wwhv9yvhoutnquo3_uncsi.gif' },
             { code: ':vigyor:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_hlewdcmawdv1pujq_vigyor.gif' },
+            { code: ':nyehehe:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_w7aqqj45p9nixmz3_nyehehe.gif' },
+            { code: ':perky:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_vpkbnfhbxaridn7y_perky.gif' },
+            { code: ':puszi:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_pvktjqftgdr0axks_puszi.gif' },
+            { code: ':cigi:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_iq5eafha9huz36h2_cigi.gif' },
+            { code: ':pipazik:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_pftlu8qnejpv2rwt_pipazik.gif' },
+            { code: ':pias:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_bw7xdrk9ualzqiw0_pias.gif' },
+            { code: ':tough:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_zgpshspjbhuuysqu_tough.gif' },
+            { code: ':bad:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_ihifbk0cpt5kr74j_bad.gif' },
+            { code: ':felmosoly:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_td6vavyd8nv7tbqt_felmosoly.gif' },
+            { code: ':abashed:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_xbjsjrfku7m0up6y_abashed.gif' },
+            { code: ':aggodik:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_ougi96agmsbvcuxy_aggodik.gif' },
+            { code: ':bigeyed:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_l4oaf9xntn9hxvqg_bigeyed.gif' },
             { code: ':whoa:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_lvrygfdregmhx0tt_whoa.gif' },
-            { code: ':wink:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_klqmlljupav0nmnh_wink.gif' },
-            { code: ':yeah:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_as3g9letedztw9ii_yeah.gif' },
+            { code: ':surprised:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_ikgcnrnqpgazruwx_surprised.gif' },
+            { code: ':ohnej:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_gfemqrnojxsc6mkv_ohnej.gif' },
+            { code: ':bok:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_pzw9hgej6dizwzof_bok.gif' },
+            { code: ':bok2:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_zzalkc4e5rv7hxcq_bok2.gif' },
+            { code: ':coco:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_k3d85ztk0objzufp_coco.gif' },
+            { code: ':gondol:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_khe86mxoxirjery1_gondol.gif' },
+            { code: ':szomoru:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_eiryf0n6po4u3cn1_szomoru.gif' },
+            { code: ':uncsi:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_wwhv9yvhoutnquo3_uncsi.gif' },
+            { code: ':huha:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_qpd2yhifajqpzrzg_huha.gif' },
+            { code: ':idiota2:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_htknjkdfz0pttnmf_idiota2.gif' },
+            { code: ':idiota:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_dtauyqcahbvgtafk_idiota.gif' },
+            { code: ':idiota3:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_uupi128oj4q3vg1j_idiota3.gif' },
+            { code: ':spooky:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_kd20nnb1mn6oev18_spooky.gif' },
+            { code: ':ijedt:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_clram2elrcyhtogp_ijedt.gif' },
+            { code: ':omg:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_isq9dlhjathmavsw_omg.gif' },
+            { code: ':szaszmarci:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_l7vlmi0908giny1d_szaszmarci.gif' },
             { code: ':zombie:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_ua0towvr7th3y2oj_zombie.gif' },
+            { code: ':sheriff:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_xvjsp9rcfo01odvi_sheriff.gif' },
+            { code: ':nana:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_l6h2tnobeeftpt8j_nana.gif' },
+            { code: ':morcos:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_egyugzuyiex9nhvo_morcos.gif' },
+            { code: ':merges:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_dkfnuwxzvxns75ae_merges.gif' },
+            { code: ':fuck1:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_rtjzdpuv7ilyvc9c_fuck1.gif' },
+            { code: ':fusillader:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_fu077bi7qsxgiyl9_fusillader.gif' },
+            { code: ':letsplay:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_esm9mjfstdpqnsjm_letsplay.gif' },
+            { code: ':bunko:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_ztgsr96bn2i9akdm_bunko.gif' },
             { code: ':poor:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_fgw3e840etthfeyi_poor.gif' },
-            { code: ':alvas:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_s2x1btnj1zrzq1rz_alvas.gif' },
-            { code: ':koccint:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_lv15ria9cnmxtoty_koccint.gif' }
+            { code: ':koccint:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_lv15ria9cnmxtoty_koccint.gif' },
+            { code: ':sleepy:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_zbjijw303uitokmm_sleepy.gif' },
+            { code: ':kocsog:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_v0mhygvcf47tipdb_kocsog.gif' },
+            { code: ':lama:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_oknfqsidavmhgeuq_lama.gif' },
+            { code: ':nem:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_occldijkfqjrfjce_nem.gif' },
+            { code: ':igen:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_m97zu6ylsflhdw5g_igen.gif' }
         ];
 
         // --- Segédfüggvény: van-e kód bármelyik szövegcsomópontban ---
@@ -2898,6 +2902,11 @@
                 if (now - ts < maxAgeMs) out[url] = ts;
             }
             return out;
+        }
+
+        function hasKekKey() {
+            const key = (KEK_SH_API_KEY || "").trim();
+            return key.length > 0;
         }
 
         const MAX_ITEMS = 120;
@@ -3281,58 +3290,85 @@
             wrapper.style.borderTop = "1px dashed #aaa";
             wrapper.dataset.activeTab = "grid";
 
+            if (!hasKekKey()) {
+                wrapper.innerHTML = `
+                    <h6 style="margin-bottom:10px;">Képfeltöltés (kek.sh)</h6>
+                    <div style="
+                        padding: 12px 14px;
+                        border: 1px solid rgba(0,0,0,0.12);
+                        border-radius: 10px;
+                        background: rgba(0,0,0,0.03);
+                        font-size: 13px;
+                        line-height: 1.45;">
+                        <div style="font-weight:700; margin-bottom:6px;">Nincs beállítva kek.sh API kulcs</div>
+                        <div style="margin-bottom:8px;">
+                            1) Regisztrálj itt: 
+                            <a href="https://kek.sh/" target="_blank" rel="noopener noreferrer">kek.sh</a><br>
+                            2) API kulcs: 
+                            <a href="https://kek.sh/settings/api" target="_blank" rel="noopener noreferrer">kek.sh/settings/api</a><br>
+                            3) Állítsd be: <b>PH Power Tools <span class="fas fa-cog"></span> Kulcsok / Szinkron</b> (kek.sh API key)
+                        </div>
+                        <div style="opacity:0.9;">
+                            Ingyenes csomag: <b>5 GB</b> tárhely, <b>1000</b> kép, <b>5 MB/kép</b>.
+                        </div>
+                    </div>
+                `;
+
+                target.appendChild(wrapper);
+                return wrapper;
+            }
+
             wrapper.innerHTML = `
-            <h6 style="margin-bottom:10px;">Külső feltöltés (kek.sh)</h6>
-
-            <div id="ph-kek-upload-row" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                <input type="file" id="ph-kek-file" accept="image/*" style="flex: 1 1 260px; min-width: 220px;">
-                <button id="ph-kek-upload-btn" class="btn btn-secondary btn-sm" type="button" style="flex: 0 0 auto;">
-                    Feltöltés
-                </button>
-                <span id="ph-kek-status" style="flex: 1 1 200px; min-width: 180px; font-size:0.8rem;"></span>
-            </div>
-
-            <div style="margin-top:14px; padding-top:12px; border-top:1px dashed #aaa;">
-                <div id="ph-kek-gallery-head" style="position: sticky; top: 0; z-index: 2;
-                            padding: 6px 0; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
-                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                        <h6 style="margin:0;">Képeim (kek.sh)</h6>
-                        <div style="display:flex; gap:6px; align-items:center;">
-                            <button type="button" id="ph-kek-tab-grid" class="btn btn-secondary btn-sm">Rács</button>
-                            <button type="button" id="ph-kek-tab-list" class="btn btn-light btn-sm">Lista</button>
+                <h6 style="margin-bottom:10px;">Külső feltöltés (kek.sh)</h6>
+                <div id="ph-kek-upload-row" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <input type="file" id="ph-kek-file" accept="image/*" style="flex: 1 1 260px; min-width: 220px;">
+                    <button id="ph-kek-upload-btn" class="btn btn-secondary btn-sm" type="button" style="flex: 0 0 auto;">
+                        Feltöltés
+                    </button>
+                    <span id="ph-kek-status" style="flex: 1 1 200px; min-width: 180px; font-size:0.8rem;"></span>
+                </div>
+        
+                <div style="margin-top:14px; padding-top:12px; border-top:1px dashed #aaa;">
+                    <div id="ph-kek-gallery-head" style="position: sticky; top: 0; z-index: 2;
+                                padding: 6px 0; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <h6 style="margin:0;">Képeim (kek.sh)</h6>
+                            <div style="display:flex; gap:6px; align-items:center;">
+                                <button type="button" id="ph-kek-tab-grid" class="btn btn-secondary btn-sm">Rács</button>
+                                <button type="button" id="ph-kek-tab-list" class="btn btn-light btn-sm">Lista</button>
+                            </div>
+                        </div>
+        
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                            <div style="display:flex; align-items:center;">
+                                <span id="ph-kek-sync-badge"></span>
+                            </div>
+                            ${ENABLE_GIST_SYNC ? `<button id="ph-kek-sync-now" class="btn btn-light btn-sm">Szinkronizálás</button>` : ``}
+                            <button type="button" class="btn btn-light btn-sm" id="ph-kek-clear">Mind törlése</button>
                         </div>
                     </div>
-
-                    <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
-                        <div style="display:flex; align-items:center;">
-                            <span id="ph-kek-sync-badge"></span>
+        
+                    <div id="ph-kek-view-grid">
+                        <div id="ph-kek-empty-grid" style="font-size:12px; color:#666; display:none;">
+                            Nincs elmentett kép. Feltöltés után itt fognak megjelenni.
                         </div>
-                        ${ENABLE_GIST_SYNC ? `<button id="ph-kek-sync-now" class="btn btn-light btn-sm">Szinkronizálás</button>` : ``}
-                        <button type="button" class="btn btn-light btn-sm" id="ph-kek-clear">Mind törlése</button>
+                        <div id="ph-kek-grid"
+                            style="display:flex; flex-wrap:wrap; gap:12px;
+                                    max-height:${GALLERY_MAX_HEIGHT_PX}px; overflow-y:auto;
+                                    padding-right:6px;">
+                        </div>
+                    </div>
+        
+                    <div id="ph-kek-view-list" style="display:none;">
+                        <div id="ph-kek-empty-list" style="font-size:12px; color:#666; display:none;">
+                            Nincs elmentett kép. Feltöltés után itt fognak megjelenni.
+                        </div>
+                        <div id="ph-kek-list"
+                            style="max-height:${GALLERY_MAX_HEIGHT_PX}px; overflow-y:auto; padding-right:6px;">
+                        </div>
                     </div>
                 </div>
-
-                <div id="ph-kek-view-grid">
-                    <div id="ph-kek-empty-grid" style="font-size:12px; color:#666; display:none;">
-                        Nincs elmentett kép. Feltöltés után itt fognak megjelenni.
-                    </div>
-                    <div id="ph-kek-grid"
-                        style="display:flex; flex-wrap:wrap; gap:12px;
-                                max-height:${GALLERY_MAX_HEIGHT_PX}px; overflow-y:auto;
-                                padding-right:6px;">
-                    </div>
-                </div>
-
-                <div id="ph-kek-view-list" style="display:none;">
-                    <div id="ph-kek-empty-list" style="font-size:12px; color:#666; display:none;">
-                        Nincs elmentett kép. Feltöltés után itt fognak megjelenni.
-                    </div>
-                    <div id="ph-kek-list"
-                        style="max-height:${GALLERY_MAX_HEIGHT_PX}px; overflow-y:auto; padding-right:6px;">
-                    </div>
-                </div>
-            </div>
-        `;
+            `;
 
             target.appendChild(wrapper);
 
@@ -3366,11 +3402,6 @@
 
             if (!fileInput?.files?.length) {
                 alert("Nincs kiválasztott fájl.");
-                return;
-            }
-
-            if (!KEK_SH_API_KEY || KEK_SH_API_KEY.includes("IDE_IRD")) {
-                alert("Nincs beállítva kek.sh API kulcs. PH Power Tools → Kulcsok / Szinkron alatt add meg.");
                 return;
             }
 
