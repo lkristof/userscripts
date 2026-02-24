@@ -55,12 +55,79 @@ A scriptek futtatásához kell egy userscript kezelő:
 | **Thread nézet**                | hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése                                                                     |
 | **Billentyűzetes navigáció**    | gyors navigáció a fórumon billentyűzet segítségével                                                                                         |
 | **Felhasználók elrejtése**      | megadott felhasználók hozzászólásait elrejti                                                                                                |
-| **Olvasottság jelölése**        | az olvasott hozzászólások fejléce szürkeárnyalatosan jelenik meg                                                                            |
+| **Új hozzászólás jelölése**     | az új hozzászólások fejléce kap egy kis jelölést                                                                                            |
 | **Extra smiley-k**              | az alap smiley-k alá egy extra adag smiley                                                                                                  |
 | **Képfeltöltés kek.sh-ra**      | képfeltöltés kek.sh-ra galéria 2 füllel: rács, lista nézet                                                                                  |
 | **Gist szinkronizáció**         | GitHub Gist alapú szinkronizáció, hogy a script beállításai és mentett adatai több eszköz között is szinkronban maradjanak                  |
 
 ---
+
+### 🔄 Gist szinkronizáció beállítása
+<details>
+
+<summary>Kattints ide a kibontáshoz</summary>
+
+A **Gist szinkronizáció** lehetővé teszi, hogy a **beállításaid és mentett adataid több böngésző és eszköz között automatikusan szinkronban maradjanak**.
+
+#### Mire jó?
+
+- több gépen ugyanazok a beállítások
+- böngésző újratelepítés után azonnali visszaállítás
+- biztonsági mentés a konfigurációról
+
+---
+
+#### 🪪 1. GitHub token létrehozása
+
+1. Regisztrálj vagy jelentkezz be a GitHubra
+2. Nyisd meg: https://github.com/settings/personal-access-tokens
+3. **Generate new token** → *Fine-grained token*
+4. Adj neki nevet (pl. `ph-power-tools-gist`)
+5. Állítsd be a lejáratot (*Expiration*)
+6. **Permissions → Gists → Read and write**
+7. Kattints: **Generate token**
+
+⚠️ **Fontos:**  
+A létrejövő `github_pat_...` token **csak egyszer látható**, ezért **másold ki és tedd el biztonságos helyre**.
+
+---
+
+#### 📄 2. Gist létrehozása
+
+1. Nyisd meg: https://gist.github.com
+2. Hozz létre egy új Gist-et:
+    - fájlnév: `ph_forum_settings.json`
+    - tartalom:
+      ```json
+      {}
+      ```
+3. Állítsd **Secret Gist**-re
+4. Kattints: **Create secret gist**
+5. A megnyíló oldal URL-jéből másold ki a **Gist ID-t**  
+   (a link végén található hosszú azonosító)
+
+---
+
+#### ⚙️ 3. Beállítás a scriptben
+
+1. Nyisd meg a PH Power Tools menüt
+2. Kattints a **⚙️ fogaskerék ikonra**
+3. Töltsd ki:
+    - **GitHub token**
+    - **Gist ID**
+4. Mentsd el a beállításokat
+
+Ezután a script automatikusan szinkronizálja az adatokat.
+
+---
+
+#### 🔐 Biztonság
+
+- a token **csak a saját böngésződben tárolódik**
+- a script **kizárólag a megadott Gist-et éri el**
+- semmilyen adat nem kerül harmadik félhez
+
+</details>
 
 ## 📸 Képernyőképek
 > [!NOTE]
