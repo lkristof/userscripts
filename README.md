@@ -159,7 +159,7 @@ Elrejti az nCore köszönéseket a torrent oldalon.
 Dereferer linkek eltávolítása, de az anonimitás megtartása
 
 > 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-de-dereferer.user.js
+> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-de-dereferer.user.js
 
 ---
 
