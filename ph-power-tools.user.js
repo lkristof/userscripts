@@ -1229,11 +1229,13 @@
          **********************/
         const style = document.createElement("style");
         style.textContent = `
-            body[data-theme="light"] .hash-highlight {
-                background-color: #FFF6C8 !important;
+            body[data-theme="light"] .msg-list .msg .msg-body.hash-highlight {
+                background-color: #FFF6C8;
+                transition: background 0.2s ease;
             }
-            body[data-theme="dark"] .hash-highlight {
-                background-color: #4A4015 !important;
+            body[data-theme="dark"] .msg-list .msg .msg-body.hash-highlight {
+                background-color: #4A4015;
+                transition: background 0.2s ease;
             }
             html {
                 scroll-behavior: smooth;
