@@ -594,16 +594,22 @@
                     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
                     overflow: hidden;">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
-                                padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
+            padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
                         <div style="font-weight:700;">PH Power Tools – Kulcsok / Szinkron</div>
-                        <button type="button" class="btn btn-sm btn-light" id="ph-secrets-close">✕</button>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span id="ph-sync-status-icon"
+                                  title=""
+                                  style="
+                                    width:10px; height:10px; border-radius:999px;
+                                    display:inline-block;
+                                    box-shadow: 0 0 0 2px rgba(0,0,0,0.08) inset;
+                                    opacity:0.95;">
+                            </span>
+                            <button type="button" class="btn btn-sm btn-light" id="ph-secrets-close">✕</button>
+                        </div>
                     </div>
             
                     <div style="padding: 14px; display:flex; flex-direction:column; gap:10px;">
-                    <div id="ph-secrets-storage-line"
-                         style="font-size:12px; opacity:0.85; line-height:1.35;">
-                    </div>
-                
                         <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
                             <label style="font-size:12px; margin:0;">
                             GitHub Gist Token
@@ -687,14 +693,24 @@
             if (!modal) return;
             applySecretsTheme();
 
-            const storageLine = modal.querySelector('#ph-secrets-storage-line');
-            if (storageLine) {
-                storageLine.innerHTML = hasGM()
-                    ? 'Tárolás: <b>GM storage</b> (közös a lapcsalád domainjei között)'
-                    : 'Tárolás: <b>localStorage</b> (domainenként külön)';
-            }
-
             const s = await loadSecrets();
+
+            const syncIcon = modal.querySelector('#ph-sync-status-icon');
+            if (syncIcon) {
+                const active = !!(
+                    (s.gistToken || '').trim() &&
+                    (s.gistId || '').trim() &&
+                    ((s.gistFilename || DEFAULT_GIST_FILENAME).trim())
+                );
+
+                if (active) {
+                    syncIcon.style.background = 'limegreen';
+                    syncIcon.title = 'Szinkron: aktív (Gist beállítva)';
+                } else {
+                    syncIcon.style.background = '#9aa0a6';
+                    syncIcon.title = 'Szinkron: inaktív (hiányzó Gist adatok)';
+                }
+            }
 
             modal.querySelector('#ph-secret-gist-token').value = s.gistToken || '';
             modal.querySelector('#ph-secret-gist-id').value = s.gistId || '';
