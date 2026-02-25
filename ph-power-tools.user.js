@@ -424,12 +424,6 @@
 
     const style = document.createElement('style');
     style.textContent = `
-        .chain-link .ph-chain-text {
-            margin-left: 4px;
-        }
-        .chain-link:hover .ph-chain-text {
-            text-decoration: underline;
-        }
         li.media {
             position: relative;
             z-index: 1;
@@ -919,30 +913,56 @@
         let selectedUser = null;
         let activeChainIds = new Set();
 
-        const COLORS = {
-            light: {
-                SAJAT: "#C7D7E0",
-                VALASZ: "#CFE0C3",
-                AKCIO: "#FFC0C0",
+        function injectColorizeCssOnce() {
+            if (document.getElementById("ph-pt-colorize-style")) return;
 
-                FOCUS_AUTHOR: "#FFA966",
-                FOCUS_REPLY: "#F6CEAF",
+            const style = document.createElement("style");
+            style.id = "ph-pt-colorize-style";
+            style.textContent = `
+                body.ph-pt-theme-light {
+                    --ph-pt-own: #C7D7E0;
+                    --ph-pt-reply: #CFE0C3;
+                    --ph-pt-akcio: #FFC0C0;
+                    --ph-pt-focus-author: #FFA966;
+                    --ph-pt-focus-reply:  #F6CEAF;
+                    --ph-pt-chain-bg: #FFF6C8;
+                    --ph-pt-chain-border: #FF9800;
+                }
+                body.ph-pt-theme-dark {
+                    --ph-pt-own: #2F4A57;
+                    --ph-pt-reply: #344A3A;
+                    --ph-pt-akcio: #8B0000;
+                    --ph-pt-focus-author: #5B327A;
+                    --ph-pt-focus-reply:  #3A1F4F;
+                    --ph-pt-chain-bg: #4A4015;
+                    --ph-pt-chain-border: #FFB300;
+                }
+                .msg .msg-body.ph-pt-colorize {
+                    transition: all 0.2s ease;
+                } 
+               .msg .msg-body.ph-pt-akcio        { background-color: var(--ph-pt-akcio) !important; }
+               .msg .msg-body.ph-pt-own          { background-color: var(--ph-pt-own) !important; }
+               .msg .msg-body.ph-pt-reply        { background-color: var(--ph-pt-reply) !important; }
+               .msg .msg-body.ph-pt-focus-author { background-color: var(--ph-pt-focus-author) !important; }
+               .msg .msg-body.ph-pt-focus-reply  { background-color: var(--ph-pt-focus-reply) !important; }
+         
+               .msg .msg-body.ph-pt-chain {
+                   background-color: var(--ph-pt-chain-bg) !important;
+                   box-shadow: inset 5px 0 0 0 var(--ph-pt-chain-border) !important;
+               }
+               .msg-head-options .ph-pt-chain-link .ph-pt-chain-text { margin-left: 4px; }
+               .msg-head-options .ph-pt-chain-link:hover .ph-pt-chain-text { text-decoration: underline; }
+            `;
+            document.head.appendChild(style);
+        }
 
-                CHAIN_BG: "#FFF6C8",
-                CHAIN_BORDER: "#FF9800"
-            },
-            dark: {
-                SAJAT: "#2F4A57",
-                VALASZ: "#344A3A",
-                AKCIO: "#8B0000",
+        injectColorizeCssOnce();
 
-                FOCUS_AUTHOR: "#5B327A",
-                FOCUS_REPLY: "#3A1F4F",
-
-                CHAIN_BG: "#4A4015",
-                CHAIN_BORDER: "#FFB300"
-            }
-        };
+        function applyColorizeThemeClass() {
+            const dark = detectDark();
+            document.body.classList.toggle("ph-pt-theme-dark", dark);
+            document.body.classList.toggle("ph-pt-theme-light", !dark);
+        }
 
         const lower = s => (s || "").toString().trim().toLowerCase();
 
@@ -962,10 +982,6 @@
             const btn = document.querySelector(".theme-button span");
             if (btn) return btn.classList.contains("fa-sun-bright");
             return false;
-        }
-
-        function getThemeColors() {
-            return detectDark() ? COLORS.dark : COLORS.light;
         }
 
         /**********************
@@ -1021,54 +1037,60 @@
          * FŐ SZÍNEZÉS
          **********************/
         function recolorAll() {
-            const c = getThemeColors();
+            applyColorizeThemeClass();
 
             document.querySelectorAll(".msg").forEach(msg => {
                 const body = msg.querySelector(".msg-body");
                 if (!body) return;
 
-                body.style.backgroundColor = "";
-                body.style.boxShadow = "";
+                // base class
+                body.classList.add("ph-pt-colorize");
 
-                const text = body.textContent.toLowerCase();
+                // reset state classes
+                body.classList.remove(
+                    "ph-pt-akcio",
+                    "ph-pt-own",
+                    "ph-pt-reply",
+                    "ph-pt-focus-author",
+                    "ph-pt-focus-reply",
+                    "ph-pt-chain"
+                );
+
+                const text = lower(body.textContent);
                 const author = getAuthor(msg);
                 const replied = getRepliedTo(msg);
 
                 const li = msg.closest("li.media[data-id]");
                 const msgId = li?.dataset?.id;
 
-                // 1️⃣ #akció
+                // 1) #akció
                 if (AKCIO_KEYWORDS.some(k => text.includes(k))) {
-                    body.style.setProperty("background-color", c.AKCIO);
+                    body.classList.add("ph-pt-akcio");
                 }
 
-                // 2️⃣ Avatar fókusz
+                // 2) Avatar fókusz (prioritásban felülír mindent, mint eddig)
                 if (selectedUser) {
                     if (author === selectedUser) {
-                        body.style.backgroundColor = c.FOCUS_AUTHOR;
-                        body.style.transition = "all 0.2s ease";
+                        body.classList.add("ph-pt-focus-author");
                         return;
                     }
                     if (replied === selectedUser) {
-                        body.style.backgroundColor = c.FOCUS_REPLY;
-                        body.style.transition = "all 0.2s ease";
+                        body.classList.add("ph-pt-focus-reply");
                         return;
                     }
                 }
 
-                // 3️⃣ Lánc kiemelés (OLDALSÁV!)
+                // 3) Lánc kiemelés
                 if (msgId && activeChainIds.has(msgId)) {
-                    body.style.backgroundColor = c.CHAIN_BG;
-                    body.style.transition = "all 0.2s ease";
-                    body.style.boxShadow = `inset 5px 0 0 0 ${c.CHAIN_BORDER}`;
+                    body.classList.add("ph-pt-chain");
                     return;
                 }
 
-                // 4️⃣ Saját / válasz
+                // 4) Saját / válasz
                 if (lower(author) === lower(FELHASZNALO)) {
-                    body.style.backgroundColor = c.SAJAT;
+                    body.classList.add("ph-pt-own");
                 } else if (lower(replied) === lower(FELHASZNALO)) {
-                    body.style.backgroundColor = c.VALASZ;
+                    body.classList.add("ph-pt-reply");
                 }
             });
         }
@@ -1110,10 +1132,10 @@
          **********************/
         function attachChainLinks() {
             document.querySelectorAll(".msg-head-options").forEach(opts => {
-                if (opts.querySelector(".chain-link")) return;
+                if (opts.querySelector(".ph-pt-chain-link")) return;
 
                 const wrapper = document.createElement("span");
-                wrapper.className = "chain-link";
+                wrapper.className = "ph-pt-chain-link";
 
                 wrapper.style.cursor = "pointer";
                 wrapper.style.marginLeft = "8px";
@@ -1122,7 +1144,7 @@
 
                 wrapper.innerHTML = `
                     <span class="fas fa-link fa-fw"></span>
-                    <span class="ph-chain-text">Lánc</span>
+                    <span class="ph-pt-chain-text">Lánc</span>
                 `;
 
                 wrapper.addEventListener("click", e => {
@@ -1167,7 +1189,7 @@
         }
 
         window.matchMedia("(prefers-color-scheme: dark)")
-            .addEventListener("change", recolorAll);
+            .addEventListener("change", () => { applyColorizeThemeClass(); recolorAll(); });
     }
 
     function linkRedirect() {
