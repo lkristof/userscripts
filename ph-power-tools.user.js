@@ -1040,10 +1040,12 @@
                 if (selectedUser) {
                     if (author === selectedUser) {
                         body.style.backgroundColor = c.FOCUS_AUTHOR;
+                        body.style.transition = "all 0.2s ease";
                         return;
                     }
                     if (replied === selectedUser) {
                         body.style.backgroundColor = c.FOCUS_REPLY;
+                        body.style.transition = "all 0.2s ease";
                         return;
                     }
                 }
