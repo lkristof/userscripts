@@ -1725,6 +1725,7 @@
             li.media.ph-thread {
                 position: relative;
                 z-index: 1;
+                box-sizing: border-box;
             }
             li.media.ph-thread:hover {
                 z-index: 10;
@@ -1738,7 +1739,7 @@
                 top: 0;
                 bottom: 0;
                 pointer-events: none;
-                left: calc(-1 * var(--indent));
+                left: 0;
             }
             .thread-line-vert {
                 position: absolute;
@@ -1818,7 +1819,8 @@
                 el.classList.add('ph-thread');
                 const currentIndent = depth * INDENT;
                 el.style.setProperty('--indent', currentIndent + 'px');
-                el.style.marginLeft = currentIndent + 'px';
+                el.style.marginLeft = "0px";
+                el.style.paddingLeft = currentIndent + "px";
 
                 if (depth > 0) {
                     let box = el.querySelector('.thread-lines');
@@ -1895,6 +1897,7 @@
                 originalOrder.forEach(li => {
                     li.classList.remove('ph-thread');
                     li.style.marginLeft = '';
+                    li.style.paddingLeft = '';
                     li.style.setProperty('--indent', '0px');
                     const box = li.querySelector('.thread-lines');
                     if (box) box.remove();
