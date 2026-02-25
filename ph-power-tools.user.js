@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.0.7
+// @version      2.0.8
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -15,6 +15,9 @@
 // @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
 // @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
 //
+// @grant        GM.getValue
+// @grant        GM.setValue
+// @grant        GM.deleteValue
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
