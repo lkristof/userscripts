@@ -424,6 +424,12 @@
 
     const style = document.createElement('style');
     style.textContent = `
+        .chain-link .ph-chain-text {
+            margin-left: 4px;
+        }
+        .chain-link:hover .ph-chain-text {
+            text-decoration: underline;
+        }
         li.media {
             position: relative;
             z-index: 1;
@@ -1114,7 +1120,10 @@
                 wrapper.style.display = "inline-flex";
                 wrapper.style.alignItems = "center";
 
-                wrapper.innerHTML = '<span class="fas fa-link fa-fw"></span>&nbsp;Lánc';
+                wrapper.innerHTML = `
+                    <span class="fas fa-link fa-fw"></span>
+                    <span class="ph-chain-text">Lánc</span>
+                `;
 
                 wrapper.addEventListener("click", e => {
                     e.preventDefault();
