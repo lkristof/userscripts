@@ -1035,6 +1035,7 @@
                 // 3️⃣ Lánc kiemelés (OLDALSÁV!)
                 if (msgId && activeChainIds.has(msgId)) {
                     body.style.backgroundColor = c.CHAIN_BG;
+                    body.style.transition = "all 0.2s ease";
                     body.style.boxShadow = `inset 5px 0 0 0 ${c.CHAIN_BORDER}`;
                     return;
                 }
