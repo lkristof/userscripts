@@ -420,6 +420,62 @@
         return regex.test(location.pathname);
     }
 
+    /*************************
+     * PH Power Tools – THEME CORE
+     *************************/
+
+    function phPtDetectDark() {
+        // 1. dark_base link alapján
+        const darkLink = document.querySelector('link[href*="dark_base"]');
+        if (darkLink) {
+            const media = darkLink.getAttribute("media");
+            if (media === "all") return true;
+            if (media === "not all") return false;
+            if (media?.includes("prefers-color-scheme")) {
+                return window.matchMedia("(prefers-color-scheme: dark)").matches;
+            }
+        }
+
+        // 2. Theme button fallback
+        const btn = document.querySelector(".theme-button span");
+        if (btn) {
+            return btn.classList.contains("fa-sun-bright");
+        }
+
+        return false;
+    }
+
+    function phPtSyncThemeAttr() {
+        const isDark = phPtDetectDark();
+        document.body.dataset.theme = isDark ? "dark" : "light";
+        return isDark;
+    }
+
+    // első szinkron
+    phPtSyncThemeAttr();
+
+    // rendszer téma váltás
+    window.matchMedia("(prefers-color-scheme: dark)")
+        .addEventListener("change", () => {
+            phPtSyncThemeAttr();
+            document.dispatchEvent(new Event("ph-pt-theme-changed"));
+        });
+
+    // PH UI változás figyelés (dark_base link media változás)
+    const phPtDarkLink = document.querySelector('link[href*="dark_base"]');
+
+    if (phPtDarkLink) {
+        const phPtThemeObserver = new MutationObserver(() => {
+            phPtSyncThemeAttr();
+            document.dispatchEvent(new Event("ph-pt-theme-changed"));
+        });
+
+        phPtThemeObserver.observe(phPtDarkLink, {
+            attributes: true,
+            attributeFilter: ["media"]
+        });
+    }
+
     /************ STYLE ************/
 
     const style = document.createElement('style');
@@ -661,17 +717,8 @@
             const panel = document.getElementById('ph-secrets-panel');
             if (!panel) return;
 
-            const darkLink = document.querySelector('link[href*="dark_base"]');
-            let isDark = false;
-
-            if (darkLink) {
-                const media = darkLink.getAttribute("media");
-                if (media === "all") isDark = true;
-                else if (media === "not all") isDark = false;
-                else if (media?.includes("prefers-color-scheme")) {
-                    isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                }
-            }
+            if (!document.body.dataset.theme) phPtSyncThemeAttr();
+            const isDark = document.body.dataset.theme === "dark";
 
             if (isDark) {
                 panel.style.background = "#2b2b2b";
@@ -919,7 +966,7 @@
             const style = document.createElement("style");
             style.id = "ph-pt-colorize-style";
             style.textContent = `
-                body.ph-pt-theme-light {
+                body[data-theme="light"] {
                     --ph-pt-own: #C7D7E0;
                     --ph-pt-reply: #CFE0C3;
                     --ph-pt-akcio: #FFC0C0;
@@ -928,7 +975,7 @@
                     --ph-pt-chain-bg: #FFF6C8;
                     --ph-pt-chain-border: #FF9800;
                 }
-                body.ph-pt-theme-dark {
+                body[data-theme="dark"] {
                     --ph-pt-own: #2F4A57;
                     --ph-pt-reply: #344A3A;
                     --ph-pt-akcio: #8B0000;
@@ -958,31 +1005,14 @@
 
         injectColorizeCssOnce();
 
-        function applyColorizeThemeClass() {
-            const dark = detectDark();
-            document.body.classList.toggle("ph-pt-theme-dark", dark);
-            document.body.classList.toggle("ph-pt-theme-light", !dark);
+        if (!document.body.dataset.phPtColorizeThemeBound) {
+            document.body.dataset.phPtColorizeThemeBound = "1";
+            document.addEventListener("ph-pt-theme-changed", () => {
+                recolorAll();
+            });
         }
 
         const lower = s => (s || "").toString().trim().toLowerCase();
-
-        /**********************
-         * TÉMA FELISMERÉS
-         **********************/
-        function detectDark() {
-            const darkLink = document.querySelector('link[href*="dark_base"]');
-            if (darkLink) {
-                const media = darkLink.getAttribute("media");
-                if (media === "all") return true;
-                if (media === "not all") return false;
-                if (media?.includes("prefers-color-scheme")) {
-                    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-                }
-            }
-            const btn = document.querySelector(".theme-button span");
-            if (btn) return btn.classList.contains("fa-sun-bright");
-            return false;
-        }
 
         /**********************
          * SEGÉDEK
@@ -1037,8 +1067,6 @@
          * FŐ SZÍNEZÉS
          **********************/
         function recolorAll() {
-            applyColorizeThemeClass();
-
             document.querySelectorAll(".msg").forEach(msg => {
                 const body = msg.querySelector(".msg-body");
                 if (!body) return;
@@ -1187,9 +1215,6 @@
         } else {
             init();
         }
-
-        window.matchMedia("(prefers-color-scheme: dark)")
-            .addEventListener("change", () => { applyColorizeThemeClass(); recolorAll(); });
     }
 
     function linkRedirect() {
@@ -1294,28 +1319,6 @@
         document.head.appendChild(style);
 
         /**********************
-         * TÉMA FELISMERÉS
-         **********************/
-        function updateBodyTheme() {
-            const darkLink = document.querySelector('link[href*="dark_base"]');
-            let dark = false;
-
-            if (darkLink) {
-                const media = darkLink.getAttribute("media");
-                if (media === "all") dark = true;
-                else if (media === "not all") dark = false;
-                else if (media?.includes("prefers-color-scheme")) {
-                    dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                }
-            }
-
-            const btn = document.querySelector(".theme-button span");
-            if (btn && btn.classList.contains("fa-sun-bright")) dark = true;
-
-            document.body.setAttribute("data-theme", dark ? "dark" : "light");
-        }
-
-        /**********************
          * HASH KIEMELÉS
          **********************/
         let lastHashMsgId = null;
@@ -1344,8 +1347,6 @@
         }
 
         function highlightHashMsg() {
-            updateBodyTheme();
-
             const hash = window.location.hash;
             let msgId = null;
 
@@ -2155,24 +2156,8 @@
             hiddenUsers = [];
         }
 
-        // ===== TÉMA FELISMERÉS =====
-        function detectDark() {
-            const darkLink = document.querySelector('link[href*="dark_base"]');
-            if (darkLink) {
-                const media = darkLink.getAttribute("media");
-                if (media === "all") return true;
-                if (media === "not all") return false;
-                if (media?.includes("prefers-color-scheme")) {
-                    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-                }
-            }
-            const btn = document.querySelector(".theme-button span");
-            if (btn) return btn.classList.contains("fa-sun-bright");
-            return false;
-        }
-
         function getHiddenBarColors() {
-            const dark = detectDark();
+            const dark = document.body.dataset.theme === "dark";
             if (dark) {
                 return { base: "rgb(20 19 15)",hover: "rgba(255,255,255,0.15)", color: "white" };
             } else {
@@ -2207,15 +2192,13 @@
                 }
                 .ph-collapsible {
                     transition: max-height 0.4s ease;
-                }
-                .ph-collapsible[data-collapsed="true"] {
                     overflow: hidden;
                 }
             `;
         }
 
         applyHiddenBarStyle();
-        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyHiddenBarStyle);
+        document.addEventListener("ph-pt-theme-changed", applyHiddenBarStyle);
 
         // ===== SEGÉDFÜGGVÉNYEK =====
         function getAuthor(msg) {
