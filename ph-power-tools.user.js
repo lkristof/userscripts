@@ -32,9 +32,38 @@
 
     /************ CONFIG ************/
 
-    const STORAGE_KEY = 'ph_forum_settings';
-    const SECRETS_KEY_GM = "ph_power_tools_secrets";
-    const SECRETS_KEY_LS = "ph_power_tools_secrets";
+    const KEYS = {
+        SETTINGS: 'ph_forum_settings',
+
+        STATE: {
+            HIDDEN_USERS: 'ph_hidden_users',
+            HIDE_OFF: 'ph_hide_off',
+            WIDE_VIEW: 'ph_wide_view',
+            THREAD_VIEW: 'ph_thread_view',
+            TOPIC_MAX_ID_MAP: 'ph_topic_max_id_map'
+        },
+
+        KEK: {
+            GALLERY: 'ph_kek_gallery',
+            GALLERY_RESET_TS: 'ph_kek_gallery_reset_ts',
+            GALLERY_DELETED: 'ph_kek_gallery_deleted',
+            GALLERY_SEEN_RESET_TS: 'ph_kek_gallery_seen_reset_ts'
+        },
+
+        SECRETS: 'ph_power_tools_secrets'
+    };
+
+    const SYNC_KEYS = [
+        KEYS.SETTINGS,
+        KEYS.STATE.HIDDEN_USERS,
+        KEYS.STATE.TOPIC_MAX_ID_MAP,
+        KEYS.KEK.GALLERY,
+        KEYS.KEK.GALLERY_RESET_TS,
+        KEYS.KEK.GALLERY_DELETED
+    ];
+
+    const STORAGE_KEY = KEYS.SETTINGS;
+    const SECRETS_KEY = KEYS.SECRETS;
 
     function hasGM() {
         // Userscripts appnál gyakran nincs GM_* global, vagy csak GM.* van
@@ -59,26 +88,26 @@
     }
 
     function lsLoad() {
-        try { return JSON.parse(localStorage.getItem(SECRETS_KEY_LS) || "{}") || {}; }
+        try { return JSON.parse(localStorage.getItem(SECRETS_KEY) || "{}") || {}; }
         catch { return {}; }
     }
     function lsSave(obj) {
-        localStorage.setItem(SECRETS_KEY_LS, JSON.stringify(obj || {}));
+        localStorage.setItem(SECRETS_KEY, JSON.stringify(obj || {}));
     }
     function lsClear() {
-        localStorage.removeItem(SECRETS_KEY_LS);
+        localStorage.removeItem(SECRETS_KEY);
     }
 
     async function loadSecrets() {
         // 1) GM ha elérhető
         if (hasGM()) {
-            const s = await gmGet(SECRETS_KEY_GM, null);
+            const s = await gmGet(SECRETS_KEY, null);
             if (s && typeof s === "object") return s;
 
             // migráció LS -> GM (ha volt régi)
             const legacy = lsLoad();
             if (legacy && Object.keys(legacy).length) {
-                await gmSet(SECRETS_KEY_GM, legacy);
+                await gmSet(SECRETS_KEY, legacy);
                 // opcionális: lsClear();
                 return legacy;
             }
@@ -90,12 +119,12 @@
     }
 
     async function saveSecrets(secrets) {
-        if (hasGM()) return gmSet(SECRETS_KEY_GM, secrets || {});
+        if (hasGM()) return gmSet(SECRETS_KEY, secrets || {});
         return lsSave(secrets);
     }
 
     async function clearSecrets() {
-        if (hasGM()) return gmDel(SECRETS_KEY_GM);
+        if (hasGM()) return gmDel(SECRETS_KEY);
         return lsClear();
     }
 
@@ -124,15 +153,6 @@
         extraSmilies: true,
         kekShUploader: true
     };
-
-    const SYNC_KEYS = [
-        'ph_forum_settings',
-        'ph_hidden_users',
-        'ph_topic_max_id_map',
-        'ph_kek_gallery',
-        'ph_kek_gallery_reset_ts',
-        'ph_kek_gallery_deleted'
-    ];
 
     function safeJsonParse(str, fallback) {
         try { return JSON.parse(str); } catch { return fallback; }
@@ -212,7 +232,7 @@
             if (localVal == null) return remoteVal;
 
             // 1) Topic max id map: slug -> maxId (itt kell a MAX merge!)
-            if (key === "ph_topic_max_id_map") {
+            if (key === KEYS.STATE.TOPIC_MAX_ID_MAP) {
                 const r = (remoteVal && typeof remoteVal === "object") ? remoteVal : {};
                 const l = (localVal && typeof localVal === "object") ? localVal : {};
                 const out = { ...r };
@@ -227,7 +247,7 @@
             }
 
             // 2) kek gallery: unió URL alapján, friss rendezés, majd limit
-            if (key === "ph_kek_gallery") {
+            if (key === KEYS.KEK.GALLERY) {
                 const r = Array.isArray(remoteVal) ? remoteVal : [];
                 const l = Array.isArray(localVal) ? localVal : [];
                 const byUrl = new Map();
@@ -247,12 +267,12 @@
                 const merged = Array.from(byUrl.values())
                     .sort((a, b) => (Date.parse(b.createdAt || 0) || 0) - (Date.parse(a.createdAt || 0) || 0));
 
-                const deleted = safeJsonParse(localStorage.getItem("ph_kek_gallery_deleted") || "{}", {});
+                const deleted = safeJsonParse(localStorage.getItem(KEYS.KEK.GALLERY_DELETED) || "{}", {});
                 const filtered = merged.filter(it => it?.url && !deleted[it.url]);
                 return filtered;
             }
 
-            if (key === "ph_kek_gallery_deleted") {
+            if (key === KEYS.KEK.GALLERY_DELETED) {
                 const r = (remoteVal && typeof remoteVal === "object") ? remoteVal : {};
                 const l = (localVal && typeof localVal === "object") ? localVal : {};
                 const out = { ...r };
@@ -1447,7 +1467,7 @@
         `;
         document.head.appendChild(style);
 
-        const STORAGE_KEY = "ph_hide_off";
+        const STORAGE_KEY = KEYS.STATE.HIDE_OFF;
         const STATUS = { ON: 'enabled', OFF: 'disabled' };
 
         let offHidden = storage.getItem(STORAGE_KEY) === STATUS.ON;
@@ -1556,7 +1576,7 @@
 
         const STYLE_ID = 'ph-wide-center-style';
         const ROW_CLASS = 'ph-center-row';
-        const STORAGE_KEY = 'ph_wide_view';
+        const STORAGE_KEY = KEYS.STATE.WIDE_VIEW;
 
         const STATUS = { ON: 'enabled', OFF: 'disabled' };
         const buttons = [];
@@ -1709,7 +1729,7 @@
         const LINE_COLOR   = "#C1BFB6";
         const LINE_OPACITY = 1;
         const LINE_THICK   = 1;
-        const STORAGE_KEY  = 'ph_thread_view';
+        const STORAGE_KEY  = KEYS.STATE.THREAD_VIEW;
         const STATUS       = { ON: 'enabled', OFF: 'disabled' };
 
         let threadContainerHeader = null;
@@ -2150,7 +2170,7 @@
     }
 
     function hideUsers() {
-        const STORAGE_KEY = "ph_hidden_users";
+        const STORAGE_KEY = KEYS.STATE.HIDDEN_USERS;
         let hiddenUsers;
         const dropdownRefreshers = [];
         try {
@@ -2548,7 +2568,7 @@
     }
 
     function markNewPosts() {
-        const MAP_KEY = "ph_topic_max_id_map";
+        const MAP_KEY = KEYS.STATE.TOPIC_MAX_ID_MAP;
 
         /* =========================
            COLOR HANDLING
@@ -2923,8 +2943,8 @@
     function kekShUploader() {
         /* ================= CONFIG ================= */
 
-        const LS_KEY = "ph_kek_gallery";
-        const DELETED_KEY = "ph_kek_gallery_deleted";
+        const LS_KEY = KEYS.KEK.GALLERY;
+        const DELETED_KEY = KEYS.KEK.GALLERY_DELETED;
 
         function loadDeletedMap() {
             const obj = safeJsonParse(storage.getItem(DELETED_KEY) || "{}", {});
@@ -3131,8 +3151,9 @@
             }
         }
 
-        const RESET_KEY = "ph_kek_gallery_reset_ts";
-        const SEEN_RESET_KEY = "ph_kek_gallery_seen_reset_ts";
+        const RESET_KEY = KEYS.KEK.GALLERY_RESET_TS;
+        const SEEN_RESET_KEY = KEYS.KEK.GALLERY_SEEN_RESET_TS;
+        // NOTE: KEYS.KEK.GALLERY_SEEN_RESET_TS = local-only ack, don't sync
 
         function applyGalleryResetIfNeeded() {
             const resetTs = parseInt(storage.getItem(RESET_KEY) || "0", 10) || 0;
@@ -3140,7 +3161,8 @@
 
             if (resetTs > 0 && resetTs > seenTs) {
                 // volt egy új “mind törlés” másik gépről → dobjuk a lokális galériát
-                localStorage.removeItem(LS_KEY); // vagy storage.removeItem(LS_KEY) ha elérhető itt
+                storage.removeItem(LS_KEY);
+                // local-only ack, do NOT sync
                 localStorage.setItem(SEEN_RESET_KEY, String(resetTs));
             }
         }
@@ -3526,8 +3548,8 @@
                     return;
                 }
 
-                storage.setItem("ph_kek_gallery_reset_ts", String(Date.now()));
-                storage.removeItem("ph_kek_gallery_deleted");
+                storage.setItem(KEYS.KEK.GALLERY_RESET_TS, String(Date.now()));
+                storage.removeItem(KEYS.KEK.GALLERY_DELETED);
                 await clearGallery();
 
                 if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
