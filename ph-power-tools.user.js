@@ -2956,12 +2956,6 @@
         const GALLERY_MAX_HEIGHT_PX = 420;
         const GRID_THUMB_SIZE_PX = 120;
 
-        /* ================= STATE ================= */
-
-        function safeJsonParse(str, fallback) {
-            try { return JSON.parse(str); } catch { return fallback; }
-        }
-
         /* ================= GM REQUEST ================= */
 
         function gmRequest(opts) {
