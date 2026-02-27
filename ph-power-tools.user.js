@@ -440,6 +440,26 @@
         return regex.test(location.pathname);
     }
 
+    function insertHtmlIntoEditor(editorEl, html) {
+        const ed = window.tinyMCE?.activeEditor;
+        if (ed && typeof ed.insertContent === "function") {
+            ed.focus();
+            ed.insertContent(html);
+            return true;
+        }
+
+        if (editorEl) {
+            editorEl.focus();
+            try {
+                return document.execCommand("insertHTML", false, html);
+            } catch {
+                editorEl.insertAdjacentHTML("beforeend", html);
+                return true;
+            }
+        }
+        return false;
+    }
+
     /*************************
      * PH Power Tools – THEME CORE
      *************************/
@@ -2886,7 +2906,7 @@
 
             // Beszúrás (TinyMCE kompatibilis)
             const imgHTML = `<img src="${smiley.src}" alt="${smiley.code}" data-mce-src="${smiley.src}" style="vertical-align: middle;">`;
-            document.execCommand('insertHTML', false, imgHTML);
+            insertHtmlIntoEditor(editor, imgHTML);
         }
 
         // --- Gombok létrehozása a kiterjesztett szmájlisorhoz ---
@@ -3071,13 +3091,6 @@
         function findEditorNear(node) {
             const root = node?.closest?.(".msg-editor-wrapper") || document;
             return root.querySelector(".rtif-content[contenteditable='true']");
-        }
-
-        function insertHtml(editor, html) {
-            if (!editor) return false;
-            editor.focus();
-            document.execCommand("insertHTML", false, html);
-            return true;
         }
 
         function escapeHtml(text) {
@@ -3615,13 +3628,13 @@
                 const editor = findEditorNear(wrapper);
 
                 if (action === "insert-image") {
-                    const ok = insertHtml(editor, `<img src="${escapeHtml(url)}" alt="">`);
+                    const ok = insertHtmlIntoEditor(editor, `<img src="${escapeHtml(url)}" alt="">`);
                     setStatus(wrapper, ok ? "✅ Kép beszúrva" : "❌ Nem találom az editort");
                     return;
                 }
 
                 if (action === "insert-link") {
-                    const ok = insertHtml(editor, buildLinkHtml(url));
+                    const ok = insertHtmlIntoEditor(editor, buildLinkHtml(url));
                     setStatus(wrapper, ok ? "✅ Link beszúrva" : "❌ Nem találom az editort");
                     return;
                 }
