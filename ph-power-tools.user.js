@@ -65,8 +65,85 @@
     const STORAGE_KEY = KEYS.SETTINGS;
     const SECRETS_KEY = KEYS.SECRETS;
 
+    const secrets = await loadSecrets();
+
+    const GIST_TOKEN = (secrets.gistToken || "").trim();
+    const GIST_ID = (secrets.gistId || "").trim();
+    const DEFAULT_GIST_FILENAME = "ph_forum_settings.json";
+    const GIST_FILENAME = ((secrets.gistFilename || DEFAULT_GIST_FILENAME)).trim();
+    const ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
+
+    const KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
+
+    const defaultSettings = {
+        colorize: true,
+        linkRedirect: true,
+        msgAnchorHighlight: true,
+        offHider: true,
+        wideView: true,
+        threadView: true,
+        keyboardNavigation: true,
+        hideUsers: true,
+        markNewPosts: true,
+        extraSmilies: true,
+        kekShUploader: true
+    };
+
+    const settingGroups = {
+        appearance: {
+            label: 'Megjelenés',
+            keys: ['colorize', 'markNewPosts', 'wideView', 'threadView'],
+            defaultOpen: true
+        },
+        filtering: {
+            label: 'Szűrés',
+            keys: ['offHider', 'hideUsers'],
+        },
+        interaction: {
+            label: 'Interakció',
+            keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight', 'keyboardNavigation']
+        }
+    };
+
+    const tooltips = {
+        colorize: 'Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés.',
+        linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
+        msgAnchorHighlight: 'Kiemeli az URL-ben szereplő #msg hozzászólást.\nHa nem létezik, a hozzá legközelebbit jelöli ki.',
+        offHider: 'Az OFF hozzászólásokat a megjelenő gomb segítségével elrejtheted.',
+        keyboardNavigation: '← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
+        hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
+        markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
+        kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.'
+    };
+
+    function prettyName(key) {
+        return {
+            colorize: 'Hozzászólások színezése',
+            linkRedirect: 'Link átirányítás',
+            msgAnchorHighlight: 'Üzenet kiemelés',
+            offHider: 'OFF hozzászólások elrejtése',
+            wideView: 'Széles nézet',
+            threadView: 'Thread nézet',
+            keyboardNavigation: 'Billentyűzetes navigáció',
+            hideUsers: 'Felhasználók elrejtése',
+            markNewPosts: 'Új hozzászólás jelölése',
+            extraSmilies: 'Extra smiley-k',
+            kekShUploader: 'kek.sh képfeltöltő'
+        }[key] || key;
+    }
+
+    const storage = createSyncedStorage();
+    await storage.init();
+
+    function getMergedSettings() {
+        const local = safeJsonParse(storage.getItem(STORAGE_KEY) || '{}', {});
+        return { ...defaultSettings, ...local };
+    }
+
+    const savedSettings = getMergedSettings();
+    let draftSettings = {...savedSettings};
+
     function hasGM() {
-        // Userscripts appnál gyakran nincs GM_* global, vagy csak GM.* van
         return (typeof GM_getValue === "function" && typeof GM_setValue === "function")
             || (typeof GM === "object" && typeof GM.getValue === "function" && typeof GM.setValue === "function");
     }
@@ -91,30 +168,28 @@
         try { return JSON.parse(localStorage.getItem(SECRETS_KEY) || "{}") || {}; }
         catch { return {}; }
     }
+
     function lsSave(obj) {
         localStorage.setItem(SECRETS_KEY, JSON.stringify(obj || {}));
     }
+
     function lsClear() {
         localStorage.removeItem(SECRETS_KEY);
     }
 
     async function loadSecrets() {
-        // 1) GM ha elérhető
         if (hasGM()) {
             const s = await gmGet(SECRETS_KEY, null);
             if (s && typeof s === "object") return s;
 
-            // migráció LS -> GM (ha volt régi)
             const legacy = lsLoad();
             if (legacy && Object.keys(legacy).length) {
                 await gmSet(SECRETS_KEY, legacy);
-                // opcionális: lsClear();
                 return legacy;
             }
             return {};
         }
 
-        // 2) fallback: localStorage (iOS Userscripts alatt valószínűleg ez)
         return lsLoad();
     }
 
@@ -127,32 +202,6 @@
         if (hasGM()) return gmDel(SECRETS_KEY);
         return lsClear();
     }
-
-    const secrets = await loadSecrets();
-
-    const GIST_TOKEN = (secrets.gistToken || "").trim();
-    const GIST_ID = (secrets.gistId || "").trim();
-    const DEFAULT_GIST_FILENAME = "ph_forum_settings.json";
-    const GIST_FILENAME = (
-        (secrets.gistFilename || DEFAULT_GIST_FILENAME)
-    ).trim();
-    const KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
-
-    const ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
-
-    const defaultSettings = {
-        colorize: true,
-        linkRedirect: true,
-        msgAnchorHighlight: true,
-        offHider: true,
-        wideView: true,
-        threadView: true,
-        keyboardNavigation: true,
-        hideUsers: true,
-        markNewPosts: true,
-        extraSmilies: true,
-        kekShUploader: true
-    };
 
     function safeJsonParse(str, fallback) {
         try { return JSON.parse(str); } catch { return fallback; }
@@ -286,7 +335,7 @@
                 return out;
             }
 
-            // Default: maradhat a "local wins" (beállításoknál ez oké)
+            // Default: maradhat a "local wins"
             return localVal;
         }
 
@@ -381,60 +430,6 @@
         };
     }
 
-    const storage = createSyncedStorage();
-    await storage.init();
-
-    function getMergedSettings() {
-        const local = safeJsonParse(storage.getItem(STORAGE_KEY) || '{}', {});
-        return { ...defaultSettings, ...local };
-    }
-
-    const settingGroups = {
-        appearance: {
-            label: 'Megjelenés',
-            keys: ['colorize', 'markNewPosts', 'wideView', 'threadView'],
-            defaultOpen: true
-        },
-        filtering: {
-            label: 'Szűrés',
-            keys: ['offHider', 'hideUsers'],
-        },
-        interaction: {
-            label: 'Interakció',
-            keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight', 'keyboardNavigation']
-        }
-    };
-
-    function prettyName(key) {
-        return {
-            colorize: 'Hozzászólások színezése',
-            linkRedirect: 'Link átirányítás',
-            msgAnchorHighlight: 'Üzenet kiemelés',
-            offHider: 'OFF hozzászólások elrejtése',
-            wideView: 'Széles nézet',
-            threadView: 'Thread nézet',
-            keyboardNavigation: 'Billentyűzetes navigáció',
-            hideUsers: 'Felhasználók elrejtése',
-            markNewPosts: 'Új hozzászólás jelölése',
-            extraSmilies: 'Extra smiley-k',
-            kekShUploader: 'kek.sh képfeltöltő'
-        }[key] || key;
-    }
-
-    const tooltips = {
-        colorize: 'Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés.',
-        linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
-        msgAnchorHighlight: 'Kiemeli az URL-ben szereplő #msg hozzászólást.\nHa nem létezik, a hozzá legközelebbit jelöli ki.',
-        offHider: 'Az OFF hozzászólásokat a megjelenő gomb segítségével elrejtheted.',
-        keyboardNavigation: '← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
-        hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
-        markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
-        kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.'
-    };
-
-    const savedSettings = getMergedSettings();
-    let draftSettings = {...savedSettings};
-
     function isOnPage(path) {
         const regex = new RegExp('^\\/' + path + '\\/');
         return regex.test(location.pathname);
@@ -459,10 +454,6 @@
         }
         return false;
     }
-
-    /*************************
-     * PH Power Tools – THEME CORE
-     *************************/
 
     function phPtDetectDark() {
         // 1. dark_base link alapján
@@ -490,114 +481,6 @@
         document.body.dataset.theme = isDark ? "dark" : "light";
         return isDark;
     }
-
-    // első szinkron
-    phPtSyncThemeAttr();
-
-    // rendszer téma váltás
-    window.matchMedia("(prefers-color-scheme: dark)")
-        .addEventListener("change", () => {
-            phPtSyncThemeAttr();
-            document.dispatchEvent(new Event("ph-pt-theme-changed"));
-        });
-
-    // PH UI változás figyelés (dark_base link media változás)
-    const phPtDarkLink = document.querySelector('link[href*="dark_base"]');
-
-    if (phPtDarkLink) {
-        const phPtThemeObserver = new MutationObserver(() => {
-            phPtSyncThemeAttr();
-            document.dispatchEvent(new Event("ph-pt-theme-changed"));
-        });
-
-        phPtThemeObserver.observe(phPtDarkLink, {
-            attributes: true,
-            attributeFilter: ["media"]
-        });
-    }
-
-    /************ STYLE ************/
-
-    const style = document.createElement('style');
-    style.textContent = `
-        li.media {
-            position: relative;
-            z-index: 1;
-        }
-        li.media:has(.dropdown-menu.show),
-        li.media:focus-within {
-            z-index: 100 !important;
-        }
-        .ph-acc-header {
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: background 0.2s ease;
-        }
-        .ph-acc-header:hover {
-            background: color-mix(in srgb, currentColor 8%, transparent);
-        }
-        .ph-acc-body {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.5s ease;
-        }
-        .ph-acc-body .dropdown-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 4px;
-            padding: 4px 10px;
-        }
-        .ph-power-menu {
-            min-width: 260px;
-            max-height: 70vh;
-            overflow-y: auto;
-        }
-        .ph-tooltip {
-            white-space: pre-line;
-            hyphens: auto;
-            overflow-wrap: break-word;
-            position: fixed;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            z-index: 9999;
-            display: none;
-            pointer-events: none;
-            max-width: 280px;
-        }
-        .ph-tooltip-icon {
-            margin-left: 5px;
-            cursor: pointer;
-        }
-        .ph-tooltip-icon:hover {
-            color: #343a40;
-        }
-        @media only screen and (max-width: 991.98px) {
-            .ph-power-btn + .dropdown-menu {
-                display: none !important;
-                position: absolute !important;
-                left: 0 !important;
-            }
-            .ph-power-btn + .dropdown-menu.show {
-                display: block !important;
-            }
-            .ph-acc-body .dropdown-item {
-                padding: 10px 10px;
-            }
-        }
-    `;
-
-    document.head.appendChild(style);
-
-    /************ HEADER INJECT ************/
-
-    waitForHeader(insertSettingsDropdown);
 
     function waitForHeader(cb) {
         const el = document.querySelector('#header-sticky .navbar-buttons');
@@ -669,7 +552,7 @@
             </div>
         `;
 
-        // ===== Secrets modal (egyszer) =====
+        // ===== Secrets modal =====
         if (!document.getElementById('ph-secrets-modal')) {
             const modal = document.createElement('div');
             modal.id = 'ph-secrets-modal';
@@ -690,7 +573,7 @@
                     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
                     overflow: hidden;">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
-            padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
+                        padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
                         <div style="font-weight:700;">PH Power Tools – Kulcsok / Szinkron</div>
                         <div style="display:flex; align-items:center; gap:10px;">
                             <span id="ph-sync-status-icon"
@@ -801,8 +684,7 @@
 
             modal.querySelector('#ph-secret-gist-token').value = s.gistToken || '';
             modal.querySelector('#ph-secret-gist-id').value = s.gistId || '';
-            modal.querySelector('#ph-secret-gist-filename').value =
-                s.gistFilename || DEFAULT_GIST_FILENAME;
+            modal.querySelector('#ph-secret-gist-filename').value = s.gistFilename || DEFAULT_GIST_FILENAME;
             modal.querySelector('#ph-secret-kek-key').value = s.kekShApiKey || '';
             modal.querySelector('#ph-secret-status').textContent = '';
 
@@ -831,7 +713,7 @@
             closeSecretsModal();
         });
 
-        // ESC = bezár (csak egyszer!)
+        // ESC = bezár
         if (!document.body.dataset.phSecretsEscBound) {
             document.body.dataset.phSecretsEscBound = "1";
             document.addEventListener('keydown', (e) => {
@@ -874,7 +756,9 @@
         });
 
         // Egyszerű custom tooltip
-        document.querySelectorAll('.ph-tooltip-icon').forEach(icon => {
+        li.querySelectorAll('.ph-tooltip-icon').forEach(icon => {
+            if (icon.dataset.phTtBound) return;
+            icon.dataset.phTtBound = "1";
             const tooltip = document.createElement('div');
             tooltip.className = 'ph-tooltip';
             tooltip.lang = "hu";
@@ -967,7 +851,6 @@
         });
     }
 
-    /************ MODULE DISPATCH ************/
     function runModule(name, fn) {
         if (typeof fn !== 'function') {
             console.warn(`[PH Power Tools] Module missing: ${name}`);
@@ -980,23 +863,151 @@
         }
     }
 
-    if (isOnPage("tema") || isOnPage("privat")) {
-        if (isOnPage("tema")) {
-            if (savedSettings.colorize) runModule('colorize', colorize);
-            if (savedSettings.markNewPosts) runModule('markNewPosts', markNewPosts);
-            if (savedSettings.linkRedirect) runModule('linkRedirect', linkRedirect);
-            if (savedSettings.msgAnchorHighlight) runModule('msgAnchorHighlight', msgAnchorHighlight);
-            if (savedSettings.offHider) runModule('offHider', offHider);
-            if (savedSettings.wideView) runModule('wideView', wideView);
-            if (savedSettings.threadView) runModule('threadView', threadView);
-            if (savedSettings.keyboardNavigation) runModule('keyboardNavigation', keyboardNavigation);
-            if (savedSettings.hideUsers) runModule('hideUsers', hideUsers);
+    function initThemeSync() {
+        phPtSyncThemeAttr();
+
+        window.matchMedia("(prefers-color-scheme: dark)")
+            .addEventListener("change", () => {
+                phPtSyncThemeAttr();
+                document.dispatchEvent(new Event("ph-pt-theme-changed"));
+            });
+
+        const phPtDarkLink = document.querySelector('link[href*="dark_base"]');
+
+        if (phPtDarkLink) {
+            const phPtThemeObserver = new MutationObserver(() => {
+                phPtSyncThemeAttr();
+                document.dispatchEvent(new Event("ph-pt-theme-changed"));
+            });
+
+            phPtThemeObserver.observe(phPtDarkLink, {
+                attributes: true,
+                attributeFilter: ["media"]
+            });
         }
-        if (savedSettings.extraSmilies) runModule('extraSmilies', extraSmilies);
-        if (savedSettings.kekShUploader) runModule('kekShUploader', kekShUploader);
     }
 
-    /************ MODULE STUBS ************/
+    function injectBaseStyle() {
+        const style = document.createElement('style');
+        style.textContent = `
+            li.media {
+                position: relative;
+                z-index: 1;
+            }
+            li.media:has(.dropdown-menu.show),
+            li.media:focus-within {
+                z-index: 100 !important;
+            }
+            .ph-acc-header {
+                font-weight: 600;
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                transition: background 0.2s ease;
+            }
+            .ph-acc-header:hover {
+                background: color-mix(in srgb, currentColor 8%, transparent);
+            }
+            .ph-acc-body {
+                max-height: 0;
+                overflow: hidden;
+                transition: max-height 0.5s ease;
+            }
+            .ph-acc-body .dropdown-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 4px;
+                padding: 4px 10px;
+            }
+            .ph-power-menu {
+                min-width: 260px;
+                max-height: 70vh;
+                overflow-y: auto;
+            }
+            .ph-tooltip {
+                white-space: pre-line;
+                hyphens: auto;
+                overflow-wrap: break-word;
+                position: fixed;
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                z-index: 9999;
+                display: none;
+                pointer-events: none;
+                max-width: 280px;
+            }
+            .ph-tooltip-icon {
+                margin-left: 5px;
+                cursor: pointer;
+            }
+            .ph-tooltip-icon:hover {
+                color: #343a40;
+            }
+            @media only screen and (max-width: 991.98px) {
+                .ph-power-btn + .dropdown-menu {
+                    display: none !important;
+                    position: absolute !important;
+                    left: 0 !important;
+                }
+                .ph-power-btn + .dropdown-menu.show {
+                    display: block !important;
+                }
+                .ph-acc-body .dropdown-item {
+                    padding: 10px 10px;
+                }
+            }
+        `;
+
+        document.head.appendChild(style);
+    }
+
+    function waitForHeaderAsync() {
+        return new Promise(resolve => waitForHeader(resolve));
+    }
+
+    async function mountHeaderUi() {
+        const headerEl = await waitForHeaderAsync();
+        insertSettingsDropdown(headerEl);
+    }
+
+    async function initApp() {
+        initThemeSync();
+        injectBaseStyle();
+        await mountHeaderUi();
+        runEnabledModules();
+    }
+
+    await initApp();
+
+    function runEnabledModules() {
+        const isTema = isOnPage("tema");
+        const isPrivat = isOnPage("privat");
+        if (!isTema && !isPrivat) return;
+
+        const modules = [
+            { name: "colorize", when: () => isTema && savedSettings.colorize, fn: colorize },
+            { name: "markNewPosts", when: () => isTema && savedSettings.markNewPosts, fn: markNewPosts },
+            { name: "linkRedirect", when: () => isTema && savedSettings.linkRedirect, fn: linkRedirect },
+            { name: "msgAnchorHighlight", when: () => isTema && savedSettings.msgAnchorHighlight, fn: msgAnchorHighlight },
+            { name: "offHider", when: () => isTema && savedSettings.offHider, fn: offHider },
+            { name: "wideView", when: () => isTema && savedSettings.wideView, fn: wideView },
+            { name: "threadView", when: () => isTema && savedSettings.threadView, fn: threadView },
+            { name: "keyboardNavigation", when: () => isTema && savedSettings.keyboardNavigation, fn: keyboardNavigation },
+            { name: "hideUsers", when: () => isTema && savedSettings.hideUsers, fn: hideUsers },
+
+            { name: "extraSmilies", when: () => (isTema || isPrivat) && savedSettings.extraSmilies, fn: extraSmilies },
+            { name: "kekShUploader", when: () => (isTema || isPrivat) && savedSettings.kekShUploader, fn: kekShUploader },
+        ];
+
+        for (const m of modules) {
+            if (m.when()) runModule(m.name, m.fn);
+        }
+    }
 
     function colorize() {
         /**********************
@@ -2682,7 +2693,7 @@
             let baseId;
 
             // Ha van mindkettő, a nagyobbat használjuk (stored vs hash)
-            // (urlMax nálad: #msgN esetén N-1)
+            // (urlMax #msgN esetén N-1)
             if (stored !== null && urlMax !== null) {
                 baseId = Math.max(stored, urlMax);
             } else if (stored !== null) {
