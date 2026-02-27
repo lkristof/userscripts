@@ -75,6 +75,27 @@
 
     const KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
 
+    const DEFAULT_COLORIZE_PALETTE = {
+        light: {
+            own: "#C7D7E0",
+            reply: "#CFE0C3",
+            akcio: "#FFC0C0",
+            focusAuthor: "#FFA966",
+            focusReply: "#F6CEAF",
+            chainBg: "#FFF6C8",
+            chainBorder: "#FF9800",
+        },
+        dark: {
+            own: "#2F4A57",
+            reply: "#344A3A",
+            akcio: "#8B0000",
+            focusAuthor: "#5B327A",
+            focusReply: "#3A1F4F",
+            chainBg: "#4A4015",
+            chainBorder: "#FFB300",
+        }
+    };
+
     const defaultSettings = {
         colorize: true,
         linkRedirect: true,
@@ -86,7 +107,9 @@
         hideUsers: true,
         markNewPosts: true,
         extraSmilies: true,
-        kekShUploader: true
+        kekShUploader: true,
+
+        colorizePalette: DEFAULT_COLORIZE_PALETTE
     };
 
     const settingGroups = {
@@ -106,7 +129,7 @@
     };
 
     const tooltips = {
-        colorize: 'Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés.',
+        colorize: 'Saját / válasz / #akció + avatar fókusz + hozzászólás-lánc kiemelés.',
         linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
         msgAnchorHighlight: 'Kiemeli az URL-ben szereplő #msg hozzászólást.\nHa nem létezik, a hozzá legközelebbit jelöli ki.',
         offHider: 'Az OFF hozzászólásokat a megjelenő gomb segítségével elrejtheted.',
@@ -557,13 +580,25 @@
                 <h6 class="dropdown-header"
                     style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0;">
                     <span>PH Power Tools</span>
-                    <button type="button"
-                            id="ph-open-secrets"
-                            class="btn btn-forum btn-sm"
-                            title="Kulcsok / Szinkron beállítások"
-                            style="padding:2px 6px;">
-                      <span class="fas fa-cog"></span>
-                    </button>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        ${savedSettings.colorize ? `
+                            <button type="button"
+                                    id="ph-open-colors"
+                                    class="btn btn-forum btn-sm"
+                                    title="Hozzászólás színek (Colorize)"
+                                    style="padding:2px 6px;">
+                                <span class="fas fa-palette"></span>
+                            </button>
+                        ` : ``}
+                      
+                        <button type="button"
+                                id="ph-open-secrets"
+                                class="btn btn-forum btn-sm"
+                                title="Kulcsok / Szinkron beállítások"
+                                style="padding:2px 6px;">
+                          <span class="fas fa-cog"></span>
+                        </button>
+                    </div>
                 </h6>
                 <div class="ph-accordion">
                     ${Object.entries(settingGroups).map(([groupKey, group], index) => `
@@ -681,6 +716,115 @@
             document.body.appendChild(modal);
         }
 
+        // ===== Colorize Colors modal =====
+        if (!document.getElementById('ph-colors-modal')) {
+            const modal = document.createElement('div');
+            modal.id = 'ph-colors-modal';
+            modal.style.cssText = `
+                position: fixed; inset: 0; z-index: 10050;
+                display: none;
+                background: rgba(0,0,0,0.45);
+                backdrop-filter: blur(2px);
+                align-items: center; justify-content: center;
+                padding: 16px;
+            `;
+
+            modal.innerHTML = `
+                <div id="ph-colors-panel" style="
+                    width: min(500px, 100%);
+                    border-radius: 10px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+                    overflow: hidden;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
+                        padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
+                        <div style="font-weight:700;">PH Power Tools – Hozzászólás színek</div>
+                        <button type="button" class="btn btn-sm btn-light" id="ph-colors-close">✕</button>
+                    </div>
+                    <div style="padding: 14px; display:flex; flex-direction:column; gap:12px;">
+                        <div id="ph-colors-body"></div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button type="button" class="btn btn-sm btn-secondary" id="ph-colors-save">Mentés</button>
+                            <button type="button" class="btn btn-sm btn-light" id="ph-colors-reset">Alaphelyzet</button>
+                        </div>
+                    </div>
+                </div>
+              `;
+            document.body.appendChild(modal);
+        }
+
+        function applyColorsTheme() {
+            const panel = document.getElementById('ph-colors-panel');
+            if (!panel) return;
+
+            if (!document.body.dataset.theme) phPtSyncThemeAttr();
+            const isDark = document.body.dataset.theme === "dark";
+
+            if (isDark) {
+                panel.style.background = "#2b2b2b";
+                panel.style.color = "#f1f1f1";
+                panel.style.border = "1px solid rgba(255,255,255,0.1)";
+            } else {
+                panel.style.background = "#ffffff";
+                panel.style.color = "#212529";
+                panel.style.border = "1px solid rgba(0,0,0,0.1)";
+            }
+        }
+
+        function renderColorsModal(settings) {
+            const modal = document.getElementById("ph-colors-modal");
+            const body = modal?.querySelector("#ph-colors-body");
+            if (!modal || !body) return;
+
+            const pal = settings.colorizePalette || DEFAULT_COLORIZE_PALETTE;
+
+            const fields = [
+                { key: "own",         label: "Saját" },
+                { key: "reply",       label: "Válasz" },
+                { key: "akcio",       label: "#akció" },
+                { key: "focusAuthor", label: "Fókusz: szerző" },
+                { key: "focusReply",  label: "Fókusz: válasz" },
+                { key: "chainBg",     label: "Lánc háttér" },
+                { key: "chainBorder", label: "Lánc szegély" },
+            ];
+
+            body.innerHTML = `
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                    ${["light","dark"].map(theme => {
+                        const boxBg = theme === "light" ? "#ffffff" : "#2b2b2b";
+                        const boxFg = theme === "light" ? "#212529" : "#f1f1f1";
+                        const boxBorder = theme === "light" ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.14)";
+                        const rowHover = theme === "light" ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.06)";
+        
+                        return `
+                            <div style="
+                                background:${boxBg};
+                                color:${boxFg};
+                                border:1px solid ${boxBorder};
+                                border-radius:10px;
+                                padding:12px;">
+                                <div style="font-weight:700; margin-bottom:10px;">
+                                    ${theme === "light" ? "Világos" : "Sötét"}
+                                </div>
+                                <div style="display:grid; grid-template-columns: 1fr auto; gap:8px 12px; align-items:center;">
+                                    ${fields.map(f => `
+                                    <label style="margin:0; font-size:13px;">${f.label}</label>
+                                    <input type="color"
+                                        data-theme="${theme}"
+                                        data-k="${f.key}"
+                                        value="${pal?.[theme]?.[f.key] || DEFAULT_COLORIZE_PALETTE[theme][f.key]}"
+                                        style="
+                                            width:44px; height:28px; padding:0;
+                                            border:none; background:transparent; cursor:pointer;
+                                            border-radius: 4px;">
+                                    `).join("")}
+                                </div>
+                            </div>
+                        `;
+                    }).join("")}
+                </div>
+            `;
+        }
+
         function applySecretsTheme() {
             const panel = document.getElementById('ph-secrets-panel');
             if (!panel) return;
@@ -703,6 +847,80 @@
 
         const openBtn = li.querySelector('#ph-open-secrets');
         const modal = document.getElementById('ph-secrets-modal');
+        const openColorsBtn = li.querySelector('#ph-open-colors');
+        const colorsModal = document.getElementById('ph-colors-modal');
+
+        let colorsDraftPalette = null;
+
+        function openColorsModal() {
+            if (!colorsModal) return;
+            applyColorsTheme();
+
+            const currentSettings = getMergedSettings();
+            colorsDraftPalette = structuredClone(currentSettings.colorizePalette || DEFAULT_COLORIZE_PALETTE);
+
+            // render: a draftból
+            renderColorsModal({ colorizePalette: colorsDraftPalette });
+
+            colorsModal.style.display = "flex";
+        }
+
+        function closeColorsModal() {
+            if (!colorsModal) return;
+            colorsModal.style.display = "none";
+            colorsDraftPalette = null;
+        }
+
+        // 🎨 gomb katt: nyit
+        openColorsBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // zárjuk a dropdownot, majd nyissuk a modalt a következő tick-ben
+            li.querySelector('.dropdown-toggle')?.click();
+            setTimeout(openColorsModal, 0);
+        });
+
+        // háttér katt: zár
+        colorsModal?.addEventListener('click', (e) => {
+            if (e.target === colorsModal) closeColorsModal();
+        });
+
+        // X katt: zár
+        colorsModal?.querySelector('#ph-colors-close')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            closeColorsModal();
+        });
+
+        // Mentés: SETTINGS-be ment + sync flush + reload
+        colorsModal?.querySelector('#ph-colors-save')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+
+            const currentSettings = getMergedSettings();
+            const newPal = structuredClone(currentSettings.colorizePalette || DEFAULT_COLORIZE_PALETTE);
+
+            colorsModal.querySelectorAll('input[type="color"][data-theme][data-k]').forEach(inp => {
+                const theme = inp.dataset.theme;
+                const k = inp.dataset.k;
+                newPal[theme][k] = inp.value;
+            });
+
+            currentSettings.colorizePalette = newPal;
+
+            storage.setItem(STORAGE_KEY, JSON.stringify(currentSettings));
+            await storage.flush();
+
+            colorsModal.style.display = "none";
+            location.reload();
+        });
+
+        // Alaphelyzet: DEFAULT
+        colorsModal?.querySelector('#ph-colors-reset')?.addEventListener('click', (e) => {
+            e.preventDefault();
+
+            colorsDraftPalette = structuredClone(DEFAULT_COLORIZE_PALETTE);
+            renderColorsModal({ colorizePalette: colorsDraftPalette });
+        });
 
         async function openSecretsModal() {
             if (!modal) return;
@@ -744,7 +962,10 @@
         openBtn?.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation(); // ne zárja be a dropdownot
-            await openSecretsModal();
+
+            // zárjuk a dropdownot, majd nyissuk a modalt a következő tick-ben
+            li.querySelector('.dropdown-toggle')?.click();
+            setTimeout(openSecretsModal, 0);
         });
 
         // háttérre katt = bezár
@@ -759,12 +980,25 @@
         });
 
         // ESC = bezár
-        if (!document.body.dataset.phSecretsEscBound) {
-            document.body.dataset.phSecretsEscBound = "1";
+        if (!document.body.dataset.phModalsEscBound) {
+            document.body.dataset.phModalsEscBound = "1";
+
             document.addEventListener('keydown', (e) => {
-                const modal = document.getElementById('ph-secrets-modal');
-                if (e.key === 'Escape' && modal?.style.display === 'flex') {
-                    modal.style.display = 'none';
+                if (e.key !== 'Escape') return;
+
+                const secretsModal = document.getElementById('ph-secrets-modal');
+                const colorsModal  = document.getElementById('ph-colors-modal');
+
+                // Először a színek modalt zárjuk, ha az van nyitva
+                if (colorsModal?.style.display === 'flex') {
+                    colorsModal.style.display = 'none';
+                    return;
+                }
+
+                // Utána a secrets modalt
+                if (secretsModal?.style.display === 'flex') {
+                    secretsModal.style.display = 'none';
+                    return;
                 }
             });
         }
@@ -1047,41 +1281,39 @@
         let selectedUser = null;
         let activeChainIds = new Set();
 
+        function paletteToCssVars(pal, theme) {
+            const p = pal?.[theme] || DEFAULT_COLORIZE_PALETTE[theme];
+            return `
+                --ph-pt-own: ${p.own};
+                --ph-pt-reply: ${p.reply};
+                --ph-pt-akcio: ${p.akcio};
+                --ph-pt-focus-author: ${p.focusAuthor};
+                --ph-pt-focus-reply: ${p.focusReply};
+                --ph-pt-chain-bg: ${p.chainBg};
+                --ph-pt-chain-border: ${p.chainBorder};
+            `;
+        }
+
         function injectColorizeCssOnce() {
+            const pal = savedSettings.colorizePalette || DEFAULT_COLORIZE_PALETTE;
+
             injectStyleOnce("ph-pt-colorize-style", `
-                body[data-theme="light"] {
-                    --ph-pt-own: #C7D7E0;
-                    --ph-pt-reply: #CFE0C3;
-                    --ph-pt-akcio: #FFC0C0;
-                    --ph-pt-focus-author: #FFA966;
-                    --ph-pt-focus-reply:  #F6CEAF;
-                    --ph-pt-chain-bg: #FFF6C8;
-                    --ph-pt-chain-border: #FF9800;
+                body[data-theme="light"] { ${paletteToCssVars(pal, "light")} }
+                body[data-theme="dark"]  { ${paletteToCssVars(pal, "dark")} }
+            
+                .msg .msg-body.ph-pt-colorize { transition: all 0.2s ease; } 
+                .msg .msg-body.ph-pt-akcio        { background-color: var(--ph-pt-akcio) !important; }
+                .msg .msg-body.ph-pt-own          { background-color: var(--ph-pt-own) !important; }
+                .msg .msg-body.ph-pt-reply        { background-color: var(--ph-pt-reply) !important; }
+                .msg .msg-body.ph-pt-focus-author { background-color: var(--ph-pt-focus-author) !important; }
+                .msg .msg-body.ph-pt-focus-reply  { background-color: var(--ph-pt-focus-reply) !important; }
+            
+                .msg .msg-body.ph-pt-chain {
+                    background-color: var(--ph-pt-chain-bg) !important;
+                    box-shadow: inset 5px 0 0 0 var(--ph-pt-chain-border) !important;
                 }
-                body[data-theme="dark"] {
-                    --ph-pt-own: #2F4A57;
-                    --ph-pt-reply: #344A3A;
-                    --ph-pt-akcio: #8B0000;
-                    --ph-pt-focus-author: #5B327A;
-                    --ph-pt-focus-reply:  #3A1F4F;
-                    --ph-pt-chain-bg: #4A4015;
-                    --ph-pt-chain-border: #FFB300;
-                }
-                .msg .msg-body.ph-pt-colorize {
-                    transition: all 0.2s ease;
-                } 
-               .msg .msg-body.ph-pt-akcio        { background-color: var(--ph-pt-akcio) !important; }
-               .msg .msg-body.ph-pt-own          { background-color: var(--ph-pt-own) !important; }
-               .msg .msg-body.ph-pt-reply        { background-color: var(--ph-pt-reply) !important; }
-               .msg .msg-body.ph-pt-focus-author { background-color: var(--ph-pt-focus-author) !important; }
-               .msg .msg-body.ph-pt-focus-reply  { background-color: var(--ph-pt-focus-reply) !important; }
-         
-               .msg .msg-body.ph-pt-chain {
-                   background-color: var(--ph-pt-chain-bg) !important;
-                   box-shadow: inset 5px 0 0 0 var(--ph-pt-chain-border) !important;
-               }
-               .msg-head-options .ph-pt-chain-link .ph-pt-chain-text { margin-left: 4px; }
-               .msg-head-options .ph-pt-chain-link:hover .ph-pt-chain-text { text-decoration: underline; }
+                .msg-head-options .ph-pt-chain-link .ph-pt-chain-text { margin-left: 4px; }
+                .msg-head-options .ph-pt-chain-link:hover .ph-pt-chain-text { text-decoration: underline; }
             `);
         }
 
