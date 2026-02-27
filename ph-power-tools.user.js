@@ -2271,6 +2271,9 @@
                 }
                 .ph-collapsible {
                     transition: max-height 0.4s ease;
+                    overflow: visible;
+                }
+                .ph-collapsible[data-collapsed="true"] {
                     overflow: hidden;
                 }
             `;
