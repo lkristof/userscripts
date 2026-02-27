@@ -452,9 +452,13 @@
             },
             getItem(key) { return localStorage.getItem(key); },
             setItem(key, value) {
+                const prev = localStorage.getItem(key);
+                if (prev === value) return;
+
                 localStorage.setItem(key, value);
+
                 if (keyShouldSync(key)) {
-                    dirtyDeletes.delete(key); // ✅ ha újra létrejött, már nem "törlés"
+                    dirtyDeletes.delete(key);
                     schedulePush();
                 }
             },
