@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.0.8
+// @version      2.1.0
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -40,17 +40,17 @@
             HIDE_OFF: 'ph_hide_off',
             WIDE_VIEW: 'ph_wide_view',
             THREAD_VIEW: 'ph_thread_view',
-            TOPIC_MAX_ID_MAP: 'ph_topic_max_id_map'
+            TOPIC_MAX_ID_MAP: 'ph_topic_max_id_map',
         },
 
         KEK: {
             GALLERY: 'ph_kek_gallery',
             GALLERY_RESET_TS: 'ph_kek_gallery_reset_ts',
             GALLERY_DELETED: 'ph_kek_gallery_deleted',
-            GALLERY_SEEN_RESET_TS: 'ph_kek_gallery_seen_reset_ts'
+            GALLERY_SEEN_RESET_TS: 'ph_kek_gallery_seen_reset_ts',
         },
 
-        SECRETS: 'ph_power_tools_secrets'
+        SECRETS: 'ph_power_tools_secrets',
     };
 
     const SYNC_KEYS = [
@@ -59,7 +59,7 @@
         KEYS.STATE.TOPIC_MAX_ID_MAP,
         KEYS.KEK.GALLERY,
         KEYS.KEK.GALLERY_RESET_TS,
-        KEYS.KEK.GALLERY_DELETED
+        KEYS.KEK.GALLERY_DELETED,
     ];
 
     const STORAGE_KEY = KEYS.SETTINGS;
@@ -84,6 +84,7 @@
             focusReply: "#F6CEAF",
             chainBg: "#FFF6C8",
             chainBorder: "#FF9800",
+            hashHighlight: "#FFF6C8",
         },
         dark: {
             own: "#2F4A57",
@@ -93,6 +94,7 @@
             focusReply: "#3A1F4F",
             chainBg: "#4A4015",
             chainBorder: "#FFB300",
+            hashHighlight: "#4A4015",
         }
     };
 
@@ -109,14 +111,14 @@
         extraSmilies: true,
         kekShUploader: true,
 
-        colorizePalette: DEFAULT_COLORIZE_PALETTE
+        colorizePalette: DEFAULT_COLORIZE_PALETTE,
     };
 
     const settingGroups = {
         appearance: {
             label: 'Megjelenés',
             keys: ['colorize', 'markNewPosts', 'wideView', 'threadView'],
-            defaultOpen: true
+            defaultOpen: true,
         },
         filtering: {
             label: 'Szűrés',
@@ -124,7 +126,7 @@
         },
         interaction: {
             label: 'Interakció',
-            keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight', 'keyboardNavigation']
+            keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight', 'keyboardNavigation'],
         }
     };
 
@@ -136,7 +138,7 @@
         keyboardNavigation: '← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
         hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
         markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
-        kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.'
+        kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
     };
 
     function prettyName(key) {
@@ -151,7 +153,7 @@
             hideUsers: 'Felhasználók elrejtése',
             markNewPosts: 'Új hozzászólás jelölése',
             extraSmilies: 'Extra smiley-k',
-            kekShUploader: 'kek.sh képfeltöltő'
+            kekShUploader: 'kek.sh képfeltöltő',
         }[key] || key;
     }
 
@@ -585,7 +587,7 @@
                     style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0;">
                     <span>PH Power Tools</span>
                     <div style="display:flex; align-items:center; gap:6px;">
-                        ${savedSettings.colorize ? `
+                        ${(savedSettings.colorize || savedSettings.msgAnchorHighlight) ? `
                             <button type="button"
                                     id="ph-open-colors"
                                     class="btn btn-forum btn-sm"
@@ -781,7 +783,7 @@
 
             const pal = settings.colorizePalette || DEFAULT_COLORIZE_PALETTE;
 
-            const fields = [
+            const colorizeFields = [
                 { key: "own",         label: "Saját" },
                 { key: "reply",       label: "Válasz" },
                 { key: "akcio",       label: "#akció" },
@@ -790,6 +792,26 @@
                 { key: "chainBg",     label: "Lánc háttér" },
                 { key: "chainBorder", label: "Lánc szegély" },
             ];
+
+            const hashFields = [
+                { key: "hashHighlight", label: "Üzenet kiemelés" },
+            ];
+
+            const enabledColorize = !!savedSettings.colorize;
+            const enabledHash = !!savedSettings.msgAnchorHighlight;
+
+            const fields =
+                enabledColorize && enabledHash ? [...colorizeFields, ...hashFields]
+                    : enabledColorize ? colorizeFields
+                        : enabledHash ? hashFields
+                            : [];
+
+            if (!fields.length) {
+                body.innerHTML = `<div style="font-size:13px; opacity:0.8;">
+                    Nincs bekapcsolt színezős funkció.
+                </div>`;
+                return;
+            }
 
             body.innerHTML = `
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
@@ -1295,6 +1317,7 @@
                 --ph-pt-focus-reply: ${p.focusReply};
                 --ph-pt-chain-bg: ${p.chainBg};
                 --ph-pt-chain-border: ${p.chainBorder};
+                --ph-pt-hash-highlight: ${p.hashHighlight};
             `;
         }
 
@@ -1620,13 +1643,19 @@
         /**********************
          * CSS
          **********************/
-        injectStyleOnce("ph-pt-link-redirect-style", `
-            body[data-theme="light"] .msg-list .msg .msg-body.hash-highlight {
-                background-color: #FFF6C8 !important;
-                transition: background 0.2s ease;
+        const pal = savedSettings.colorizePalette || DEFAULT_COLORIZE_PALETTE;
+        const l = pal?.light?.hashHighlight || DEFAULT_COLORIZE_PALETTE.light.hashHighlight;
+        const d = pal?.dark?.hashHighlight  || DEFAULT_COLORIZE_PALETTE.dark.hashHighlight;
+
+        injectStyleOnce("ph-pt-msg-anchor-highlight-style", `
+            body[data-theme="light"] {
+                --ph-pt-hash-highlight: ${l};
             }
-            body[data-theme="dark"] .msg-list .msg .msg-body.hash-highlight {
-                background-color: #4A4015 !important;
+            body[data-theme="dark"] {
+                --ph-pt-hash-highlight: ${d};
+            }
+            .msg-list .msg .msg-body.hash-highlight {
+                background-color: var(--ph-pt-hash-highlight) !important;
                 transition: background 0.2s ease;
             }
             html {
@@ -3045,7 +3074,7 @@
             { code: ':kocsog:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_v0mhygvcf47tipdb_kocsog.gif' },
             { code: ':lama:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_oknfqsidavmhgeuq_lama.gif' },
             { code: ':nem:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_occldijkfqjrfjce_nem.gif' },
-            { code: ':igen:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_m97zu6ylsflhdw5g_igen.gif' }
+            { code: ':igen:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_m97zu6ylsflhdw5g_igen.gif' },
         ];
 
         // --- Segédfüggvény: van-e kód bármelyik szövegcsomópontban ---
