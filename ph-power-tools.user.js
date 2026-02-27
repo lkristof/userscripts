@@ -512,22 +512,29 @@
     }
 
     function bindTooltips(rootEl) {
+        let tooltip = document.getElementById('ph-pt-global-tooltip');
+
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'ph-pt-global-tooltip';
+            tooltip.className = 'ph-tooltip';
+            tooltip.lang = 'hu';
+            document.body.appendChild(tooltip);
+        }
+
         rootEl.querySelectorAll('.ph-tooltip-icon').forEach(icon => {
             if (icon.dataset.phTtBound) return;
             icon.dataset.phTtBound = '1';
 
-            const tooltip = document.createElement('div');
-            tooltip.className = 'ph-tooltip';
-            tooltip.lang = 'hu';
-            tooltip.textContent = icon.dataset.tooltip;
-            document.body.appendChild(tooltip);
-
             icon.addEventListener('mouseenter', () => {
-                tooltip.style.display = 'block';
+                tooltip.textContent = icon.dataset.tooltip;
+
                 const rect = icon.getBoundingClientRect();
                 tooltip.style.left = (rect.right + 5) + 'px';
                 tooltip.style.top = rect.top + 'px';
+                tooltip.style.display = 'block';
             });
+
             icon.addEventListener('mouseleave', () => {
                 tooltip.style.display = 'none';
             });
@@ -967,9 +974,6 @@
             .ph-tooltip-icon {
                 margin-left: 5px;
                 cursor: pointer;
-            }
-            .ph-tooltip-icon:hover {
-                color: #343a40;
             }
             @media only screen and (max-width: 991.98px) {
                 .ph-power-btn + .dropdown-menu {
