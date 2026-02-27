@@ -948,21 +948,32 @@
     }
 
     /************ MODULE DISPATCH ************/
+    function runModule(name, fn) {
+        if (typeof fn !== 'function') {
+            console.warn(`[PH Power Tools] Module missing: ${name}`);
+            return;
+        }
+        try {
+            fn();
+        } catch (e) {
+            console.error(`[PH Power Tools] Module failed: ${name}`, e);
+        }
+    }
 
     if (isOnPage("tema") || isOnPage("privat")) {
         if (isOnPage("tema")) {
-            if (savedSettings.colorize) colorize();
-            if (savedSettings.markNewPosts) markNewPosts();
-            if (savedSettings.linkRedirect) linkRedirect();
-            if (savedSettings.msgAnchorHighlight) msgAnchorHighlight();
-            if (savedSettings.offHider) offHider();
-            if (savedSettings.wideView) wideView();
-            if (savedSettings.threadView) threadView();
-            if (savedSettings.keyboardNavigation) keyboardNavigation();
-            if (savedSettings.hideUsers) hideUsers();
+            if (savedSettings.colorize) runModule('colorize', colorize);
+            if (savedSettings.markNewPosts) runModule('markNewPosts', markNewPosts);
+            if (savedSettings.linkRedirect) runModule('linkRedirect', linkRedirect);
+            if (savedSettings.msgAnchorHighlight) runModule('msgAnchorHighlight', msgAnchorHighlight);
+            if (savedSettings.offHider) runModule('offHider', offHider);
+            if (savedSettings.wideView) runModule('wideView', wideView);
+            if (savedSettings.threadView) runModule('threadView', threadView);
+            if (savedSettings.keyboardNavigation) runModule('keyboardNavigation', keyboardNavigation);
+            if (savedSettings.hideUsers) runModule('hideUsers', hideUsers);
         }
-        if (savedSettings.extraSmilies) extraSmilies();
-        if (savedSettings.kekShUploader) kekShUploader();
+        if (savedSettings.extraSmilies) runModule('extraSmilies', extraSmilies);
+        if (savedSettings.kekShUploader) runModule('kekShUploader', kekShUploader);
     }
 
     /************ MODULE STUBS ************/
