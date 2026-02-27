@@ -207,6 +207,21 @@
         try { return JSON.parse(str); } catch { return fallback; }
     }
 
+    /**
+     * Inject / update a <style> tag exactly once.
+     * Helps avoid duplicate style tags when the script (or parts of it) re-run.
+     */
+    function injectStyleOnce(id, cssText) {
+        let el = document.getElementById(id);
+        if (!el) {
+            el = document.createElement('style');
+            el.id = id;
+            document.head.appendChild(el);
+        }
+        el.textContent = cssText;
+        return el;
+    }
+
     async function fetchGistBlob() {
         const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
             headers: {
@@ -496,6 +511,29 @@
         obs.observe(document.body, {childList: true, subtree: true});
     }
 
+    function bindTooltips(rootEl) {
+        rootEl.querySelectorAll('.ph-tooltip-icon').forEach(icon => {
+            if (icon.dataset.phTtBound) return;
+            icon.dataset.phTtBound = '1';
+
+            const tooltip = document.createElement('div');
+            tooltip.className = 'ph-tooltip';
+            tooltip.lang = 'hu';
+            tooltip.textContent = icon.dataset.tooltip;
+            document.body.appendChild(tooltip);
+
+            icon.addEventListener('mouseenter', () => {
+                tooltip.style.display = 'block';
+                const rect = icon.getBoundingClientRect();
+                tooltip.style.left = (rect.right + 5) + 'px';
+                tooltip.style.top = rect.top + 'px';
+            });
+            icon.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
+        });
+    }
+
     function insertSettingsDropdown(container) {
         if (container.querySelector('#ph-power-tools-dropdown')) return;
         const li = document.createElement('li');
@@ -755,26 +793,8 @@
             setTimeout(() => location.reload(), 250);
         });
 
-        // Egyszerű custom tooltip
-        li.querySelectorAll('.ph-tooltip-icon').forEach(icon => {
-            if (icon.dataset.phTtBound) return;
-            icon.dataset.phTtBound = "1";
-            const tooltip = document.createElement('div');
-            tooltip.className = 'ph-tooltip';
-            tooltip.lang = "hu";
-            tooltip.textContent = icon.dataset.tooltip;
-            document.body.appendChild(tooltip);
-
-            icon.addEventListener('mouseenter', e => {
-                tooltip.style.display = 'block';
-                const rect = icon.getBoundingClientRect();
-                tooltip.style.left = rect.right + 5 + 'px';
-                tooltip.style.top = rect.top + 'px';
-            });
-            icon.addEventListener('mouseleave', () => {
-                tooltip.style.display = 'none';
-            });
-        });
+        // Egyszerű custom tooltip (csak a mi dropdownunkon belül)
+        bindTooltips(li);
 
         const toggleBtn = li.querySelector('.ph-power-btn');
         const applyBtn = li.querySelector('.ph-apply-btn');
@@ -866,30 +886,33 @@
     function initThemeSync() {
         phPtSyncThemeAttr();
 
-        window.matchMedia("(prefers-color-scheme: dark)")
-            .addEventListener("change", () => {
+        // 1) matchMedia listener: bind-once
+        if (!document.documentElement.dataset.phPtThemeMqBound) {
+            document.documentElement.dataset.phPtThemeMqBound = '1';
+            const mq = window.matchMedia("(prefers-color-scheme: dark)");
+            const onChange = () => {
                 phPtSyncThemeAttr();
                 document.dispatchEvent(new Event("ph-pt-theme-changed"));
-            });
-
-        const phPtDarkLink = document.querySelector('link[href*="dark_base"]');
-
-        if (phPtDarkLink) {
-            const phPtThemeObserver = new MutationObserver(() => {
-                phPtSyncThemeAttr();
-                document.dispatchEvent(new Event("ph-pt-theme-changed"));
-            });
-
-            phPtThemeObserver.observe(phPtDarkLink, {
-                attributes: true,
-                attributeFilter: ["media"]
-            });
+            };
+            if (mq.addEventListener) mq.addEventListener('change', onChange);
+            else if (mq.addListener) mq.addListener(onChange);
         }
+
+        // 2) dark_base observer: attach when link exists, also bind-once
+        if (document.documentElement.dataset.phPtThemeDarkLinkBound) return;
+        const phPtDarkLink = document.querySelector('link[href*="dark_base"]');
+        if (!phPtDarkLink) return;
+
+        document.documentElement.dataset.phPtThemeDarkLinkBound = '1';
+        const obs = new MutationObserver(() => {
+            phPtSyncThemeAttr();
+            document.dispatchEvent(new Event("ph-pt-theme-changed"));
+        });
+        obs.observe(phPtDarkLink, {attributes: true, attributeFilter: ["media"]});
     }
 
     function injectBaseStyle() {
-        const style = document.createElement('style');
-        style.textContent = `
+        injectStyleOnce('ph-pt-base-style', `
             li.media {
                 position: relative;
                 z-index: 1;
@@ -961,9 +984,7 @@
                     padding: 10px 10px;
                 }
             }
-        `;
-
-        document.head.appendChild(style);
+        `);
     }
 
     function waitForHeaderAsync() {
@@ -1023,11 +1044,7 @@
         let activeChainIds = new Set();
 
         function injectColorizeCssOnce() {
-            if (document.getElementById("ph-pt-colorize-style")) return;
-
-            const style = document.createElement("style");
-            style.id = "ph-pt-colorize-style";
-            style.textContent = `
+            injectStyleOnce("ph-pt-colorize-style", `
                 body[data-theme="light"] {
                     --ph-pt-own: #C7D7E0;
                     --ph-pt-reply: #CFE0C3;
@@ -1061,8 +1078,7 @@
                }
                .msg-head-options .ph-pt-chain-link .ph-pt-chain-text { margin-left: 4px; }
                .msg-head-options .ph-pt-chain-link:hover .ph-pt-chain-text { text-decoration: underline; }
-            `;
-            document.head.appendChild(style);
+            `);
         }
 
         injectColorizeCssOnce();
@@ -1364,21 +1380,19 @@
         /**********************
          * CSS
          **********************/
-        const style = document.createElement("style");
-        style.textContent = `
+        injectStyleOnce("ph-pt-link-redirect-style", `
             body[data-theme="light"] .msg-list .msg .msg-body.hash-highlight {
-                background-color: #FFF6C8;
+                background-color: #FFF6C8 !important;
                 transition: background 0.2s ease;
             }
             body[data-theme="dark"] .msg-list .msg .msg-body.hash-highlight {
-                background-color: #4A4015;
+                background-color: #4A4015 !important;
                 transition: background 0.2s ease;
             }
             html {
                 scroll-behavior: smooth;
             }
-        `;
-        document.head.appendChild(style);
+        `);
 
         /**********************
          * HASH KIEMELÉS
@@ -1488,8 +1502,7 @@
     }
 
     function offHider() {
-        const style = document.createElement('style');
-        style.innerHTML = `
+        injectStyleOnce("ph-pt-off-hider-style", `
             .off-post-animate {
                 transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
                 overflow: hidden !important;
@@ -1506,8 +1519,7 @@
                 border-bottom-width: 0 !important;
                 pointer-events: none !important;
             }
-        `;
-        document.head.appendChild(style);
+        `);
 
         const STORAGE_KEY = KEYS.STATE.HIDE_OFF;
         const STATUS = { ON: 'enabled', OFF: 'disabled' };
@@ -1778,8 +1790,7 @@
         let threadActive = false;
         const buttons = [];
 
-        const style = document.createElement('style');
-        style.textContent = `
+        injectStyleOnce("ph-pt-thread-view-style", `
             li.media {
                 transition: transform 300ms ease, opacity 200ms ease;
                 will-change: transform;
@@ -1824,8 +1835,7 @@
                 opacity: ${LINE_OPACITY};
                 box-sizing: border-box;
             }
-        `;
-        document.head.appendChild(style);
+        `);
 
         function saveState(active) {
             storage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
@@ -2433,13 +2443,7 @@
             const bg = buttonPlaceholder ? getComputedStyle(buttonPlaceholder).backgroundColor : "white";
             const color = buttonPlaceholder ? getComputedStyle(buttonPlaceholder).color : "black";
 
-            let style = document.querySelector("#ph-dual-list-style");
-            if (!style) {
-                style = document.createElement("style");
-                style.id = "ph-dual-list-style";
-                document.head.appendChild(style);
-            }
-            style.textContent = `
+            injectStyleOnce("ph-pt-dual-list-style", `
                 .ph-editor-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px);}
                 .ph-editor-panel { background: ${bg}; padding: 20px; border-radius: 5px; min-width: 400px; max-width: 600px; color: ${color}; }
                 .dual-list-container { display: flex; gap: 10px; margin-top: 10px; }
@@ -2449,7 +2453,7 @@
                 .dual-list-buttons { display: flex; flex-direction: column; justify-content: center; gap: 5px; }
                 .dual-list-buttons button { width: 36px; height: 36px; font-weight: bold; border-radius: 3px; cursor: pointer; }
                 .editor-buttons { margin-top: 10px; display: flex; gap: 5px; justify-content: flex-end; }
-            `;
+            `);
 
             const overlay = document.createElement("div");
             overlay.className = "ph-editor-overlay";
@@ -2629,14 +2633,12 @@
         }
 
         function initStyle() {
-            const style = document.createElement("style");
-            style.textContent = `
+            injectStyleOnce("ph-pt-mark-new-posts-style",  `
                 .ph-new-post-header {
                     box-shadow: var(--ph-mark-color) 5px 0 0 0 inset !important;
                     transition: box-shadow 1s ease;
                 }
-            `;
-            document.head.appendChild(style);
+            `);
         }
 
         function observeThemeChanges() {
@@ -3121,31 +3123,26 @@
         /* ================= UI ================= */
 
         function injectCssOnce() {
-            if (document.getElementById("ph-kek-style")) return;
-
-            const style = document.createElement("style");
-            style.id = "ph-kek-style";
-            style.textContent = `
-            #ph-kek-upload .ph-kek-cell { position: relative; }
-            #ph-kek-upload .ph-kek-overlay { opacity: 0; pointer-events: none; }
-            #ph-kek-upload .ph-kek-cell:hover .ph-kek-overlay {
-                opacity: 1 !important;
-                pointer-events: auto !important;
-            }
-            #ph-kek-upload .ph-kek-overlay button.btn {
-                padding: 2px 6px;
-                line-height: 1.1;
-                font-size: 11px;
-            }
-            #ph-kek-upload #ph-kek-sync-badge {
-                font-size: 12px;
-                padding: 2px 6px;
-                border-radius: 10px;
-                background: rgba(0,0,0,0.06);
-            }
-            #ph-kek-sync-badge:empty { display: none; }
-        `;
-            document.head.appendChild(style);
+            injectStyleOnce("ph-pt-kek-sh-uploader-style", `
+                #ph-kek-upload .ph-kek-cell { position: relative; }
+                #ph-kek-upload .ph-kek-overlay { opacity: 0; pointer-events: none; }
+                #ph-kek-upload .ph-kek-cell:hover .ph-kek-overlay {
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                }
+                #ph-kek-upload .ph-kek-overlay button.btn {
+                    padding: 2px 6px;
+                    line-height: 1.1;
+                    font-size: 11px;
+                }
+                #ph-kek-upload #ph-kek-sync-badge {
+                    font-size: 12px;
+                    padding: 2px 6px;
+                    border-radius: 10px;
+                    background: rgba(0,0,0,0.06);
+                }
+                #ph-kek-sync-badge:empty { display: none; }
+            `);
         }
 
         function updateSyncBadge() {
