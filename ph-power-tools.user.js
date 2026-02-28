@@ -1962,13 +1962,7 @@
         }
 
         function applyLayout() {
-            let style = document.getElementById(STYLE_ID);
-            if (!style) {
-                style = document.createElement('style');
-                style.id = STYLE_ID;
-                document.documentElement.appendChild(style);
-            }
-            style.textContent = buildCSS();
+            injectStyleOnce(STYLE_ID, buildCSS());
 
             const center = document.querySelector('#center');
             const row = center?.closest('.row');
