@@ -131,13 +131,16 @@
     };
 
     const tooltips = {
-        colorize: 'Saját / válasz / #akció + avatar fókusz + hozzászólás-lánc kiemelés.',
+        colorize: 'Saját / válasz / #akció + avatar fókusz + hozzászólás-lánc kiemelés. Színek a 🎨 menüben.',
         linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
-        msgAnchorHighlight: 'Kiemeli az URL-ben szereplő #msg hozzászólást.\nHa nem létezik, a hozzá legközelebbit jelöli ki.',
-        offHider: 'Az OFF hozzászólásokat a megjelenő gomb segítségével elrejtheted.',
-        keyboardNavigation: '← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
+        msgAnchorHighlight: 'URL-ben lévő #msg hozzászólás kiemelése. Színek a 🎨 menüben.',
+        offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
+        wideView: 'Szélesebb tartalom, kevesebb oldalsó margó.',
+        threadView: 'Hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése.',
+        keyboardNavigation: 'Billentyű navigáció a hozzászólások között\n← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
         hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
         markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
+        extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
         kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
     };
 
