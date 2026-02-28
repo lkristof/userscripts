@@ -2514,14 +2514,7 @@
 
         function applyHiddenBarStyle() {
             const { base, hover, color } = getHiddenBarColors();
-            let styleEl = document.querySelector("#ph-hidden-bar-style");
-            if (!styleEl) {
-                styleEl = document.createElement("style");
-                styleEl.id = "ph-hidden-bar-style";
-                document.head.appendChild(styleEl);
-            }
-
-            styleEl.textContent = `
+            injectStyleOnce("ph-pt-hidden-bar-style", `
                 .hidden-bar {
                     background: ${base};
                     color: ${color};
@@ -2544,7 +2537,7 @@
                 .ph-collapsible[data-collapsed="true"] {
                     overflow: hidden;
                 }
-            `;
+            `);
         }
 
         applyHiddenBarStyle();
