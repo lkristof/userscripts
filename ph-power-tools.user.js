@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.0.7
+// @version      2.1.0
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -15,6 +15,9 @@
 // @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
 // @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
 //
+// @grant        GM.getValue
+// @grant        GM.setValue
+// @grant        GM.deleteValue
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
@@ -29,12 +32,146 @@
 
     /************ CONFIG ************/
 
-    const STORAGE_KEY = 'ph_forum_settings';
-    const SECRETS_KEY_GM = "ph_power_tools_secrets";
-    const SECRETS_KEY_LS = "ph_power_tools_secrets";
+    const KEYS = {
+        SETTINGS: 'ph_forum_settings',
+
+        STATE: {
+            HIDDEN_USERS: 'ph_hidden_users',
+            HIDE_OFF: 'ph_hide_off',
+            WIDE_VIEW: 'ph_wide_view',
+            THREAD_VIEW: 'ph_thread_view',
+            TOPIC_MAX_ID_MAP: 'ph_topic_max_id_map',
+        },
+
+        KEK: {
+            GALLERY: 'ph_kek_gallery',
+            GALLERY_RESET_TS: 'ph_kek_gallery_reset_ts',
+            GALLERY_DELETED: 'ph_kek_gallery_deleted',
+            GALLERY_SEEN_RESET_TS: 'ph_kek_gallery_seen_reset_ts',
+        },
+
+        SECRETS: 'ph_power_tools_secrets',
+    };
+
+    const SYNC_KEYS = [
+        KEYS.SETTINGS,
+        KEYS.STATE.HIDDEN_USERS,
+        KEYS.STATE.TOPIC_MAX_ID_MAP,
+        KEYS.KEK.GALLERY,
+        KEYS.KEK.GALLERY_RESET_TS,
+        KEYS.KEK.GALLERY_DELETED,
+    ];
+
+    const STORAGE_KEY = KEYS.SETTINGS;
+    const SECRETS_KEY = KEYS.SECRETS;
+
+    const secrets = await loadSecrets();
+
+    const GIST_TOKEN = (secrets.gistToken || "").trim();
+    const GIST_ID = (secrets.gistId || "").trim();
+    const DEFAULT_GIST_FILENAME = "ph_forum_settings.json";
+    const GIST_FILENAME = ((secrets.gistFilename || DEFAULT_GIST_FILENAME)).trim();
+    const ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
+
+    const KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
+
+    const DEFAULT_COLORIZE_PALETTE = {
+        light: {
+            own: "#C7D7E0",
+            reply: "#CFE0C3",
+            akcio: "#FFC0C0",
+            focusAuthor: "#FFA966",
+            focusReply: "#F6CEAF",
+            chainBg: "#FFF6C8",
+            chainBorder: "#FF9800",
+            hashHighlight: "#FFF6C8",
+        },
+        dark: {
+            own: "#2F4A57",
+            reply: "#344A3A",
+            akcio: "#8B0000",
+            focusAuthor: "#5B327A",
+            focusReply: "#3A1F4F",
+            chainBg: "#4A4015",
+            chainBorder: "#FFB300",
+            hashHighlight: "#4A4015",
+        }
+    };
+
+    const defaultSettings = {
+        colorize: true,
+        linkRedirect: true,
+        msgAnchorHighlight: true,
+        offHider: true,
+        wideView: true,
+        threadView: true,
+        keyboardNavigation: true,
+        hideUsers: true,
+        markNewPosts: true,
+        extraSmilies: true,
+        kekShUploader: true,
+
+        colorizePalette: DEFAULT_COLORIZE_PALETTE,
+    };
+
+    const settingGroups = {
+        appearance: {
+            label: 'Megjelenés',
+            keys: ['colorize', 'markNewPosts', 'wideView', 'threadView'],
+            defaultOpen: true,
+        },
+        filtering: {
+            label: 'Szűrés',
+            keys: ['offHider', 'hideUsers'],
+        },
+        interaction: {
+            label: 'Interakció',
+            keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight', 'keyboardNavigation'],
+        }
+    };
+
+    const tooltips = {
+        colorize: 'Saját / válasz / #akció + avatar fókusz + hozzászólás-lánc kiemelés. Színek a 🎨 menüben.',
+        linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
+        msgAnchorHighlight: 'URL-ben lévő #msg hozzászólás kiemelése. Színek a 🎨 menüben.',
+        offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
+        wideView: 'Szélesebb tartalom, kevesebb oldalsó margó.',
+        threadView: 'Hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése.',
+        keyboardNavigation: 'Billentyű navigáció a hozzászólások között\n← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
+        hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
+        markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
+        extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
+        kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
+    };
+
+    function prettyName(key) {
+        return {
+            colorize: 'Hozzászólások színezése',
+            linkRedirect: 'Link átirányítás',
+            msgAnchorHighlight: 'Üzenet kiemelés',
+            offHider: 'OFF hozzászólások elrejtése',
+            wideView: 'Széles nézet',
+            threadView: 'Thread nézet',
+            keyboardNavigation: 'Billentyűzetes navigáció',
+            hideUsers: 'Felhasználók elrejtése',
+            markNewPosts: 'Új hozzászólás jelölése',
+            extraSmilies: 'Extra smiley-k',
+            kekShUploader: 'kek.sh képfeltöltő',
+        }[key] || key;
+    }
+
+    const storage = createSyncedStorage();
+    await storage.init();
+
+    function getMergedSettings() {
+        const local = safeJsonParse(storage.getItem(STORAGE_KEY) || '{}', {});
+        return { ...defaultSettings, ...local };
+    }
+
+    const savedSettings = getMergedSettings();
+    let draftSettings = {...savedSettings};
 
     function hasGM() {
-        // Userscripts appnál gyakran nincs GM_* global, vagy csak GM.* van
         return (typeof GM_getValue === "function" && typeof GM_setValue === "function")
             || (typeof GM === "object" && typeof GM.getValue === "function" && typeof GM.setValue === "function");
     }
@@ -56,83 +193,61 @@
     }
 
     function lsLoad() {
-        try { return JSON.parse(localStorage.getItem(SECRETS_KEY_LS) || "{}") || {}; }
+        try { return JSON.parse(localStorage.getItem(SECRETS_KEY) || "{}") || {}; }
         catch { return {}; }
     }
+
     function lsSave(obj) {
-        localStorage.setItem(SECRETS_KEY_LS, JSON.stringify(obj || {}));
+        localStorage.setItem(SECRETS_KEY, JSON.stringify(obj || {}));
     }
+
     function lsClear() {
-        localStorage.removeItem(SECRETS_KEY_LS);
+        localStorage.removeItem(SECRETS_KEY);
     }
 
     async function loadSecrets() {
-        // 1) GM ha elérhető
         if (hasGM()) {
-            const s = await gmGet(SECRETS_KEY_GM, null);
+            const s = await gmGet(SECRETS_KEY, null);
             if (s && typeof s === "object") return s;
 
-            // migráció LS -> GM (ha volt régi)
             const legacy = lsLoad();
             if (legacy && Object.keys(legacy).length) {
-                await gmSet(SECRETS_KEY_GM, legacy);
-                // opcionális: lsClear();
+                await gmSet(SECRETS_KEY, legacy);
                 return legacy;
             }
             return {};
         }
 
-        // 2) fallback: localStorage (iOS Userscripts alatt valószínűleg ez)
         return lsLoad();
     }
 
     async function saveSecrets(secrets) {
-        if (hasGM()) return gmSet(SECRETS_KEY_GM, secrets || {});
+        if (hasGM()) return gmSet(SECRETS_KEY, secrets || {});
         return lsSave(secrets);
     }
 
     async function clearSecrets() {
-        if (hasGM()) return gmDel(SECRETS_KEY_GM);
+        if (hasGM()) return gmDel(SECRETS_KEY);
         return lsClear();
     }
 
-    const secrets = await loadSecrets();
-
-    const GIST_TOKEN = (secrets.gistToken || "").trim();
-    const GIST_ID = (secrets.gistId || "").trim();
-    const DEFAULT_GIST_FILENAME = "ph_forum_settings.json";
-    const GIST_FILENAME = (
-        (secrets.gistFilename || DEFAULT_GIST_FILENAME)
-    ).trim();
-    const KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
-
-    const ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
-
-    const defaultSettings = {
-        colorize: true,
-        linkRedirect: true,
-        msgAnchorHighlight: true,
-        offHider: true,
-        wideView: true,
-        threadView: true,
-        keyboardNavigation: true,
-        hideUsers: true,
-        markNewPosts: true,
-        extraSmilies: true,
-        kekShUploader: true
-    };
-
-    const SYNC_KEYS = [
-        'ph_forum_settings',
-        'ph_hidden_users',
-        'ph_topic_max_id_map',
-        'ph_kek_gallery',
-        'ph_kek_gallery_reset_ts',
-        'ph_kek_gallery_deleted'
-    ];
-
     function safeJsonParse(str, fallback) {
         try { return JSON.parse(str); } catch { return fallback; }
+    }
+
+    /**
+     * Inject / update a <style> tag exactly once.
+     * Helps avoid duplicate style tags when the script (or parts of it) re-run.
+     */
+    function injectStyleOnce(id, cssText) {
+        let el = document.getElementById(id);
+        if (!el) {
+            el = document.createElement('style');
+            el.id = id;
+            document.head.appendChild(el);
+        }
+        el.textContent = cssText;
+        return el;
     }
 
     async function fetchGistBlob() {
@@ -209,7 +324,7 @@
             if (localVal == null) return remoteVal;
 
             // 1) Topic max id map: slug -> maxId (itt kell a MAX merge!)
-            if (key === "ph_topic_max_id_map") {
+            if (key === KEYS.STATE.TOPIC_MAX_ID_MAP) {
                 const r = (remoteVal && typeof remoteVal === "object") ? remoteVal : {};
                 const l = (localVal && typeof localVal === "object") ? localVal : {};
                 const out = { ...r };
@@ -224,7 +339,7 @@
             }
 
             // 2) kek gallery: unió URL alapján, friss rendezés, majd limit
-            if (key === "ph_kek_gallery") {
+            if (key === KEYS.KEK.GALLERY) {
                 const r = Array.isArray(remoteVal) ? remoteVal : [];
                 const l = Array.isArray(localVal) ? localVal : [];
                 const byUrl = new Map();
@@ -244,12 +359,12 @@
                 const merged = Array.from(byUrl.values())
                     .sort((a, b) => (Date.parse(b.createdAt || 0) || 0) - (Date.parse(a.createdAt || 0) || 0));
 
-                const deleted = safeJsonParse(localStorage.getItem("ph_kek_gallery_deleted") || "{}", {});
+                const deleted = safeJsonParse(localStorage.getItem(KEYS.KEK.GALLERY_DELETED) || "{}", {});
                 const filtered = merged.filter(it => it?.url && !deleted[it.url]);
                 return filtered;
             }
 
-            if (key === "ph_kek_gallery_deleted") {
+            if (key === KEYS.KEK.GALLERY_DELETED) {
                 const r = (remoteVal && typeof remoteVal === "object") ? remoteVal : {};
                 const l = (localVal && typeof localVal === "object") ? localVal : {};
                 const out = { ...r };
@@ -263,7 +378,7 @@
                 return out;
             }
 
-            // Default: maradhat a "local wins" (beállításoknál ez oké)
+            // Default: maradhat a "local wins"
             return localVal;
         }
 
@@ -342,9 +457,13 @@
             },
             getItem(key) { return localStorage.getItem(key); },
             setItem(key, value) {
+                const prev = localStorage.getItem(key);
+                if (prev === value) return;
+
                 localStorage.setItem(key, value);
+
                 if (keyShouldSync(key)) {
-                    dirtyDeletes.delete(key); // ✅ ha újra létrejött, már nem "törlés"
+                    dirtyDeletes.delete(key);
                     schedulePush();
                 }
             },
@@ -358,147 +477,57 @@
         };
     }
 
-    const storage = createSyncedStorage();
-    await storage.init();
-
-    function getMergedSettings() {
-        const local = safeJsonParse(storage.getItem(STORAGE_KEY) || '{}', {});
-        return { ...defaultSettings, ...local };
-    }
-
-    const settingGroups = {
-        appearance: {
-            label: 'Megjelenés',
-            keys: ['colorize', 'markNewPosts', 'wideView', 'threadView'],
-            defaultOpen: true
-        },
-        filtering: {
-            label: 'Szűrés',
-            keys: ['offHider', 'hideUsers'],
-        },
-        interaction: {
-            label: 'Interakció',
-            keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight', 'keyboardNavigation']
-        }
-    };
-
-    function prettyName(key) {
-        return {
-            colorize: 'Hozzászólások színezése',
-            linkRedirect: 'Link átirányítás',
-            msgAnchorHighlight: 'Üzenet kiemelés',
-            offHider: 'OFF hozzászólások elrejtése',
-            wideView: 'Széles nézet',
-            threadView: 'Thread nézet',
-            keyboardNavigation: 'Billentyűzetes navigáció',
-            hideUsers: 'Felhasználók elrejtése',
-            markNewPosts: 'Új hozzászólás jelölése',
-            extraSmilies: 'Extra smiley-k',
-            kekShUploader: 'kek.sh képfeltöltő'
-        }[key] || key;
-    }
-
-    const tooltips = {
-        colorize: 'Saját / rád válaszoló / #akció + avatar fókusz + hozzászólás-lánc kiemelés.',
-        linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
-        msgAnchorHighlight: 'Kiemeli az URL-ben szereplő #msg hozzászólást.\nHa nem létezik, a hozzá legközelebbit jelöli ki.',
-        offHider: 'Az OFF hozzászólásokat a megjelenő gomb segítségével elrejtheted.',
-        keyboardNavigation: '← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
-        hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
-        markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
-        kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.'
-    };
-
-    const savedSettings = getMergedSettings();
-    let draftSettings = {...savedSettings};
-
     function isOnPage(path) {
         const regex = new RegExp('^\\/' + path + '\\/');
         return regex.test(location.pathname);
     }
 
-    /************ STYLE ************/
+    function insertHtmlIntoEditor(editorEl, html) {
+        const ed = window.tinyMCE?.activeEditor;
+        if (ed && typeof ed.insertContent === "function") {
+            ed.focus();
+            ed.insertContent(html);
+            return true;
+        }
 
-    const style = document.createElement('style');
-    style.textContent = `
-        li.media {
-            position: relative;
-            z-index: 1;
-        }
-        li.media:has(.dropdown-menu.show),
-        li.media:focus-within {
-            z-index: 100 !important;
-        }
-        .ph-acc-header {
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: background 0.2s ease;
-        }
-        .ph-acc-header:hover {
-            background: color-mix(in srgb, currentColor 8%, transparent);
-        }
-        .ph-acc-body {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.5s ease;
-        }
-        .ph-acc-body .dropdown-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 4px;
-            padding: 4px 10px;
-        }
-        .ph-power-menu {
-            min-width: 260px;
-            max-height: 70vh;
-            overflow-y: auto;
-        }
-        .ph-tooltip {
-            white-space: pre-line;
-            hyphens: auto;
-            overflow-wrap: break-word;
-            position: fixed;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            z-index: 9999;
-            display: none;
-            pointer-events: none;
-            max-width: 280px;
-        }
-        .ph-tooltip-icon {
-            margin-left: 5px;
-            cursor: pointer;
-        }
-        .ph-tooltip-icon:hover {
-            color: #343a40;
-        }
-        @media only screen and (max-width: 991.98px) {
-            .ph-power-btn + .dropdown-menu {
-                display: none !important;
-                position: absolute !important;
-                left: 0 !important;
-            }
-            .ph-power-btn + .dropdown-menu.show {
-                display: block !important;
-            }
-            .ph-acc-body .dropdown-item {
-                padding: 10px 10px;
+        if (editorEl) {
+            editorEl.focus();
+            try {
+                return document.execCommand("insertHTML", false, html);
+            } catch {
+                editorEl.insertAdjacentHTML("beforeend", html);
+                return true;
             }
         }
-    `;
+        return false;
+    }
 
-    document.head.appendChild(style);
+    function phPtDetectDark() {
+        // 1. dark_base link alapján
+        const darkLink = document.querySelector('link[href*="dark_base"]');
+        if (darkLink) {
+            const media = darkLink.getAttribute("media");
+            if (media === "all") return true;
+            if (media === "not all") return false;
+            if (media?.includes("prefers-color-scheme")) {
+                return window.matchMedia("(prefers-color-scheme: dark)").matches;
+            }
+        }
 
-    /************ HEADER INJECT ************/
+        // 2. Theme button fallback
+        const btn = document.querySelector(".theme-button span");
+        if (btn) {
+            return btn.classList.contains("fa-sun-bright");
+        }
 
-    waitForHeader(insertSettingsDropdown);
+        return false;
+    }
+
+    function phPtSyncThemeAttr() {
+        const isDark = phPtDetectDark();
+        document.body.dataset.theme = isDark ? "dark" : "light";
+        return isDark;
+    }
 
     function waitForHeader(cb) {
         const el = document.querySelector('#header-sticky .navbar-buttons');
@@ -512,6 +541,36 @@
             }
         });
         obs.observe(document.body, {childList: true, subtree: true});
+    }
+
+    function bindTooltips(rootEl) {
+        let tooltip = document.getElementById('ph-pt-global-tooltip');
+
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'ph-pt-global-tooltip';
+            tooltip.className = 'ph-tooltip';
+            tooltip.lang = 'hu';
+            document.body.appendChild(tooltip);
+        }
+
+        rootEl.querySelectorAll('.ph-tooltip-icon').forEach(icon => {
+            if (icon.dataset.phTtBound) return;
+            icon.dataset.phTtBound = '1';
+
+            icon.addEventListener('mouseenter', () => {
+                tooltip.textContent = icon.dataset.tooltip;
+
+                const rect = icon.getBoundingClientRect();
+                tooltip.style.left = (rect.right + 5) + 'px';
+                tooltip.style.top = rect.top + 'px';
+                tooltip.style.display = 'block';
+            });
+
+            icon.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
+        });
     }
 
     function insertSettingsDropdown(container) {
@@ -530,13 +589,25 @@
                 <h6 class="dropdown-header"
                     style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0;">
                     <span>PH Power Tools</span>
-                    <button type="button"
-                            id="ph-open-secrets"
-                            class="btn btn-forum btn-sm"
-                            title="Kulcsok / Szinkron beállítások"
-                            style="padding:2px 6px;">
-                      <span class="fas fa-cog"></span>
-                    </button>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        ${(savedSettings.colorize || savedSettings.msgAnchorHighlight) ? `
+                            <button type="button"
+                                    id="ph-open-colors"
+                                    class="btn btn-forum btn-sm"
+                                    title="Hozzászólás színek (Colorize)"
+                                    style="padding:2px 6px;">
+                                <span class="fas fa-palette"></span>
+                            </button>
+                        ` : ``}
+                      
+                        <button type="button"
+                                id="ph-open-secrets"
+                                class="btn btn-forum btn-sm"
+                                title="Kulcsok / Szinkron beállítások"
+                                style="padding:2px 6px;">
+                          <span class="fas fa-cog"></span>
+                        </button>
+                    </div>
                 </h6>
                 <div class="ph-accordion">
                     ${Object.entries(settingGroups).map(([groupKey, group], index) => `
@@ -570,7 +641,7 @@
             </div>
         `;
 
-        // ===== Secrets modal (egyszer) =====
+        // ===== Secrets modal =====
         if (!document.getElementById('ph-secrets-modal')) {
             const modal = document.createElement('div');
             modal.id = 'ph-secrets-modal';
@@ -591,16 +662,22 @@
                     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
                     overflow: hidden;">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
-                                padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
+                        padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
                         <div style="font-weight:700;">PH Power Tools – Kulcsok / Szinkron</div>
-                        <button type="button" class="btn btn-sm btn-light" id="ph-secrets-close">✕</button>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span id="ph-sync-status-icon"
+                                  title=""
+                                  style="
+                                    width:10px; height:10px; border-radius:999px;
+                                    display:inline-block;
+                                    box-shadow: 0 0 0 2px rgba(0,0,0,0.08) inset;
+                                    opacity:0.95;">
+                            </span>
+                            <button type="button" class="btn btn-sm btn-light" id="ph-secrets-close">✕</button>
+                        </div>
                     </div>
             
                     <div style="padding: 14px; display:flex; flex-direction:column; gap:10px;">
-                    <div id="ph-secrets-storage-line"
-                         style="font-size:12px; opacity:0.85; line-height:1.35;">
-                    </div>
-                
                         <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
                             <label style="font-size:12px; margin:0;">
                             GitHub Gist Token
@@ -648,21 +725,141 @@
             document.body.appendChild(modal);
         }
 
+        // ===== Colorize Colors modal =====
+        if (!document.getElementById('ph-colors-modal')) {
+            const modal = document.createElement('div');
+            modal.id = 'ph-colors-modal';
+            modal.style.cssText = `
+                position: fixed; inset: 0; z-index: 10050;
+                display: none;
+                background: rgba(0,0,0,0.45);
+                backdrop-filter: blur(2px);
+                align-items: center; justify-content: center;
+                padding: 16px;
+            `;
+
+            modal.innerHTML = `
+                <div id="ph-colors-panel" style="
+                    width: min(500px, 100%);
+                    border-radius: 10px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+                    overflow: hidden;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
+                        padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
+                        <div style="font-weight:700;">PH Power Tools – Hozzászólás színek</div>
+                        <button type="button" class="btn btn-sm btn-light" id="ph-colors-close">✕</button>
+                    </div>
+                    <div style="padding: 14px; display:flex; flex-direction:column; gap:12px;">
+                        <div id="ph-colors-body"></div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button type="button" class="btn btn-sm btn-secondary" id="ph-colors-save">Mentés</button>
+                            <button type="button" class="btn btn-sm btn-light" id="ph-colors-reset">Alaphelyzet</button>
+                        </div>
+                    </div>
+                </div>
+              `;
+            document.body.appendChild(modal);
+        }
+
+        function applyColorsTheme() {
+            const panel = document.getElementById('ph-colors-panel');
+            if (!panel) return;
+
+            if (!document.body.dataset.theme) phPtSyncThemeAttr();
+            const isDark = document.body.dataset.theme === "dark";
+
+            if (isDark) {
+                panel.style.background = "#2b2b2b";
+                panel.style.color = "#f1f1f1";
+                panel.style.border = "1px solid rgba(255,255,255,0.1)";
+            } else {
+                panel.style.background = "#ffffff";
+                panel.style.color = "#212529";
+                panel.style.border = "1px solid rgba(0,0,0,0.1)";
+            }
+        }
+
+        function renderColorsModal(settings) {
+            const modal = document.getElementById("ph-colors-modal");
+            const body = modal?.querySelector("#ph-colors-body");
+            if (!modal || !body) return;
+
+            const pal = settings.colorizePalette || DEFAULT_COLORIZE_PALETTE;
+
+            const colorizeFields = [
+                { key: "own",         label: "Saját" },
+                { key: "reply",       label: "Válasz" },
+                { key: "akcio",       label: "#akció" },
+                { key: "focusAuthor", label: "Fókusz: szerző" },
+                { key: "focusReply",  label: "Fókusz: válasz" },
+                { key: "chainBg",     label: "Lánc háttér" },
+                { key: "chainBorder", label: "Lánc szegély" },
+            ];
+
+            const hashFields = [
+                { key: "hashHighlight", label: "Üzenet kiemelés" },
+            ];
+
+            const enabledColorize = !!savedSettings.colorize;
+            const enabledHash = !!savedSettings.msgAnchorHighlight;
+
+            const fields =
+                enabledColorize && enabledHash ? [...colorizeFields, ...hashFields]
+                    : enabledColorize ? colorizeFields
+                        : enabledHash ? hashFields
+                            : [];
+
+            if (!fields.length) {
+                body.innerHTML = `<div style="font-size:13px; opacity:0.8;">
+                    Nincs bekapcsolt színezős funkció.
+                </div>`;
+                return;
+            }
+
+            body.innerHTML = `
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                    ${["light","dark"].map(theme => {
+                        const boxBg = theme === "light" ? "#ffffff" : "#2b2b2b";
+                        const boxFg = theme === "light" ? "#212529" : "#f1f1f1";
+                        const boxBorder = theme === "light" ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.14)";
+                        const rowHover = theme === "light" ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.06)";
+        
+                        return `
+                            <div style="
+                                background:${boxBg};
+                                color:${boxFg};
+                                border:1px solid ${boxBorder};
+                                border-radius:10px;
+                                padding:12px;">
+                                <div style="font-weight:700; margin-bottom:10px;">
+                                    ${theme === "light" ? "Világos" : "Sötét"}
+                                </div>
+                                <div style="display:grid; grid-template-columns: 1fr auto; gap:8px 12px; align-items:center;">
+                                    ${fields.map(f => `
+                                    <label style="margin:0; font-size:13px;">${f.label}</label>
+                                    <input type="color"
+                                        data-theme="${theme}"
+                                        data-k="${f.key}"
+                                        value="${pal?.[theme]?.[f.key] || DEFAULT_COLORIZE_PALETTE[theme][f.key]}"
+                                        style="
+                                            width:44px; height:28px; padding:0;
+                                            border:none; background:transparent; cursor:pointer;
+                                            border-radius: 4px;">
+                                    `).join("")}
+                                </div>
+                            </div>
+                        `;
+                    }).join("")}
+                </div>
+            `;
+        }
+
         function applySecretsTheme() {
             const panel = document.getElementById('ph-secrets-panel');
             if (!panel) return;
 
-            const darkLink = document.querySelector('link[href*="dark_base"]');
-            let isDark = false;
-
-            if (darkLink) {
-                const media = darkLink.getAttribute("media");
-                if (media === "all") isDark = true;
-                else if (media === "not all") isDark = false;
-                else if (media?.includes("prefers-color-scheme")) {
-                    isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                }
-            }
+            if (!document.body.dataset.theme) phPtSyncThemeAttr();
+            const isDark = document.body.dataset.theme === "dark";
 
             if (isDark) {
                 panel.style.background = "#2b2b2b";
@@ -679,24 +876,107 @@
 
         const openBtn = li.querySelector('#ph-open-secrets');
         const modal = document.getElementById('ph-secrets-modal');
+        const openColorsBtn = li.querySelector('#ph-open-colors');
+        const colorsModal = document.getElementById('ph-colors-modal');
+
+        let colorsDraftPalette = null;
+
+        function openColorsModal() {
+            if (!colorsModal) return;
+            applyColorsTheme();
+
+            const currentSettings = getMergedSettings();
+            colorsDraftPalette = structuredClone(currentSettings.colorizePalette || DEFAULT_COLORIZE_PALETTE);
+
+            // render: a draftból
+            renderColorsModal({ colorizePalette: colorsDraftPalette });
+
+            colorsModal.style.display = "flex";
+        }
+
+        function closeColorsModal() {
+            if (!colorsModal) return;
+            colorsModal.style.display = "none";
+            colorsDraftPalette = null;
+        }
+
+        // 🎨 gomb katt: nyit
+        openColorsBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // zárjuk a dropdownot, majd nyissuk a modalt a következő tick-ben
+            li.querySelector('.dropdown-toggle')?.click();
+            setTimeout(openColorsModal, 0);
+        });
+
+        // háttér katt: zár
+        colorsModal?.addEventListener('click', (e) => {
+            if (e.target === colorsModal) closeColorsModal();
+        });
+
+        // X katt: zár
+        colorsModal?.querySelector('#ph-colors-close')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            closeColorsModal();
+        });
+
+        // Mentés: SETTINGS-be ment + sync flush + reload
+        colorsModal?.querySelector('#ph-colors-save')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+
+            const currentSettings = getMergedSettings();
+            const newPal = structuredClone(currentSettings.colorizePalette || DEFAULT_COLORIZE_PALETTE);
+
+            colorsModal.querySelectorAll('input[type="color"][data-theme][data-k]').forEach(inp => {
+                const theme = inp.dataset.theme;
+                const k = inp.dataset.k;
+                newPal[theme][k] = inp.value;
+            });
+
+            currentSettings.colorizePalette = newPal;
+
+            storage.setItem(STORAGE_KEY, JSON.stringify(currentSettings));
+            await storage.flush();
+
+            colorsModal.style.display = "none";
+            location.reload();
+        });
+
+        // Alaphelyzet: DEFAULT
+        colorsModal?.querySelector('#ph-colors-reset')?.addEventListener('click', (e) => {
+            e.preventDefault();
+
+            colorsDraftPalette = structuredClone(DEFAULT_COLORIZE_PALETTE);
+            renderColorsModal({ colorizePalette: colorsDraftPalette });
+        });
 
         async function openSecretsModal() {
             if (!modal) return;
             applySecretsTheme();
 
-            const storageLine = modal.querySelector('#ph-secrets-storage-line');
-            if (storageLine) {
-                storageLine.innerHTML = hasGM()
-                    ? 'Tárolás: <b>GM storage</b> (közös a lapcsalád domainjei között)'
-                    : 'Tárolás: <b>localStorage</b> (domainenként külön)';
-            }
-
             const s = await loadSecrets();
+
+            const syncIcon = modal.querySelector('#ph-sync-status-icon');
+            if (syncIcon) {
+                const active = !!(
+                    (s.gistToken || '').trim() &&
+                    (s.gistId || '').trim() &&
+                    ((s.gistFilename || DEFAULT_GIST_FILENAME).trim())
+                );
+
+                if (active) {
+                    syncIcon.style.background = 'limegreen';
+                    syncIcon.title = 'Szinkron: aktív (Gist beállítva)';
+                } else {
+                    syncIcon.style.background = '#9aa0a6';
+                    syncIcon.title = 'Szinkron: inaktív (hiányzó Gist adatok)';
+                }
+            }
 
             modal.querySelector('#ph-secret-gist-token').value = s.gistToken || '';
             modal.querySelector('#ph-secret-gist-id').value = s.gistId || '';
-            modal.querySelector('#ph-secret-gist-filename').value =
-                s.gistFilename || DEFAULT_GIST_FILENAME;
+            modal.querySelector('#ph-secret-gist-filename').value = s.gistFilename || DEFAULT_GIST_FILENAME;
             modal.querySelector('#ph-secret-kek-key').value = s.kekShApiKey || '';
             modal.querySelector('#ph-secret-status').textContent = '';
 
@@ -711,7 +991,10 @@
         openBtn?.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation(); // ne zárja be a dropdownot
-            await openSecretsModal();
+
+            // zárjuk a dropdownot, majd nyissuk a modalt a következő tick-ben
+            li.querySelector('.dropdown-toggle')?.click();
+            setTimeout(openSecretsModal, 0);
         });
 
         // háttérre katt = bezár
@@ -725,13 +1008,26 @@
             closeSecretsModal();
         });
 
-        // ESC = bezár (csak egyszer!)
-        if (!document.body.dataset.phSecretsEscBound) {
-            document.body.dataset.phSecretsEscBound = "1";
+        // ESC = bezár
+        if (!document.body.dataset.phModalsEscBound) {
+            document.body.dataset.phModalsEscBound = "1";
+
             document.addEventListener('keydown', (e) => {
-                const modal = document.getElementById('ph-secrets-modal');
-                if (e.key === 'Escape' && modal?.style.display === 'flex') {
-                    modal.style.display = 'none';
+                if (e.key !== 'Escape') return;
+
+                const secretsModal = document.getElementById('ph-secrets-modal');
+                const colorsModal  = document.getElementById('ph-colors-modal');
+
+                // Először a színek modalt zárjuk, ha az van nyitva
+                if (colorsModal?.style.display === 'flex') {
+                    colorsModal.style.display = 'none';
+                    return;
+                }
+
+                // Utána a secrets modalt
+                if (secretsModal?.style.display === 'flex') {
+                    secretsModal.style.display = 'none';
+                    return;
                 }
             });
         }
@@ -767,24 +1063,8 @@
             setTimeout(() => location.reload(), 250);
         });
 
-        // Egyszerű custom tooltip
-        document.querySelectorAll('.ph-tooltip-icon').forEach(icon => {
-            const tooltip = document.createElement('div');
-            tooltip.className = 'ph-tooltip';
-            tooltip.lang = "hu";
-            tooltip.textContent = icon.dataset.tooltip;
-            document.body.appendChild(tooltip);
-
-            icon.addEventListener('mouseenter', e => {
-                tooltip.style.display = 'block';
-                const rect = icon.getBoundingClientRect();
-                tooltip.style.left = rect.right + 5 + 'px';
-                tooltip.style.top = rect.top + 'px';
-            });
-            icon.addEventListener('mouseleave', () => {
-                tooltip.style.display = 'none';
-            });
-        });
+        // Egyszerű custom tooltip (csak a mi dropdownunkon belül)
+        bindTooltips(li);
 
         const toggleBtn = li.querySelector('.ph-power-btn');
         const applyBtn = li.querySelector('.ph-apply-btn');
@@ -861,25 +1141,161 @@
         });
     }
 
-    /************ MODULE DISPATCH ************/
-
-    if (isOnPage("tema") || isOnPage("privat")) {
-        if (isOnPage("tema")) {
-            if (savedSettings.colorize) colorize();
-            if (savedSettings.markNewPosts) markNewPosts();
-            if (savedSettings.linkRedirect) linkRedirect();
-            if (savedSettings.msgAnchorHighlight) msgAnchorHighlight();
-            if (savedSettings.offHider) offHider();
-            if (savedSettings.wideView) wideView();
-            if (savedSettings.threadView) threadView();
-            if (savedSettings.keyboardNavigation) keyboardNavigation();
-            if (savedSettings.hideUsers) hideUsers();
+    function runModule(name, fn) {
+        if (typeof fn !== 'function') {
+            console.warn(`[PH Power Tools] Module missing: ${name}`);
+            return;
         }
-        if (savedSettings.extraSmilies) extraSmilies();
-        if (savedSettings.kekShUploader) kekShUploader();
+        try {
+            fn();
+        } catch (e) {
+            console.error(`[PH Power Tools] Module failed: ${name}`, e);
+        }
     }
 
-    /************ MODULE STUBS ************/
+    function initThemeSync() {
+        phPtSyncThemeAttr();
+
+        // 1) matchMedia listener: bind-once
+        if (!document.documentElement.dataset.phPtThemeMqBound) {
+            document.documentElement.dataset.phPtThemeMqBound = '1';
+            const mq = window.matchMedia("(prefers-color-scheme: dark)");
+            const onChange = () => {
+                phPtSyncThemeAttr();
+                document.dispatchEvent(new Event("ph-pt-theme-changed"));
+            };
+            if (mq.addEventListener) mq.addEventListener('change', onChange);
+            else if (mq.addListener) mq.addListener(onChange);
+        }
+
+        // 2) dark_base observer: attach when link exists, also bind-once
+        if (document.documentElement.dataset.phPtThemeDarkLinkBound) return;
+        const phPtDarkLink = document.querySelector('link[href*="dark_base"]');
+        if (!phPtDarkLink) return;
+
+        document.documentElement.dataset.phPtThemeDarkLinkBound = '1';
+        const obs = new MutationObserver(() => {
+            phPtSyncThemeAttr();
+            document.dispatchEvent(new Event("ph-pt-theme-changed"));
+        });
+        obs.observe(phPtDarkLink, {attributes: true, attributeFilter: ["media"]});
+    }
+
+    function injectBaseStyle() {
+        injectStyleOnce('ph-pt-base-style', `
+            li.media {
+                position: relative;
+                z-index: 1;
+            }
+            li.media:has(.dropdown-menu.show),
+            li.media:focus-within {
+                z-index: 100 !important;
+            }
+            .ph-acc-header {
+                font-weight: 600;
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                transition: background 0.2s ease;
+            }
+            .ph-acc-header:hover {
+                background: color-mix(in srgb, currentColor 8%, transparent);
+            }
+            .ph-acc-body {
+                max-height: 0;
+                overflow: hidden;
+                transition: max-height 0.5s ease;
+            }
+            .ph-acc-body .dropdown-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 4px;
+                padding: 4px 10px;
+            }
+            .ph-power-menu {
+                min-width: 260px;
+                max-height: 70vh;
+                overflow-y: auto;
+            }
+            .ph-tooltip {
+                white-space: pre-line;
+                hyphens: auto;
+                overflow-wrap: break-word;
+                position: fixed;
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                z-index: 9999;
+                display: none;
+                pointer-events: none;
+                max-width: 280px;
+            }
+            .ph-tooltip-icon {
+                margin-left: 5px;
+                cursor: pointer;
+            }
+            @media only screen and (max-width: 991.98px) {
+                .ph-power-btn + .dropdown-menu {
+                    display: none !important;
+                    position: absolute !important;
+                    left: 0 !important;
+                }
+                .ph-power-btn + .dropdown-menu.show {
+                    display: block !important;
+                }
+                .ph-acc-body .dropdown-item {
+                    padding: 10px 10px;
+                }
+            }
+        `);
+    }
+
+    function waitForHeaderAsync() {
+        return new Promise(resolve => waitForHeader(resolve));
+    }
+
+    async function mountHeaderUi() {
+        const headerEl = await waitForHeaderAsync();
+        insertSettingsDropdown(headerEl);
+    }
+
+    async function initApp() {
+        initThemeSync();
+        injectBaseStyle();
+        await mountHeaderUi();
+        runEnabledModules();
+    }
+
+    await initApp();
+
+    function runEnabledModules() {
+        const isTema = isOnPage("tema");
+        const isPrivat = isOnPage("privat");
+        if (!isTema && !isPrivat) return;
+
+        const modules = [
+            { name: "colorize", when: () => isTema && savedSettings.colorize, fn: colorize },
+            { name: "markNewPosts", when: () => isTema && savedSettings.markNewPosts, fn: markNewPosts },
+            { name: "linkRedirect", when: () => isTema && savedSettings.linkRedirect, fn: linkRedirect },
+            { name: "msgAnchorHighlight", when: () => isTema && savedSettings.msgAnchorHighlight, fn: msgAnchorHighlight },
+            { name: "offHider", when: () => isTema && savedSettings.offHider, fn: offHider },
+            { name: "wideView", when: () => isTema && savedSettings.wideView, fn: wideView },
+            { name: "threadView", when: () => isTema && savedSettings.threadView, fn: threadView },
+            { name: "keyboardNavigation", when: () => isTema && savedSettings.keyboardNavigation, fn: keyboardNavigation },
+            { name: "hideUsers", when: () => isTema && savedSettings.hideUsers, fn: hideUsers },
+
+            { name: "extraSmilies", when: () => (isTema || isPrivat) && savedSettings.extraSmilies, fn: extraSmilies },
+            { name: "kekShUploader", when: () => (isTema || isPrivat) && savedSettings.kekShUploader, fn: kekShUploader },
+        ];
+
+        for (const m of modules) {
+            if (m.when()) runModule(m.name, m.fn);
+        }
+    }
 
     function colorize() {
         /**********************
@@ -894,54 +1310,53 @@
         let selectedUser = null;
         let activeChainIds = new Set();
 
-        const COLORS = {
-            light: {
-                SAJAT: "#C7D7E0",
-                VALASZ: "#CFE0C3",
-                AKCIO: "#FFC0C0",
+        function paletteToCssVars(pal, theme) {
+            const p = pal?.[theme] || DEFAULT_COLORIZE_PALETTE[theme];
+            return `
+                --ph-pt-own: ${p.own};
+                --ph-pt-reply: ${p.reply};
+                --ph-pt-akcio: ${p.akcio};
+                --ph-pt-focus-author: ${p.focusAuthor};
+                --ph-pt-focus-reply: ${p.focusReply};
+                --ph-pt-chain-bg: ${p.chainBg};
+                --ph-pt-chain-border: ${p.chainBorder};
+                --ph-pt-hash-highlight: ${p.hashHighlight};
+            `;
+        }
 
-                FOCUS_AUTHOR: "#FFA966",
-                FOCUS_REPLY: "#F6CEAF",
+        function injectColorizeCssOnce() {
+            const pal = savedSettings.colorizePalette || DEFAULT_COLORIZE_PALETTE;
 
-                CHAIN_BG: "#FFF6C8",
-                CHAIN_BORDER: "#FF9800"
-            },
-            dark: {
-                SAJAT: "#2F4A57",
-                VALASZ: "#344A3A",
-                AKCIO: "#8B0000",
+            injectStyleOnce("ph-pt-colorize-style", `
+                body[data-theme="light"] { ${paletteToCssVars(pal, "light")} }
+                body[data-theme="dark"]  { ${paletteToCssVars(pal, "dark")} }
+            
+                .msg .msg-body.ph-pt-colorize { transition: all 0.2s ease; } 
+                .msg .msg-body.ph-pt-akcio        { background-color: var(--ph-pt-akcio) !important; }
+                .msg .msg-body.ph-pt-own          { background-color: var(--ph-pt-own) !important; }
+                .msg .msg-body.ph-pt-reply        { background-color: var(--ph-pt-reply) !important; }
+                .msg .msg-body.ph-pt-focus-author { background-color: var(--ph-pt-focus-author) !important; }
+                .msg .msg-body.ph-pt-focus-reply  { background-color: var(--ph-pt-focus-reply) !important; }
+            
+                .msg .msg-body.ph-pt-chain {
+                    background-color: var(--ph-pt-chain-bg) !important;
+                    box-shadow: inset 5px 0 0 0 var(--ph-pt-chain-border) !important;
+                }
+                .msg-head-options .ph-pt-chain-link .ph-pt-chain-text { margin-left: 4px; }
+                .msg-head-options .ph-pt-chain-link:hover .ph-pt-chain-text { text-decoration: underline; }
+            `);
+        }
 
-                FOCUS_AUTHOR: "#5B327A",
-                FOCUS_REPLY: "#3A1F4F",
+        injectColorizeCssOnce();
 
-                CHAIN_BG: "#4A4015",
-                CHAIN_BORDER: "#FFB300"
-            }
-        };
+        if (!document.body.dataset.phPtColorizeThemeBound) {
+            document.body.dataset.phPtColorizeThemeBound = "1";
+            document.addEventListener("ph-pt-theme-changed", () => {
+                recolorAll();
+            });
+        }
 
         const lower = s => (s || "").toString().trim().toLowerCase();
-
-        /**********************
-         * TÉMA FELISMERÉS
-         **********************/
-        function detectDark() {
-            const darkLink = document.querySelector('link[href*="dark_base"]');
-            if (darkLink) {
-                const media = darkLink.getAttribute("media");
-                if (media === "all") return true;
-                if (media === "not all") return false;
-                if (media?.includes("prefers-color-scheme")) {
-                    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-                }
-            }
-            const btn = document.querySelector(".theme-button span");
-            if (btn) return btn.classList.contains("fa-sun-bright");
-            return false;
-        }
-
-        function getThemeColors() {
-            return detectDark() ? COLORS.dark : COLORS.light;
-        }
 
         /**********************
          * SEGÉDEK
@@ -996,51 +1411,58 @@
          * FŐ SZÍNEZÉS
          **********************/
         function recolorAll() {
-            const c = getThemeColors();
-
             document.querySelectorAll(".msg").forEach(msg => {
                 const body = msg.querySelector(".msg-body");
                 if (!body) return;
 
-                body.style.backgroundColor = "";
-                body.style.boxShadow = "";
+                // base class
+                body.classList.add("ph-pt-colorize");
 
-                const text = body.textContent.toLowerCase();
+                // reset state classes
+                body.classList.remove(
+                    "ph-pt-akcio",
+                    "ph-pt-own",
+                    "ph-pt-reply",
+                    "ph-pt-focus-author",
+                    "ph-pt-focus-reply",
+                    "ph-pt-chain"
+                );
+
+                const text = lower(body.textContent);
                 const author = getAuthor(msg);
                 const replied = getRepliedTo(msg);
 
                 const li = msg.closest("li.media[data-id]");
                 const msgId = li?.dataset?.id;
 
-                // 1️⃣ #akció
+                // 1) #akció
                 if (AKCIO_KEYWORDS.some(k => text.includes(k))) {
-                    body.style.setProperty("background-color", c.AKCIO);
+                    body.classList.add("ph-pt-akcio");
                 }
 
-                // 2️⃣ Avatar fókusz
+                // 2) Avatar fókusz (prioritásban felülír mindent, mint eddig)
                 if (selectedUser) {
                     if (author === selectedUser) {
-                        body.style.backgroundColor = c.FOCUS_AUTHOR;
+                        body.classList.add("ph-pt-focus-author");
                         return;
                     }
                     if (replied === selectedUser) {
-                        body.style.backgroundColor = c.FOCUS_REPLY;
+                        body.classList.add("ph-pt-focus-reply");
                         return;
                     }
                 }
 
-                // 3️⃣ Lánc kiemelés (OLDALSÁV!)
+                // 3) Lánc kiemelés
                 if (msgId && activeChainIds.has(msgId)) {
-                    body.style.backgroundColor = c.CHAIN_BG;
-                    body.style.boxShadow = `inset 5px 0 0 0 ${c.CHAIN_BORDER}`;
+                    body.classList.add("ph-pt-chain");
                     return;
                 }
 
-                // 4️⃣ Saját / válasz
+                // 4) Saját / válasz
                 if (lower(author) === lower(FELHASZNALO)) {
-                    body.style.backgroundColor = c.SAJAT;
+                    body.classList.add("ph-pt-own");
                 } else if (lower(replied) === lower(FELHASZNALO)) {
-                    body.style.backgroundColor = c.VALASZ;
+                    body.classList.add("ph-pt-reply");
                 }
             });
         }
@@ -1082,17 +1504,20 @@
          **********************/
         function attachChainLinks() {
             document.querySelectorAll(".msg-head-options").forEach(opts => {
-                if (opts.querySelector(".chain-link")) return;
+                if (opts.querySelector(".ph-pt-chain-link")) return;
 
                 const wrapper = document.createElement("span");
-                wrapper.className = "chain-link";
+                wrapper.className = "ph-pt-chain-link";
 
                 wrapper.style.cursor = "pointer";
                 wrapper.style.marginLeft = "8px";
                 wrapper.style.display = "inline-flex";
                 wrapper.style.alignItems = "center";
 
-                wrapper.innerHTML = '<span class="fas fa-link fa-fw"></span>&nbsp;Lánc';
+                wrapper.innerHTML = `
+                    <span class="fas fa-link fa-fw"></span>
+                    <span class="ph-pt-chain-text">Lánc</span>
+                `;
 
                 wrapper.addEventListener("click", e => {
                     e.preventDefault();
@@ -1134,9 +1559,6 @@
         } else {
             init();
         }
-
-        window.matchMedia("(prefers-color-scheme: dark)")
-            .addEventListener("change", recolorAll);
     }
 
     function linkRedirect() {
@@ -1224,41 +1646,25 @@
         /**********************
          * CSS
          **********************/
-        const style = document.createElement("style");
-        style.textContent = `
-            body[data-theme="light"] .hash-highlight {
-                background-color: #FFF6C8 !important;
+        const pal = savedSettings.colorizePalette || DEFAULT_COLORIZE_PALETTE;
+        const l = pal?.light?.hashHighlight || DEFAULT_COLORIZE_PALETTE.light.hashHighlight;
+        const d = pal?.dark?.hashHighlight  || DEFAULT_COLORIZE_PALETTE.dark.hashHighlight;
+
+        injectStyleOnce("ph-pt-msg-anchor-highlight-style", `
+            body[data-theme="light"] {
+                --ph-pt-hash-highlight: ${l};
             }
-            body[data-theme="dark"] .hash-highlight {
-                background-color: #4A4015 !important;
+            body[data-theme="dark"] {
+                --ph-pt-hash-highlight: ${d};
+            }
+            .msg-list .msg .msg-body.hash-highlight {
+                background-color: var(--ph-pt-hash-highlight) !important;
+                transition: background 0.2s ease;
             }
             html {
                 scroll-behavior: smooth;
             }
-        `;
-        document.head.appendChild(style);
-
-        /**********************
-         * TÉMA FELISMERÉS
-         **********************/
-        function updateBodyTheme() {
-            const darkLink = document.querySelector('link[href*="dark_base"]');
-            let dark = false;
-
-            if (darkLink) {
-                const media = darkLink.getAttribute("media");
-                if (media === "all") dark = true;
-                else if (media === "not all") dark = false;
-                else if (media?.includes("prefers-color-scheme")) {
-                    dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                }
-            }
-
-            const btn = document.querySelector(".theme-button span");
-            if (btn && btn.classList.contains("fa-sun-bright")) dark = true;
-
-            document.body.setAttribute("data-theme", dark ? "dark" : "light");
-        }
+        `);
 
         /**********************
          * HASH KIEMELÉS
@@ -1289,8 +1695,6 @@
         }
 
         function highlightHashMsg() {
-            updateBodyTheme();
-
             const hash = window.location.hash;
             let msgId = null;
 
@@ -1370,8 +1774,7 @@
     }
 
     function offHider() {
-        const style = document.createElement('style');
-        style.innerHTML = `
+        injectStyleOnce("ph-pt-off-hider-style", `
             .off-post-animate {
                 transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
                 overflow: hidden !important;
@@ -1388,10 +1791,9 @@
                 border-bottom-width: 0 !important;
                 pointer-events: none !important;
             }
-        `;
-        document.head.appendChild(style);
+        `);
 
-        const STORAGE_KEY = "ph_hide_off";
+        const STORAGE_KEY = KEYS.STATE.HIDE_OFF;
         const STATUS = { ON: 'enabled', OFF: 'disabled' };
 
         let offHidden = storage.getItem(STORAGE_KEY) === STATUS.ON;
@@ -1500,7 +1902,7 @@
 
         const STYLE_ID = 'ph-wide-center-style';
         const ROW_CLASS = 'ph-center-row';
-        const STORAGE_KEY = 'ph_wide_view';
+        const STORAGE_KEY = KEYS.STATE.WIDE_VIEW;
 
         const STATUS = { ON: 'enabled', OFF: 'disabled' };
         const buttons = [];
@@ -1560,13 +1962,7 @@
         }
 
         function applyLayout() {
-            let style = document.getElementById(STYLE_ID);
-            if (!style) {
-                style = document.createElement('style');
-                style.id = STYLE_ID;
-                document.documentElement.appendChild(style);
-            }
-            style.textContent = buildCSS();
+            injectStyleOnce(STYLE_ID, buildCSS());
 
             const center = document.querySelector('#center');
             const row = center?.closest('.row');
@@ -1653,15 +2049,14 @@
         const LINE_COLOR   = "#C1BFB6";
         const LINE_OPACITY = 1;
         const LINE_THICK   = 1;
-        const STORAGE_KEY  = 'ph_thread_view';
+        const STORAGE_KEY  = KEYS.STATE.THREAD_VIEW;
         const STATUS       = { ON: 'enabled', OFF: 'disabled' };
 
         let threadContainerHeader = null;
         let threadActive = false;
         const buttons = [];
 
-        const style = document.createElement('style');
-        style.textContent = `
+        injectStyleOnce("ph-pt-thread-view-style", `
             li.media {
                 transition: transform 300ms ease, opacity 200ms ease;
                 will-change: transform;
@@ -1669,6 +2064,7 @@
             li.media.ph-thread {
                 position: relative;
                 z-index: 1;
+                box-sizing: border-box;
             }
             li.media.ph-thread:hover {
                 z-index: 10;
@@ -1682,7 +2078,7 @@
                 top: 0;
                 bottom: 0;
                 pointer-events: none;
-                left: calc(-1 * var(--indent));
+                left: 0;
             }
             .thread-line-vert {
                 position: absolute;
@@ -1705,8 +2101,7 @@
                 opacity: ${LINE_OPACITY};
                 box-sizing: border-box;
             }
-        `;
-        document.head.appendChild(style);
+        `);
 
         function saveState(active) {
             storage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
@@ -1762,7 +2157,8 @@
                 el.classList.add('ph-thread');
                 const currentIndent = depth * INDENT;
                 el.style.setProperty('--indent', currentIndent + 'px');
-                el.style.marginLeft = currentIndent + 'px';
+                el.style.marginLeft = "0px";
+                el.style.paddingLeft = currentIndent + "px";
 
                 if (depth > 0) {
                     let box = el.querySelector('.thread-lines');
@@ -1839,6 +2235,7 @@
                 originalOrder.forEach(li => {
                     li.classList.remove('ph-thread');
                     li.style.marginLeft = '';
+                    li.style.paddingLeft = '';
                     li.style.setProperty('--indent', '0px');
                     const box = li.querySelector('.thread-lines');
                     if (box) box.remove();
@@ -2091,7 +2488,7 @@
     }
 
     function hideUsers() {
-        const STORAGE_KEY = "ph_hidden_users";
+        const STORAGE_KEY = KEYS.STATE.HIDDEN_USERS;
         let hiddenUsers;
         const dropdownRefreshers = [];
         try {
@@ -2100,24 +2497,8 @@
             hiddenUsers = [];
         }
 
-        // ===== TÉMA FELISMERÉS =====
-        function detectDark() {
-            const darkLink = document.querySelector('link[href*="dark_base"]');
-            if (darkLink) {
-                const media = darkLink.getAttribute("media");
-                if (media === "all") return true;
-                if (media === "not all") return false;
-                if (media?.includes("prefers-color-scheme")) {
-                    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-                }
-            }
-            const btn = document.querySelector(".theme-button span");
-            if (btn) return btn.classList.contains("fa-sun-bright");
-            return false;
-        }
-
         function getHiddenBarColors() {
-            const dark = detectDark();
+            const dark = document.body.dataset.theme === "dark";
             if (dark) {
                 return { base: "rgb(20 19 15)",hover: "rgba(255,255,255,0.15)", color: "white" };
             } else {
@@ -2127,14 +2508,7 @@
 
         function applyHiddenBarStyle() {
             const { base, hover, color } = getHiddenBarColors();
-            let styleEl = document.querySelector("#ph-hidden-bar-style");
-            if (!styleEl) {
-                styleEl = document.createElement("style");
-                styleEl.id = "ph-hidden-bar-style";
-                document.head.appendChild(styleEl);
-            }
-
-            styleEl.textContent = `
+            injectStyleOnce("ph-pt-hidden-bar-style", `
                 .hidden-bar {
                     background: ${base};
                     color: ${color};
@@ -2152,15 +2526,16 @@
                 }
                 .ph-collapsible {
                     transition: max-height 0.4s ease;
+                    overflow: visible;
                 }
                 .ph-collapsible[data-collapsed="true"] {
                     overflow: hidden;
                 }
-            `;
+            `);
         }
 
         applyHiddenBarStyle();
-        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyHiddenBarStyle);
+        document.addEventListener("ph-pt-theme-changed", applyHiddenBarStyle);
 
         // ===== SEGÉDFÜGGVÉNYEK =====
         function getAuthor(msg) {
@@ -2330,13 +2705,7 @@
             const bg = buttonPlaceholder ? getComputedStyle(buttonPlaceholder).backgroundColor : "white";
             const color = buttonPlaceholder ? getComputedStyle(buttonPlaceholder).color : "black";
 
-            let style = document.querySelector("#ph-dual-list-style");
-            if (!style) {
-                style = document.createElement("style");
-                style.id = "ph-dual-list-style";
-                document.head.appendChild(style);
-            }
-            style.textContent = `
+            injectStyleOnce("ph-pt-dual-list-style", `
                 .ph-editor-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px);}
                 .ph-editor-panel { background: ${bg}; padding: 20px; border-radius: 5px; min-width: 400px; max-width: 600px; color: ${color}; }
                 .dual-list-container { display: flex; gap: 10px; margin-top: 10px; }
@@ -2346,7 +2715,7 @@
                 .dual-list-buttons { display: flex; flex-direction: column; justify-content: center; gap: 5px; }
                 .dual-list-buttons button { width: 36px; height: 36px; font-weight: bold; border-radius: 3px; cursor: pointer; }
                 .editor-buttons { margin-top: 10px; display: flex; gap: 5px; justify-content: flex-end; }
-            `;
+            `);
 
             const overlay = document.createElement("div");
             overlay.className = "ph-editor-overlay";
@@ -2507,7 +2876,7 @@
     }
 
     function markNewPosts() {
-        const MAP_KEY = "ph_topic_max_id_map";
+        const MAP_KEY = KEYS.STATE.TOPIC_MAX_ID_MAP;
 
         /* =========================
            COLOR HANDLING
@@ -2526,14 +2895,12 @@
         }
 
         function initStyle() {
-            const style = document.createElement("style");
-            style.textContent = `
+            injectStyleOnce("ph-pt-mark-new-posts-style",  `
                 .ph-new-post-header {
                     box-shadow: var(--ph-mark-color) 5px 0 0 0 inset !important;
                     transition: box-shadow 1s ease;
                 }
-            `;
-            document.head.appendChild(style);
+            `);
         }
 
         function observeThemeChanges() {
@@ -2590,7 +2957,7 @@
             let baseId;
 
             // Ha van mindkettő, a nagyobbat használjuk (stored vs hash)
-            // (urlMax nálad: #msgN esetén N-1)
+            // (urlMax #msgN esetén N-1)
             if (stored !== null && urlMax !== null) {
                 baseId = Math.max(stored, urlMax);
             } else if (stored !== null) {
@@ -2697,7 +3064,7 @@
             { code: ':kocsog:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_v0mhygvcf47tipdb_kocsog.gif' },
             { code: ':lama:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_oknfqsidavmhgeuq_lama.gif' },
             { code: ':nem:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_occldijkfqjrfjce_nem.gif' },
-            { code: ':igen:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_m97zu6ylsflhdw5g_igen.gif' }
+            { code: ':igen:', src: 'https://cdn.rios.hu/dl/upc/2026-02/19/413301_m97zu6ylsflhdw5g_igen.gif' },
         ];
 
         // --- Segédfüggvény: van-e kód bármelyik szövegcsomópontban ---
@@ -2814,7 +3181,7 @@
 
             // Beszúrás (TinyMCE kompatibilis)
             const imgHTML = `<img src="${smiley.src}" alt="${smiley.code}" data-mce-src="${smiley.src}" style="vertical-align: middle;">`;
-            document.execCommand('insertHTML', false, imgHTML);
+            insertHtmlIntoEditor(editor, imgHTML);
         }
 
         // --- Gombok létrehozása a kiterjesztett szmájlisorhoz ---
@@ -2882,8 +3249,8 @@
     function kekShUploader() {
         /* ================= CONFIG ================= */
 
-        const LS_KEY = "ph_kek_gallery";
-        const DELETED_KEY = "ph_kek_gallery_deleted";
+        const LS_KEY = KEYS.KEK.GALLERY;
+        const DELETED_KEY = KEYS.KEK.GALLERY_DELETED;
 
         function loadDeletedMap() {
             const obj = safeJsonParse(storage.getItem(DELETED_KEY) || "{}", {});
@@ -2914,12 +3281,6 @@
         // UI
         const GALLERY_MAX_HEIGHT_PX = 420;
         const GRID_THUMB_SIZE_PX = 120;
-
-        /* ================= STATE ================= */
-
-        function safeJsonParse(str, fallback) {
-            try { return JSON.parse(str); } catch { return fallback; }
-        }
 
         /* ================= GM REQUEST ================= */
 
@@ -3007,13 +3368,6 @@
             return root.querySelector(".rtif-content[contenteditable='true']");
         }
 
-        function insertHtml(editor, html) {
-            if (!editor) return false;
-            editor.focus();
-            document.execCommand("insertHTML", false, html);
-            return true;
-        }
-
         function escapeHtml(text) {
             return String(text)
                 .replaceAll("&", "&amp;")
@@ -3031,31 +3385,26 @@
         /* ================= UI ================= */
 
         function injectCssOnce() {
-            if (document.getElementById("ph-kek-style")) return;
-
-            const style = document.createElement("style");
-            style.id = "ph-kek-style";
-            style.textContent = `
-            #ph-kek-upload .ph-kek-cell { position: relative; }
-            #ph-kek-upload .ph-kek-overlay { opacity: 0; pointer-events: none; }
-            #ph-kek-upload .ph-kek-cell:hover .ph-kek-overlay {
-                opacity: 1 !important;
-                pointer-events: auto !important;
-            }
-            #ph-kek-upload .ph-kek-overlay button.btn {
-                padding: 2px 6px;
-                line-height: 1.1;
-                font-size: 11px;
-            }
-            #ph-kek-upload #ph-kek-sync-badge {
-                font-size: 12px;
-                padding: 2px 6px;
-                border-radius: 10px;
-                background: rgba(0,0,0,0.06);
-            }
-            #ph-kek-sync-badge:empty { display: none; }
-        `;
-            document.head.appendChild(style);
+            injectStyleOnce("ph-pt-kek-sh-uploader-style", `
+                #ph-kek-upload .ph-kek-cell { position: relative; }
+                #ph-kek-upload .ph-kek-overlay { opacity: 0; pointer-events: none; }
+                #ph-kek-upload .ph-kek-cell:hover .ph-kek-overlay {
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                }
+                #ph-kek-upload .ph-kek-overlay button.btn {
+                    padding: 2px 6px;
+                    line-height: 1.1;
+                    font-size: 11px;
+                }
+                #ph-kek-upload #ph-kek-sync-badge {
+                    font-size: 12px;
+                    padding: 2px 6px;
+                    border-radius: 10px;
+                    background: rgba(0,0,0,0.06);
+                }
+                #ph-kek-sync-badge:empty { display: none; }
+            `);
         }
 
         function updateSyncBadge() {
@@ -3096,8 +3445,9 @@
             }
         }
 
-        const RESET_KEY = "ph_kek_gallery_reset_ts";
-        const SEEN_RESET_KEY = "ph_kek_gallery_seen_reset_ts";
+        const RESET_KEY = KEYS.KEK.GALLERY_RESET_TS;
+        const SEEN_RESET_KEY = KEYS.KEK.GALLERY_SEEN_RESET_TS;
+        // NOTE: KEYS.KEK.GALLERY_SEEN_RESET_TS = local-only ack, don't sync
 
         function applyGalleryResetIfNeeded() {
             const resetTs = parseInt(storage.getItem(RESET_KEY) || "0", 10) || 0;
@@ -3105,7 +3455,8 @@
 
             if (resetTs > 0 && resetTs > seenTs) {
                 // volt egy új “mind törlés” másik gépről → dobjuk a lokális galériát
-                localStorage.removeItem(LS_KEY); // vagy storage.removeItem(LS_KEY) ha elérhető itt
+                storage.removeItem(LS_KEY);
+                // local-only ack, do NOT sync
                 localStorage.setItem(SEEN_RESET_KEY, String(resetTs));
             }
         }
@@ -3491,8 +3842,8 @@
                     return;
                 }
 
-                storage.setItem("ph_kek_gallery_reset_ts", String(Date.now()));
-                storage.removeItem("ph_kek_gallery_deleted");
+                storage.setItem(KEYS.KEK.GALLERY_RESET_TS, String(Date.now()));
+                storage.removeItem(KEYS.KEK.GALLERY_DELETED);
                 await clearGallery();
 
                 if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
@@ -3547,13 +3898,13 @@
                 const editor = findEditorNear(wrapper);
 
                 if (action === "insert-image") {
-                    const ok = insertHtml(editor, `<img src="${escapeHtml(url)}" alt="">`);
+                    const ok = insertHtmlIntoEditor(editor, `<img src="${escapeHtml(url)}" alt="">`);
                     setStatus(wrapper, ok ? "✅ Kép beszúrva" : "❌ Nem találom az editort");
                     return;
                 }
 
                 if (action === "insert-link") {
-                    const ok = insertHtml(editor, buildLinkHtml(url));
+                    const ok = insertHtmlIntoEditor(editor, buildLinkHtml(url));
                     setStatus(wrapper, ok ? "✅ Link beszúrva" : "❌ Nem találom az editort");
                     return;
                 }
