@@ -1344,6 +1344,11 @@
                 }
                 .msg-head-options .ph-pt-chain-link .ph-pt-chain-text { margin-left: 4px; }
                 .msg-head-options .ph-pt-chain-link:hover .ph-pt-chain-text { text-decoration: underline; }
+                @media (max-width: 419.98px) {
+                    .msg-head-options .ph-pt-chain-link .ph-pt-chain-text {
+                        display: none !important;
+                    }
+                }
             `);
         }
 
