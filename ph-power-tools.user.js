@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.1.0
+// @version      2.1.1
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -1344,6 +1344,11 @@
                 }
                 .msg-head-options .ph-pt-chain-link .ph-pt-chain-text { margin-left: 4px; }
                 .msg-head-options .ph-pt-chain-link:hover .ph-pt-chain-text { text-decoration: underline; }
+                @media (max-width: 419.98px) {
+                    .msg-head-options .ph-pt-chain-link .ph-pt-chain-text {
+                        display: none !important;
+                    }
+                }
             `);
         }
 
