@@ -10,8 +10,8 @@
 //
 // @homepageURL  https://github.com/lkristof/userscripts
 // @supportURL   https://github.com/lkristof/userscripts/issues
-// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ph-giveaway-answer-check.user.js
-// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ph-giveaway-answer-check.user.js
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/prohardver/ph-giveaway-answer-check.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/prohardver/ph-giveaway-answer-check.user.js
 //
 // @grant        GM_xmlhttpRequest
 // @run-at       document-idle
