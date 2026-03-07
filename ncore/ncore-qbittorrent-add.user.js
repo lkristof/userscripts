@@ -9,8 +9,8 @@
 //
 // @homepageURL  https://github.com/lkristof/userscripts
 // @supportURL   https://github.com/lkristof/userscripts/issues
-// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-qbittorrent-add.user.js
-// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-qbittorrent-add.user.js
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-qbittorrent-add.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-qbittorrent-add.user.js
 //
 // @grant        GM_xmlhttpRequest
 // @grant        GM.getValue
