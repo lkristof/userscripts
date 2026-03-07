@@ -60,26 +60,112 @@
     }
 
     /* ---------------- Toast ---------------- */
-    function toast(msg, color = "#2ecc71") {
-        const t = document.createElement("div");
+    let toastContainer = null;
+    function getToastContainer() {
+        if (!toastContainer) {
+            toastContainer = document.createElement("div");
+            Object.assign(toastContainer.style, {
+                position: "fixed",
+                bottom: "20px",
+                right: "20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                zIndex: 99999
+            });
+            document.body.appendChild(toastContainer);
+        }
+        return toastContainer;
+    }
 
-        Object.assign(t.style, {
-            position: "fixed",
-            bottom: "20px",
-            right: "20px",
-            background: color,
-            color: "#fff",
-            padding: "10px 14px",
-            borderRadius: "6px",
-            fontWeight: "bold",
-            zIndex: 99999,
-            boxShadow: "0 3px 10px rgba(0,0,0,.3)"
+    function showToast(message, type = 'success', duration = 3000) {
+        const container = getToastContainer();
+
+        const toast = document.createElement('div');
+        Object.assign(toast.style, {
+            position: 'relative',
+            overflow: 'hidden',
+            padding: '12px 18px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            color: '#fff',
+            minWidth: '220px',
+            opacity: '0',
+            transform: 'translateX(20px)',
+            transition: 'all 0.3s ease',
+            backgroundColor: type === 'success' ? '#2ecc71' : '#e74c3c',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
         });
 
-        t.textContent = msg;
-        document.body.appendChild(t);
+        const text = document.createElement('div');
+        text.textContent = message;
 
-        setTimeout(() => t.remove(), 2500);
+        const bar = document.createElement('div');
+        Object.assign(bar.style, {
+            position: 'absolute',
+            left: '0',
+            bottom: '0',
+            height: '3px',
+            width: '100%',
+            background: 'rgba(255,255,255,0.9)',
+            transformOrigin: 'left',
+            transform: 'scaleX(1)',
+        });
+
+        const animName = `toastBar_${Math.random().toString(16).slice(2)}`;
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes ${animName} {
+              from { transform: scaleX(1); }
+              to   { transform: scaleX(0); }
+            }`;
+        document.head.appendChild(style);
+
+        bar.style.animation = `${animName} ${duration}ms linear forwards`;
+
+        toast.appendChild(text);
+        toast.appendChild(bar);
+        container.appendChild(toast);
+
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(0)';
+        });
+
+        if (container.children.length > 5) container.removeChild(container.firstChild);
+
+        let remaining = duration;
+        let start = Date.now();
+        let timeout;
+
+        function removeToast() {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(20px)';
+            setTimeout(() => {
+                toast.remove();
+                style.remove();
+            }, 300);
+        }
+
+        function startTimer(time) {
+            start = Date.now();
+            timeout = setTimeout(removeToast, Math.max(0, time));
+        }
+
+        startTimer(remaining);
+
+        toast.addEventListener('mouseenter', () => {
+            bar.style.animationPlayState = 'paused';
+            clearTimeout(timeout);
+            const elapsed = Date.now() - start;
+            remaining -= elapsed;
+        });
+
+        toast.addEventListener('mouseleave', () => {
+            bar.style.animationPlayState = 'running';
+            startTimer(remaining);
+        });
     }
 
     /* ---------------- Send torrent ---------------- */
@@ -102,14 +188,12 @@
             url: QB_URL + "/api/v2/torrents/add",
             data: form,
             onload: function () {
-                toast("Torrent elküldve qBittorrentbe");
+                showToast("Torrent elküldve qBittorrentbe", "success");
             },
             onerror: function () {
-                toast("Hiba qBittorrent küldésnél", "#e74c3c");
+                showToast("Hiba qBittorrent küldésnél", "error");
             }
         });
-
-        toast("Torrent elküldve qBittorrentbe");
     }
 
     /* ---------------- Inject qB button ---------------- */
@@ -161,7 +245,7 @@
             if (!url) return;
 
             await gmSet(KEY, url);
-            toast("qB URL elmentve");
+            showToast("qB URL elmentve", "success");
         };
 
         const wrap = document.createElement("span");
