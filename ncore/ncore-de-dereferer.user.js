@@ -9,8 +9,8 @@
 //
 // @homepageURL  https://github.com/lkristof/userscripts
 // @supportURL   https://github.com/lkristof/userscripts/issues
-// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-de-dereferer.user.js
-// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-de-dereferer.user.js
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-de-dereferer.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-de-dereferer.user.js
 //
 // @grant        none
 // @run-at       document-idle

@@ -9,8 +9,8 @@
 //
 // @homepageURL  https://github.com/lkristof/userscripts
 // @supportURL   https://github.com/lkristof/userscripts/issues
-// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-torrent-highlight.user.js
-// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ncore-torrent-highlight.user.js
+// @downloadURL  https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-torrent-highlight.user.js
+// @updateURL    https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-torrent-highlight.user.js
 //
 // @grant        none
 // @run-at       document-idle
