@@ -2552,7 +2552,6 @@
                     font-size: 13px;
                     padding: 4px 8px;
                     cursor: pointer;
-                    position: sticky;
                     top: 0;
                     z-index: 105;
                     text-align: center;
