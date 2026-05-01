@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.1.2
+// @version      2.2.0
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -585,10 +585,10 @@
         li.className = 'dropdown';
 
         li.innerHTML = `
-            <a href="javascript:;" class="btn dropdown-toggle ph-power-btn"
+            <a href="javascript:;" class="nav-btn dropdown-toggle ph-power-btn"
                 data-toggle="dropdown"
                 title="PH Power Tools beállítások">
-                <span class="fas fa-sliders-h"></span>
+                <span class="fas fa-sliders-h fa-fw"></span>
             </a>
             <div class="dropdown-menu dropdown-menu-right p-2 ph-power-menu">
                 <h6 class="dropdown-header"
@@ -1188,12 +1188,12 @@
 
     function injectBaseStyle() {
         injectStyleOnce('ph-pt-base-style', `
-            li.media {
+            li[data-id] {
                 position: relative;
                 z-index: 1;
             }
-            li.media:has(.dropdown-menu.show),
-            li.media:focus-within {
+            li[data-id]:has(.dropdown-menu.show),
+            li[data-id]:focus-within {
                 z-index: 100 !important;
             }
             .ph-acc-header {
@@ -1363,23 +1363,16 @@
                 body[data-theme="light"] { ${paletteToCssVars(pal, "light")} }
                 body[data-theme="dark"]  { ${paletteToCssVars(pal, "dark")} }
             
-                .msg .msg-body.ph-pt-colorize { transition: all 0.2s ease; } 
-                .msg .msg-body.ph-pt-akcio        { background-color: var(--ph-pt-akcio) !important; }
-                .msg .msg-body.ph-pt-own          { background-color: var(--ph-pt-own) !important; }
-                .msg .msg-body.ph-pt-reply        { background-color: var(--ph-pt-reply) !important; }
-                .msg .msg-body.ph-pt-focus-author { background-color: var(--ph-pt-focus-author) !important; }
-                .msg .msg-body.ph-pt-focus-reply  { background-color: var(--ph-pt-focus-reply) !important; }
+                .message .message-body.ph-pt-colorize { transition: all 0.2s ease; } 
+                .message .message-body.ph-pt-akcio        { background-color: var(--ph-pt-akcio) !important; }
+                .message .message-body.ph-pt-own          { background-color: var(--ph-pt-own) !important; }
+                .message .message-body.ph-pt-reply        { background-color: var(--ph-pt-reply) !important; }
+                .message .message-body.ph-pt-focus-author { background-color: var(--ph-pt-focus-author) !important; }
+                .message .message-body.ph-pt-focus-reply  { background-color: var(--ph-pt-focus-reply) !important; }
             
-                .msg .msg-body.ph-pt-chain {
+                .message .message-body.ph-pt-chain {
                     background-color: var(--ph-pt-chain-bg) !important;
                     box-shadow: inset 5px 0 0 0 var(--ph-pt-chain-border) !important;
-                }
-                .msg-head-options .ph-pt-chain-link .ph-pt-chain-text { margin-left: 4px; }
-                .msg-head-options .ph-pt-chain-link:hover .ph-pt-chain-text { text-decoration: underline; }
-                @media (max-width: 419.98px) {
-                    .msg-head-options .ph-pt-chain-link .ph-pt-chain-text {
-                        display: none !important;
-                    }
                 }
             `);
         }
@@ -1399,15 +1392,15 @@
          * SEGÉDEK
          **********************/
         function getAuthor(msg) {
-            return msg.querySelector(".msg-head-author .user-title a")?.textContent?.trim() || "";
+            return msg.querySelector(".message-head-user .user-title .user-link")?.textContent?.trim() || "";
         }
 
         function getRepliedTo(msg) {
-            return msg.querySelector(".msg-head-replied .user-title a")?.textContent?.trim() || "";
+            return msg.querySelector(".message-body-reply .user-title .user-link")?.textContent?.trim() || "";
         }
 
         function getAllLis() {
-            return Array.from(document.querySelectorAll("li.media[data-id]"));
+            return Array.from(document.querySelectorAll("li[data-id]"));
         }
 
         /**********************
@@ -1448,8 +1441,8 @@
          * FŐ SZÍNEZÉS
          **********************/
         function recolorAll() {
-            document.querySelectorAll(".msg").forEach(msg => {
-                const body = msg.querySelector(".msg-body");
+            document.querySelectorAll(".message").forEach(msg => {
+                const body = msg.querySelector(".message-body");
                 if (!body) return;
 
                 // base class
@@ -1469,7 +1462,7 @@
                 const author = getAuthor(msg);
                 const replied = getRepliedTo(msg);
 
-                const li = msg.closest("li.media[data-id]");
+                const li = msg.closest("li[data-id]");
                 const msgId = li?.dataset?.id;
 
                 // 1) #akció
@@ -1511,7 +1504,7 @@
             e.preventDefault();
             e.stopPropagation();
 
-            const msg = e.target.closest(".msg");
+            const msg = e.target.closest(".message");
             if (!msg) return;
 
             const author = getAuthor(msg);
@@ -1525,8 +1518,8 @@
 
         function attachAvatarHandlers() {
             const selectors = [
-                ".msg-user img",           // Desktop/Normál avatar a body-ban
-                ".user-face-circle img"    // Mobilos/Fejléc avatar a kör alakú wrapper-ben
+                ".message-head-user .user-face img",
+                ".message-body-user .user-face img"
             ];
 
             document.querySelectorAll(selectors.join(", ")).forEach(img => {
@@ -1540,27 +1533,24 @@
          * LÁNC LINK
          **********************/
         function attachChainLinks() {
-            document.querySelectorAll(".msg-head-options").forEach(opts => {
+            document.querySelectorAll(".message-head-btns").forEach(opts => {
                 if (opts.querySelector(".ph-pt-chain-link")) return;
 
-                const wrapper = document.createElement("span");
-                wrapper.className = "ph-pt-chain-link";
-
-                wrapper.style.cursor = "pointer";
-                wrapper.style.marginLeft = "8px";
-                wrapper.style.display = "inline-flex";
-                wrapper.style.alignItems = "center";
+                const wrapper = document.createElement("a");
+                wrapper.className = "ph-pt-chain-link message-head-btn";
+                wrapper.href = "javascript:;";
+                wrapper.role = "button";
 
                 wrapper.innerHTML = `
                     <span class="fas fa-link fa-fw"></span>
-                    <span class="ph-pt-chain-text">Lánc</span>
+                    <span class="ph-pt-chain-text d-none d-sm-inline">Lánc</span>
                 `;
 
                 wrapper.addEventListener("click", e => {
                     e.preventDefault();
                     e.stopPropagation();
 
-                    const li = opts.closest("li.media[data-id]");
+                    const li = opts.closest("li[data-id]");
                     if (!li) return;
 
                     // HA LÁNCRA KATTINTASZ: Töröljük a kijelölt felhasználót
@@ -1694,7 +1684,7 @@
             body[data-theme="dark"] {
                 --ph-pt-hash-highlight: ${d};
             }
-            .msg-list .msg .msg-body.hash-highlight {
+            li[data-id] .message-body.hash-highlight {
                 background-color: var(--ph-pt-hash-highlight) !important;
                 transition: background 0.2s ease;
             }
@@ -1710,7 +1700,7 @@
         let lastHash = null;
 
         function getPosts() {
-            return [...document.querySelectorAll('li.media[data-id]')];
+            return [...document.querySelectorAll('li[data-id]')];
         }
 
         function findClosestPost(posts, targetId) {
@@ -1746,15 +1736,14 @@
                 return;
             }
 
-            document.querySelectorAll(".msg-body.hash-highlight")
+            document.querySelectorAll(".message-body.hash-highlight")
                 .forEach(b => b.classList.remove("hash-highlight"));
 
-            let body = document.querySelector(
-                `li.media[data-id="${msgId}"] .msg-body`
-            );
+            let body = document.querySelector(`li[data-id="${msgId}"] .message-body`);
 
             if (!body) {
-                body = findClosestPost(getPosts(), msgId)?.querySelector('.msg-body');
+                const closest = findClosestPost(getPosts(), msgId);
+                body = closest?.querySelector('.message-body');
             }
 
             if (!body) return;
@@ -1771,10 +1760,10 @@
          * DUPLA KATT: kijelölés
          **********************/
         document.addEventListener("dblclick", (e) => {
-            const header = e.target.closest(".msg-header");
+            const header = e.target.closest(".message-head");
             if (!header) return;
 
-            const li = header.closest("li.media[data-id]");
+            const li = header.closest("li[data-id]");
             if (!li) return;
 
             const id = li.dataset.id;
@@ -1837,8 +1826,8 @@
         const buttons = [];
 
         function getOffPosts() {
-            return Array.from(document.querySelectorAll('.msg, .topic, .msg-off')).filter(post =>
-                post.textContent.includes('[OFF]') || post.classList.contains('msg-off')
+            return Array.from(document.querySelectorAll('.message-off, .message')).filter(post =>
+                post.textContent.includes('[OFF]') || post.classList.contains('message-off')
             );
         }
 
@@ -2094,20 +2083,20 @@
         const buttons = [];
 
         injectStyleOnce("ph-pt-thread-view-style", `
-            li.media {
+            li[data-id] {
                 transition: transform 300ms ease, opacity 200ms ease;
                 will-change: transform;
             }
-            li.media.ph-thread {
+            li[data-id].ph-thread {
                 position: relative;
                 z-index: 1;
                 box-sizing: border-box;
             }
-            li.media.ph-thread:hover {
+            li[data-id].ph-thread:hover {
                 z-index: 10;
             }
-            li.media.ph-thread:has(.dropdown-menu.show),
-            li.media.ph-thread:focus-within {
+            li[data-id].ph-thread:has(.dropdown-menu.show),
+            li[data-id].ph-thread:focus-within {
                 z-index: 100 !important;
             }
             .thread-lines {
@@ -2153,13 +2142,13 @@
             if (!threadContainerHeader) return;
 
             let ul = threadContainerHeader.nextElementSibling;
-            while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
+            while (ul && !(ul.tagName === 'UL' && ul.classList.length === 0)) {
                 ul = ul.nextElementSibling;
             }
             if (!ul) return;
 
             // Adatgyűjtés
-            const allMedia = [...ul.querySelectorAll('li.media')];
+            const allMedia = [...ul.querySelectorAll('li[data-id]')];
             const items = allMedia.filter(li => li.dataset.id);
 
             if (!items.length) return;
@@ -2249,19 +2238,19 @@
         function initOriginalOrder() {
             if (!threadContainerHeader) return;
             let ul = threadContainerHeader.nextElementSibling;
-            while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
+            while (ul && !(ul.tagName === 'UL' && ul.classList.length === 0)) {
                 ul = ul.nextElementSibling;
             }
             if (!ul) return;
 
-            originalOrder = [...ul.querySelectorAll('li.media')];
+            originalOrder = [...ul.querySelectorAll('li[data-id]')];
         }
 
         function restoreOriginalOrder() {
             if (!threadContainerHeader) return;
 
             let ul = threadContainerHeader.nextElementSibling;
-            while (ul && !(ul.tagName === 'UL' && ul.classList.contains('list-unstyled'))) {
+            while (ul && !(ul.tagName === 'UL' && ul.classList.length === 0)) {
                 ul = ul.nextElementSibling;
             }
             if (!ul) return;
@@ -2338,7 +2327,7 @@
         }
 
         function animateReorder(ul, reorderFn) {
-            const items = [...ul.querySelectorAll('li.media')];
+            const items = [...ul.querySelectorAll('li[data-id]')];
 
             // FIRST – pozíció mentése
             const firstRects = new Map();
@@ -2384,7 +2373,7 @@
 
     function keyboardNavigation() {
         function getPosts() {
-            return [...document.querySelectorAll('li.media[data-id]')];
+            return [...document.querySelectorAll('li[data-id]')];
         }
 
         function getCurrentIndex(posts) {
@@ -2575,17 +2564,17 @@
 
         // ===== SEGÉDFÜGGVÉNYEK =====
         function getAuthor(msg) {
-            return msg.querySelector(".msg-head-author .user-title a")?.textContent?.trim() || "";
+            return msg.querySelector(".message-head-user .user-title .user-link")?.textContent?.trim() || "";
         }
 
         function getPosts() {
-            return Array.from(document.querySelectorAll("li.media[data-id]"));
+            return Array.from(document.querySelectorAll("li[data-id]"));
         }
 
         function updateHiddenComments() {
             getPosts().forEach(li => {
                 injectDropdownToggle(li);
-                const msg = li.querySelector(".msg");
+                const msg = li.querySelector(".message");
                 if (!msg) return;
                 const author = getAuthor(msg);
                 const isHidden = hiddenUsers.includes(author);
@@ -2662,7 +2651,7 @@
         }
 
         function injectDropdownToggle(li) {
-            const msg = li.querySelector(".msg");
+            const msg = li.querySelector(".message");
             if (!msg) return;
 
             const author = getAuthor(msg);
@@ -2681,7 +2670,7 @@
             a.href = "javascript:;";
 
             function refreshText() {
-                const currentAuthor = getAuthor(li.querySelector(".msg"));
+                const currentAuthor = getAuthor(li.querySelector(".message"));
                 const hidden = hiddenUsers.includes(currentAuthor);
                 a.innerHTML = hidden
                     ? `<span class="fas fa-eye fa-fw"></span> Felhasználó feloldása`
@@ -2919,7 +2908,7 @@
         ========================== */
 
         function detectLinkColor() {
-            const sample = document.querySelector('.msg-head-options a');
+            const sample = document.querySelector('.message-head-btns a');
             return sample
                 ? window.getComputedStyle(sample).color
                 : "#4a90e2";
@@ -2979,7 +2968,7 @@
             const map = readMap();
 
             const urlMax = getMaxFromURL();
-            const comments = Array.from(document.querySelectorAll("li.media[data-id]"));
+            const comments = Array.from(document.querySelectorAll("li[data-id]"));
 
             if (!comments.length) return;
 
@@ -3010,7 +2999,7 @@
             // Jelölés
             comments.forEach(comment => {
                 const id = parseInt(comment.dataset.id, 10);
-                const header = comment.querySelector(".msg-header");
+                const header = comment.querySelector(".message-head");
 
                 if (id && header && id > baseId) {
                     header.classList.add("ph-new-post-header");
