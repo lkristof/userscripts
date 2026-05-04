@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.2.1
+// @version      2.2.2
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -1298,10 +1298,29 @@
         initThemeSync();
         injectBaseStyle();
         await mountHeaderUi();
+        stickyFooterHide();
         runEnabledModules();
     }
 
     await initApp();
+
+    function stickyFooterHide() {
+        const footer = document.querySelector('#footer-sticky');
+        if (!footer) return;
+
+        footer.style.transition = 'transform 0.25s ease';
+
+        let lastY = window.scrollY;
+        window.addEventListener('scroll', () => {
+            const currentY = window.scrollY;
+            if (currentY > lastY && currentY > 80) {
+                footer.style.transform = 'translateY(100%)';
+            } else {
+                footer.style.transform = 'translateY(0)';
+            }
+            lastY = currentY;
+        }, { passive: true });
+    }
 
     function runEnabledModules() {
         const isTema = isOnPage("tema");
