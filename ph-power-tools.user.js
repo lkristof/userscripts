@@ -1073,15 +1073,41 @@
 
         const toggleBtn = li.querySelector('.ph-power-btn');
         const applyBtn = li.querySelector('.ph-apply-btn');
+        const menu = li.querySelector('.dropdown-menu');
+
+        function resetAccordionHeights() {
+            li.querySelectorAll('.ph-acc-body').forEach(body => {
+                body.style.maxHeight = null;
+            });
+        }
+
+        function applyAccordionHeights() {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    li.querySelectorAll('.ph-acc-body.open').forEach(body => {
+                        body.style.maxHeight = body.scrollHeight + "px";
+                    });
+                });
+            });
+        }
+
+        const dropdownObserver = new MutationObserver((mutations) => {
+            mutations.forEach(m => {
+                if (m.attributeName === 'class') {
+                    const isOpen = menu.classList.contains('show');
+                    if (isOpen) {
+                        applyAccordionHeights();
+                    } else {
+                        resetAccordionHeights();
+                    }
+                }
+            });
+        });
+
+        dropdownObserver.observe(menu, { attributes: true });
 
         toggleBtn.addEventListener('click', () => {
-            setTimeout(() => {
-                toggleBtn.blur();
-
-                li.querySelectorAll('.ph-acc-body.open').forEach(body => {
-                    body.style.maxHeight = body.scrollHeight + "px";
-                });
-            }, 50);
+            setTimeout(() => toggleBtn.blur(), 50);
         });
 
         // Dropdown item click
@@ -1100,7 +1126,6 @@
             });
         });
 
-        const menu = li.querySelector('.dropdown-menu');
         menu.addEventListener('click', e => e.stopPropagation());
 
         applyBtn.addEventListener('click', async () => {
