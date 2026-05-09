@@ -1188,14 +1188,6 @@
 
     function injectBaseStyle() {
         injectStyleOnce('ph-pt-base-style', `
-            li[data-id] {
-                position: relative;
-                z-index: 1;
-            }
-            li[data-id]:has(.dropdown-menu.show),
-            li[data-id]:focus-within {
-                z-index: 100 !important;
-            }
             .ph-acc-header {
                 font-weight: 600;
                 cursor: pointer;
@@ -2085,19 +2077,6 @@
         injectStyleOnce("ph-pt-thread-view-style", `
             li[data-id] {
                 transition: transform 300ms ease, opacity 200ms ease;
-                will-change: transform;
-            }
-            li[data-id].ph-thread {
-                position: relative;
-                z-index: 1;
-                box-sizing: border-box;
-            }
-            li[data-id].ph-thread:hover {
-                z-index: 10;
-            }
-            li[data-id].ph-thread:has(.dropdown-menu.show),
-            li[data-id].ph-thread:focus-within {
-                z-index: 100 !important;
             }
             .thread-lines {
                 position: absolute;
