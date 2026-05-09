@@ -1535,8 +1535,8 @@
 
         function attachAvatarHandlers() {
             const selectors = [
-                ".message-head-user .user-face img",
-                ".message-body-user .user-face img"
+                ".message-head-user .user-face",
+                ".message-body-user .user-face"
             ];
 
             document.querySelectorAll(selectors.join(", ")).forEach(img => {
