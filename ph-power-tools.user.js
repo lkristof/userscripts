@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.2.2
+// @version      2.2.3
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -1382,7 +1382,7 @@
             
                 .message .message-body.ph-pt-colorize { transition: all 0.2s ease; } 
                 .message .message-body.ph-pt-akcio        { background-color: var(--ph-pt-akcio) !important; }
-                .message-content-replied.ph-pt-akcio      { background-color: var(--ph-pt-akcio) !important; }
+                .message-content-replied .message-content.ph-pt-akcio { background-color: var(--ph-pt-akcio) !important; }
                 .message .message-body.ph-pt-own          { background-color: var(--ph-pt-own) !important; }
                 .message .message-body.ph-pt-reply        { background-color: var(--ph-pt-reply) !important; }
                 .message .message-body.ph-pt-focus-author { background-color: var(--ph-pt-focus-author) !important; }
@@ -1493,11 +1493,12 @@
                 // 1b) #akció az idézett (collapsed) blokkban – ha az idézet maga akciós
                 const repliedContent = body.querySelector('.message-content-replied');
                 if (repliedContent) {
+                    const repliedInner = repliedContent.querySelector('.message-content') ?? repliedContent;
                     const repliedText = lower(repliedContent.textContent);
                     if (AKCIO_KEYWORDS.some(k => repliedText.includes(k))) {
-                        repliedContent.classList.add("ph-pt-akcio");
+                        repliedInner.classList.add("ph-pt-akcio");
                     } else {
-                        repliedContent.classList.remove("ph-pt-akcio");
+                        repliedInner.classList.remove("ph-pt-akcio");
                     }
                 }
 
