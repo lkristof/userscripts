@@ -1475,7 +1475,8 @@
                     "ph-pt-chain"
                 );
 
-                const text = lower(body.textContent);
+                const messageContent = body.querySelector('.message-content:not(.message-content-replied)');
+                const text = lower(messageContent?.textContent ?? body.textContent);
                 const author = getAuthor(msg);
                 const replied = getRepliedTo(msg);
 
