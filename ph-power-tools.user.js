@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.2.1
+// @version      2.2.2
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -1073,15 +1073,41 @@
 
         const toggleBtn = li.querySelector('.ph-power-btn');
         const applyBtn = li.querySelector('.ph-apply-btn');
+        const menu = li.querySelector('.dropdown-menu');
+
+        function resetAccordionHeights() {
+            li.querySelectorAll('.ph-acc-body').forEach(body => {
+                body.style.maxHeight = null;
+            });
+        }
+
+        function applyAccordionHeights() {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    li.querySelectorAll('.ph-acc-body.open').forEach(body => {
+                        body.style.maxHeight = body.scrollHeight + "px";
+                    });
+                });
+            });
+        }
+
+        const dropdownObserver = new MutationObserver((mutations) => {
+            mutations.forEach(m => {
+                if (m.attributeName === 'class') {
+                    const isOpen = menu.classList.contains('show');
+                    if (isOpen) {
+                        applyAccordionHeights();
+                    } else {
+                        resetAccordionHeights();
+                    }
+                }
+            });
+        });
+
+        dropdownObserver.observe(menu, { attributes: true });
 
         toggleBtn.addEventListener('click', () => {
-            setTimeout(() => {
-                toggleBtn.blur();
-
-                li.querySelectorAll('.ph-acc-body.open').forEach(body => {
-                    body.style.maxHeight = body.scrollHeight + "px";
-                });
-            }, 50);
+            setTimeout(() => toggleBtn.blur(), 50);
         });
 
         // Dropdown item click
@@ -1100,7 +1126,6 @@
             });
         });
 
-        const menu = li.querySelector('.dropdown-menu');
         menu.addEventListener('click', e => e.stopPropagation());
 
         applyBtn.addEventListener('click', async () => {
@@ -1188,14 +1213,6 @@
 
     function injectBaseStyle() {
         injectStyleOnce('ph-pt-base-style', `
-            li[data-id] {
-                position: relative;
-                z-index: 1;
-            }
-            li[data-id]:has(.dropdown-menu.show),
-            li[data-id]:focus-within {
-                z-index: 100 !important;
-            }
             .ph-acc-header {
                 font-weight: 600;
                 cursor: pointer;
@@ -1365,6 +1382,7 @@
             
                 .message .message-body.ph-pt-colorize { transition: all 0.2s ease; } 
                 .message .message-body.ph-pt-akcio        { background-color: var(--ph-pt-akcio) !important; }
+                .message-content-replied.ph-pt-akcio      { background-color: var(--ph-pt-akcio) !important; }
                 .message .message-body.ph-pt-own          { background-color: var(--ph-pt-own) !important; }
                 .message .message-body.ph-pt-reply        { background-color: var(--ph-pt-reply) !important; }
                 .message .message-body.ph-pt-focus-author { background-color: var(--ph-pt-focus-author) !important; }
@@ -1458,7 +1476,8 @@
                     "ph-pt-chain"
                 );
 
-                const text = lower(body.textContent);
+                const messageContent = body.querySelector('.message-content:not(.message-content-replied)');
+                const text = lower(messageContent?.textContent ?? body.textContent);
                 const author = getAuthor(msg);
                 const replied = getRepliedTo(msg);
 
@@ -1468,6 +1487,17 @@
                 // 1) #akció
                 if (AKCIO_KEYWORDS.some(k => text.includes(k))) {
                     body.classList.add("ph-pt-akcio");
+                }
+
+                // 1b) #akció az idézett (collapsed) blokkban – ha az idézet maga akciós
+                const repliedContent = body.querySelector('.message-content-replied');
+                if (repliedContent) {
+                    const repliedText = lower(repliedContent.textContent);
+                    if (AKCIO_KEYWORDS.some(k => repliedText.includes(k))) {
+                        repliedContent.classList.add("ph-pt-akcio");
+                    } else {
+                        repliedContent.classList.remove("ph-pt-akcio");
+                    }
                 }
 
                 // 2) Avatar fókusz (prioritásban felülír mindent, mint eddig)
@@ -1518,8 +1548,8 @@
 
         function attachAvatarHandlers() {
             const selectors = [
-                ".message-head-user .user-face img",
-                ".message-body-user .user-face img"
+                ".message-head-user .user-face",
+                ".message-body-user .user-face"
             ];
 
             document.querySelectorAll(selectors.join(", ")).forEach(img => {
@@ -2085,19 +2115,6 @@
         injectStyleOnce("ph-pt-thread-view-style", `
             li[data-id] {
                 transition: transform 300ms ease, opacity 200ms ease;
-                will-change: transform;
-            }
-            li[data-id].ph-thread {
-                position: relative;
-                z-index: 1;
-                box-sizing: border-box;
-            }
-            li[data-id].ph-thread:hover {
-                z-index: 10;
-            }
-            li[data-id].ph-thread:has(.dropdown-menu.show),
-            li[data-id].ph-thread:focus-within {
-                z-index: 100 !important;
             }
             .thread-lines {
                 position: absolute;
