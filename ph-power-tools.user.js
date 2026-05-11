@@ -1476,8 +1476,9 @@
                     "ph-pt-chain"
                 );
 
-                const messageContent = body.querySelector('.message-content:not(.message-content-replied)');
-                const text = lower(messageContent?.textContent ?? body.textContent);
+                const bodyClone = body.cloneNode(true);
+                bodyClone.querySelector('.message-content-replied')?.remove();
+                const text = lower(bodyClone.textContent);
                 const author = getAuthor(msg);
                 const replied = getRepliedTo(msg);
 
