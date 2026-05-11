@@ -1382,6 +1382,7 @@
             
                 .message .message-body.ph-pt-colorize { transition: all 0.2s ease; } 
                 .message .message-body.ph-pt-akcio        { background-color: var(--ph-pt-akcio) !important; }
+                .message-content-replied.ph-pt-akcio      { background-color: var(--ph-pt-akcio) !important; }
                 .message .message-body.ph-pt-own          { background-color: var(--ph-pt-own) !important; }
                 .message .message-body.ph-pt-reply        { background-color: var(--ph-pt-reply) !important; }
                 .message .message-body.ph-pt-focus-author { background-color: var(--ph-pt-focus-author) !important; }
@@ -1486,6 +1487,17 @@
                 // 1) #akció
                 if (AKCIO_KEYWORDS.some(k => text.includes(k))) {
                     body.classList.add("ph-pt-akcio");
+                }
+
+                // 1b) #akció az idézett (collapsed) blokkban – ha az idézet maga akciós
+                const repliedContent = body.querySelector('.message-content-replied');
+                if (repliedContent) {
+                    const repliedText = lower(repliedContent.textContent);
+                    if (AKCIO_KEYWORDS.some(k => repliedText.includes(k))) {
+                        repliedContent.classList.add("ph-pt-akcio");
+                    } else {
+                        repliedContent.classList.remove("ph-pt-akcio");
+                    }
                 }
 
                 // 2) Avatar fókusz (prioritásban felülír mindent, mint eddig)
