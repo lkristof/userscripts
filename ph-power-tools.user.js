@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.2.3
+// @version      2.2.4
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -113,6 +113,7 @@
         extraSmilies: true,
         kekShUploader: true,
         giveawayAnswerChecker: true,
+        stickySidebar: true,
 
         colorizePalette: DEFAULT_COLORIZE_PALETTE,
     };
@@ -120,7 +121,8 @@
     const settingGroups = {
         appearance: {
             label: 'Megjelenés',
-            keys: ['colorize', 'markNewPosts', 'wideView', 'threadView'],
+            keys: ['colorize', 'markNewPosts', 'wideView', 'threadView',
+                'stickySidebar'],
             defaultOpen: true,
         },
         filtering: {
@@ -146,6 +148,7 @@
         markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
         extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
         kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
+        stickySidebar: 'A bal és jobb oldalsáv a képernyőn marad.',
     };
 
     function prettyName(key) {
@@ -162,6 +165,7 @@
             extraSmilies: 'Extra smiley-k',
             kekShUploader: 'kek.sh képfeltöltő',
             giveawayAnswerChecker: 'Nyereményjáték válasz ellenőrző',
+            stickySidebar: 'Fix oldalsávok',
         }[key] || key;
     }
 
@@ -1339,6 +1343,7 @@
             { name: "extraSmilies", when: () => (isTema || isPrivat) && savedSettings.extraSmilies, fn: extraSmilies },
             { name: "kekShUploader", when: () => (isTema || isPrivat) && savedSettings.kekShUploader, fn: kekShUploader },
             { name: "giveawayAnswerChecker", when: () => isNyeremenyjatek && savedSettings.giveawayAnswerChecker, fn: giveawayAnswerChecker },
+            { name: "stickySidebar", when: () => savedSettings.stickySidebar, fn: stickySidebar },
         ];
 
         for (const m of modules) {
@@ -4245,5 +4250,105 @@
         }
 
         watchWinnersList();
+    }
+
+    function stickySidebar() {
+        injectStyleOnce('ph-sticky-sidebar-style', `
+            #right.slotSingleColumn {
+                max-height: calc(100vh - 20px);
+                top: 45px;
+                position: sticky;
+                overflow-y: overlay;
+                overscroll-behavior: contain;
+                padding-left: 4px;
+                margin-left: -4px;
+            }
+            #right.slotSingleColumn::-webkit-scrollbar {
+                width: 4px;
+            }
+            #right.slotSingleColumn::-webkit-scrollbar-thumb {
+                background-color: #ccc;
+                border-radius: 10px;
+            }
+            #left {
+                max-height: calc(100vh - 20px);
+                top: 45px;
+                position: sticky;
+                overflow-y: overlay;
+                overscroll-behavior: contain;
+            }
+            .active-topic-sidebar {
+                background-color: #e9e0c9 !important;
+                font-weight: bold !important;
+                box-shadow: inset 5px 0px 0 0;
+                padding-left: 10px !important;
+            }
+            .active-topic-sidebar a {
+                color: #000 !important;
+            }
+            body[data-theme="dark"] .active-topic-sidebar {
+                background-color: #3a352a !important;
+                box-shadow: inset 5px 0px 0 0 #e0e0e0;
+            }
+            body[data-theme="dark"] .active-topic-sidebar a {
+                color: inherit !important;
+            }
+            .active-topic-header {
+                background-color: #e9e0c9 !important;
+                font-weight: bold !important;
+                box-shadow: inset 5px 0px 0 0 #000000;
+            }
+            .active-topic-header a {
+                color: #000 !important;
+            }
+            body[data-theme="dark"] .active-topic-header {
+                background-color: #3a352a !important;
+                box-shadow: inset 5px 0px 0 0 #e0e0e0;
+            }
+            body[data-theme="dark"] .active-topic-header a {
+                color: inherit !important;
+            }
+            @media (max-width: 991px) {
+                #right.slotSingleColumn {
+                    top: 5px;
+                }
+            }
+        `);
+
+        const currentMatch = window.location.pathname.match(/\/tema\/[^/]+\//);
+        if (!currentMatch) return;
+
+        const currentTopicId = currentMatch[0];
+
+        // Sidebar (#right) - desktop
+        document.querySelectorAll('.user-thread-list a').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && href.includes(currentTopicId)) {
+                const li = link.closest('li');
+                if (li) {
+                    li.classList.add('active-topic-sidebar');
+                    const sidebar = document.querySelector('#right.slotSingleColumn');
+                    if (sidebar) {
+                        const liRect = li.getBoundingClientRect();
+                        const sidebarRect = sidebar.getBoundingClientRect();
+                        const scrollTarget = sidebar.scrollTop
+                            + liRect.top
+                            - sidebarRect.top
+                            - (sidebar.clientHeight / 2)
+                            + (li.clientHeight / 2);
+                        sidebar.scrollTo({ top: scrollTarget, behavior: 'smooth' });
+                    }
+                }
+            }
+        });
+
+        // Header dropdown list - mobil/tablet
+        document.querySelectorAll('.header-thread-list a').forEach(link => {
+            const href = link.getAttribute('href');
+            if (href && href.includes(currentTopicId)) {
+                const li = link.closest('li');
+                if (li) li.classList.add('active-topic-header');
+            }
+        });
     }
 })();
