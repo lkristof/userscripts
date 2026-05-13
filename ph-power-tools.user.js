@@ -4255,11 +4255,6 @@
     function stickySidebar() {
         injectStyleOnce('ph-sticky-sidebar-style', `
             #right.slotSingleColumn {
-                max-height: calc(100vh - 20px);
-                top: 45px;
-                position: sticky;
-                overflow-y: overlay;
-                overscroll-behavior: contain;
                 padding-left: 4px;
                 margin-left: -4px;
             }
@@ -4269,13 +4264,6 @@
             #right.slotSingleColumn::-webkit-scrollbar-thumb {
                 background-color: #ccc;
                 border-radius: 10px;
-            }
-            #left {
-                max-height: calc(100vh - 20px);
-                top: 45px;
-                position: sticky;
-                overflow-y: overlay;
-                overscroll-behavior: contain;
             }
             #left::-webkit-scrollbar {
                 width: 4px;
@@ -4315,9 +4303,27 @@
             body[data-theme="dark"] .active-topic-header a {
                 color: inherit !important;
             }
+            #right.slotSingleColumn,
+            #left {
+                position: sticky;
+                top: 85px;
+                max-height: calc(100vh - 55px);
+                overflow-y: overlay;
+                overscroll-behavior: contain;
+                transition: top 0.3s ease, max-height 0.3s ease;
+            }
+            html.scroll-down #right.slotSingleColumn,
+            html.scroll-down #left {
+                top: 45px;
+                max-height: calc(100vh - 10px);
+            }
             @media (max-width: 991px) {
                 #right.slotSingleColumn {
+                    top: 53px;
+                }
+                html.scroll-down #right.slotSingleColumn{
                     top: 5px;
+                    max-height: calc(100vh - 10px);
                 }
             }
         `);
