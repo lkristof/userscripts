@@ -1578,7 +1578,7 @@
                 if (opts.querySelector(".ph-pt-chain-link")) return;
 
                 const wrapper = document.createElement("a");
-                wrapper.className = "ph-pt-chain-link message-head-btn";
+                wrapper.className = "ph-pt-chain-link message-btn";
                 wrapper.href = "javascript:;";
                 wrapper.role = "button";
 
