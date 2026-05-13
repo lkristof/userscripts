@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.2.4
+// @version      2.2.5
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -4254,71 +4254,70 @@
 
     function stickySidebar() {
         injectStyleOnce('ph-sticky-sidebar-style', `
-            @media (min-width: 768px) {
-                #right.slotSingleColumn {
-                    padding-left: 4px;
-                    margin-left: -4px;
-                }
-                #right.slotSingleColumn::-webkit-scrollbar {
-                    width: 4px;
-                }
-                #right.slotSingleColumn::-webkit-scrollbar-thumb {
-                    background-color: #ccc;
-                    border-radius: 10px;
-                }
-                #left::-webkit-scrollbar {
-                    width: 4px;
-                }
-                #left::-webkit-scrollbar-thumb {
-                    background-color: #ccc;
-                    border-radius: 10px;
-                }
-                .active-topic-sidebar {
-                    background-color: #e9e0c9 !important;
-                    font-weight: bold !important;
-                    box-shadow: inset 5px 0px 0 0;
-                    padding-left: 10px !important;
-                }
-                .active-topic-sidebar a {
-                    color: #000 !important;
-                }
-                body[data-theme="dark"] .active-topic-sidebar {
-                    background-color: #3a352a !important;
-                    box-shadow: inset 5px 0px 0 0 #e0e0e0;
-                }
-                body[data-theme="dark"] .active-topic-sidebar a {
-                    color: inherit !important;
-                }
-                .active-topic-header {
-                    background-color: #e9e0c9 !important;
-                    font-weight: bold !important;
-                    box-shadow: inset 5px 0px 0 0 #000000;
-                }
-                .active-topic-header a {
-                    color: #000 !important;
-                }
-                body[data-theme="dark"] .active-topic-header {
-                    background-color: #3a352a !important;
-                    box-shadow: inset 5px 0px 0 0 #e0e0e0;
-                }
-                body[data-theme="dark"] .active-topic-header a {
-                    color: inherit !important;
-                }
-                #right.slotSingleColumn,
-                #left {
-                    position: sticky;
-                    top: 85px;
-                    max-height: calc(100vh - 55px);
-                    overflow-y: overlay;
-                    overscroll-behavior: contain;
-                    transition: top 0.3s ease, max-height 0.3s ease;
-                }
-                html.scroll-down #right.slotSingleColumn,
-                html.scroll-down #left {
-                    top: 45px;
-                    max-height: calc(100vh - 10px);
-                }
-                @media (max-width: 991px) {
+            #right.slotSingleColumn {
+                padding-left: 4px;
+                margin-left: -4px;
+            }
+            #right.slotSingleColumn::-webkit-scrollbar {
+                width: 4px;
+            }
+            #right.slotSingleColumn::-webkit-scrollbar-thumb {
+                background-color: #ccc;
+                border-radius: 10px;
+            }
+            #left::-webkit-scrollbar {
+                width: 4px;
+            }
+            #left::-webkit-scrollbar-thumb {
+                background-color: #ccc;
+                border-radius: 10px;
+            }
+            .active-topic-sidebar {
+                background-color: #e9e0c9 !important;
+                font-weight: bold !important;
+                box-shadow: inset 5px 0px 0 0;
+                padding-left: 10px !important;
+            }
+            .active-topic-sidebar a {
+                color: #000 !important;
+            }
+            body[data-theme="dark"] .active-topic-sidebar {
+                background-color: #3a352a !important;
+                box-shadow: inset 5px 0px 0 0 #e0e0e0;
+            }
+            body[data-theme="dark"] .active-topic-sidebar a {
+                color: inherit !important;
+            }
+            .active-topic-header {
+                background-color: #e9e0c9 !important;
+                font-weight: bold !important;
+                box-shadow: inset 5px 0px 0 0 #000000;
+            }
+            .active-topic-header a {
+                color: #000 !important;
+            }
+            body[data-theme="dark"] .active-topic-header {
+                background-color: #3a352a !important;
+                box-shadow: inset 5px 0px 0 0 #e0e0e0;
+            }
+            body[data-theme="dark"] .active-topic-header a {
+                color: inherit !important;
+            }
+            #right.slotSingleColumn,
+            #left {
+                position: sticky;
+                top: 85px;
+                max-height: calc(100vh - 55px);
+                overflow-y: overlay;
+                overscroll-behavior: contain;
+                transition: top 0.3s ease, max-height 0.3s ease;
+            }
+            html.scroll-down #right.slotSingleColumn,
+            html.scroll-down #left {
+                top: 45px;
+                max-height: calc(100vh - 10px);
+            }
+            @media (max-width: 991px) {
                 #right.slotSingleColumn {
                     top: 53px;
                 }
@@ -4327,6 +4326,11 @@
                     max-height: calc(100vh - 10px);
                 }
             }
+            @media (max-width: 768px) {
+                #right.slotSingleColumn {
+                    overflow-y: visible;
+                    max-height: none;
+                }
             }
         `);
 
