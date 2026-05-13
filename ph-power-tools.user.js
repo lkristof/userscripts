@@ -114,6 +114,7 @@
         kekShUploader: true,
         giveawayAnswerChecker: true,
         stickySidebar: true,
+        readingProgress: true,
 
         colorizePalette: DEFAULT_COLORIZE_PALETTE,
     };
@@ -122,7 +123,7 @@
         appearance: {
             label: 'Megjelenés',
             keys: ['colorize', 'markNewPosts', 'wideView', 'threadView',
-                'stickySidebar'],
+                'stickySidebar', 'readingProgress'],
             defaultOpen: true,
         },
         filtering: {
@@ -149,6 +150,7 @@
         extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
         kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
         stickySidebar: 'A bal és jobb oldalsáv a képernyőn marad.',
+        readingProgress: 'Az oldal tetején mutatja, mennyit görgettél.',
     };
 
     function prettyName(key) {
@@ -166,6 +168,7 @@
             kekShUploader: 'kek.sh képfeltöltő',
             giveawayAnswerChecker: 'Nyereményjáték válasz ellenőrző',
             stickySidebar: 'Fix oldalsávok',
+            readingProgress: 'Olvasási folyamatjelző',
         }[key] || key;
     }
 
@@ -1344,6 +1347,7 @@
             { name: "kekShUploader", when: () => (isTema || isPrivat) && savedSettings.kekShUploader, fn: kekShUploader },
             { name: "giveawayAnswerChecker", when: () => isNyeremenyjatek && savedSettings.giveawayAnswerChecker, fn: giveawayAnswerChecker },
             { name: "stickySidebar", when: () => savedSettings.stickySidebar, fn: stickySidebar },
+            { name: "readingProgress", when: () => savedSettings.readingProgress, fn: readingProgress },
         ];
 
         for (const m of modules) {
@@ -4363,5 +4367,30 @@
                 if (li) li.classList.add('active-topic-header');
             }
         });
+    }
+
+    function readingProgress() {
+        injectStyleOnce('ph-reading-progress-style', `
+            #ph-progress-bar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 0%;
+                height: 3px;
+                background: var(--ph-pt-primary);;
+                z-index: 9999;
+                transition: width 0.1s linear;
+            }
+    `);
+
+        const bar = document.createElement('div');
+        bar.id = 'ph-progress-bar';
+        document.body.appendChild(bar);
+
+        window.addEventListener('scroll', () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            bar.style.width = (scrollTop / docHeight * 100) + '%';
+        }, { passive: true });
     }
 })();
