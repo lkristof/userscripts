@@ -1219,6 +1219,19 @@
     }
 
     function injectBaseStyle() {
+        (function injectPrimaryColor() {
+            const tmp = document.createElement('button');
+            tmp.className = 'btn btn-primary';
+            tmp.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none';
+            document.body.appendChild(tmp);
+            const color = getComputedStyle(tmp).backgroundColor;
+            tmp.remove();
+            const el = document.createElement('style');
+            el.id = 'ph-pt-primary-color-style';
+            el.textContent = `:root { --ph-pt-primary: ${color}; }`;
+            document.head.appendChild(el);
+        })();
+
         injectStyleOnce('ph-pt-base-style', `
             .ph-acc-header {
                 font-weight: 600;
@@ -4375,19 +4388,39 @@
         injectStyleOnce('ph-reading-progress-style', `
             #ph-progress-bar {
                 position: fixed;
-                top: 0;
                 left: 0;
+                top: 0;
                 width: 0%;
                 height: 3px;
-                background: var(--ph-pt-primary);;
+                background: var(--ph-pt-primary);
                 z-index: 9999;
-                transition: width 0.1s linear;
+                transition: width 0.1s linear, top 0.2s ease;
             }
     `);
 
         const bar = document.createElement('div');
         bar.id = 'ph-progress-bar';
         document.body.appendChild(bar);
+
+        function updateBarTop() {
+            const header = document.querySelector('#header-sticky');
+            if (!header) { bar.style.top = '0px'; return; }
+
+            if (window.innerWidth <= 991) {
+                bar.style.top = document.documentElement.classList.contains('scroll-down')
+                    ? '0px'
+                    : header.getBoundingClientRect().height + 'px';
+            } else {
+                bar.style.top = header.getBoundingClientRect().height + 'px';
+            }
+        }
+        const header = document.querySelector('#header-sticky');
+        if (header) new ResizeObserver(updateBarTop).observe(header);
+
+        new MutationObserver(updateBarTop).observe(
+            document.documentElement,
+            { attributes: true, attributeFilter: ['class'] }
+        );
 
         window.addEventListener('scroll', () => {
             const scrollTop = window.scrollY;
