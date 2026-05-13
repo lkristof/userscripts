@@ -4277,6 +4277,13 @@
                 overflow-y: overlay;
                 overscroll-behavior: contain;
             }
+            #left::-webkit-scrollbar {
+                width: 4px;
+            }
+            #left::-webkit-scrollbar-thumb {
+                background-color: #ccc;
+                border-radius: 10px;
+            }
             .active-topic-sidebar {
                 background-color: #e9e0c9 !important;
                 font-weight: bold !important;
