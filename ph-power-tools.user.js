@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.2.5
+// @version      2.2.6
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -114,6 +114,7 @@
         kekShUploader: true,
         giveawayAnswerChecker: true,
         stickySidebar: true,
+        mobileScrollNav: true,
 
         colorizePalette: DEFAULT_COLORIZE_PALETTE,
     };
@@ -132,7 +133,7 @@
         interaction: {
             label: 'Interakció',
             keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight',
-                'keyboardNavigation', 'giveawayAnswerChecker'],
+                'keyboardNavigation', 'mobileScrollNav', 'giveawayAnswerChecker'],
         }
     };
 
@@ -149,6 +150,7 @@
         extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
         kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
         stickySidebar: 'A bal és jobb oldalsáv a képernyőn marad.',
+        mobileScrollNav: 'Lebegő panel a hozzászólások közti lépkedéshez.',
     };
 
     function prettyName(key) {
@@ -166,6 +168,7 @@
             kekShUploader: 'kek.sh képfeltöltő',
             giveawayAnswerChecker: 'Nyereményjáték válasz ellenőrző',
             stickySidebar: 'Fix oldalsávok',
+            mobileScrollNav: 'Mobil navigációs panel',
         }[key] || key;
     }
 
@@ -1344,6 +1347,7 @@
             { name: "kekShUploader", when: () => (isTema || isPrivat) && savedSettings.kekShUploader, fn: kekShUploader },
             { name: "giveawayAnswerChecker", when: () => isNyeremenyjatek && savedSettings.giveawayAnswerChecker, fn: giveawayAnswerChecker },
             { name: "stickySidebar", when: () => savedSettings.stickySidebar, fn: stickySidebar },
+            { name: "mobileScrollNav", when: () => isTema && savedSettings.mobileScrollNav, fn: mobileScrollNav },
         ];
 
         for (const m of modules) {
@@ -4371,5 +4375,755 @@
                 if (li) li.classList.add('active-topic-header');
             }
         });
+    }
+
+    function mobileScrollNav() {
+        const POSITION_KEY = 'ph_mobile_scroll_nav_position';
+
+        function loadNavPosition() {
+            const pos = safeJsonParse(localStorage.getItem(POSITION_KEY) || "{}", {});
+            return {
+                side: pos.side === "left" ? "left" : "right",
+                bottom: Number.isFinite(parseFloat(pos.bottom)) ? parseFloat(pos.bottom) : 88,
+            };
+        }
+
+        function saveNavPosition() {
+            localStorage.setItem(POSITION_KEY, JSON.stringify({
+                side: navSide,
+                bottom: parseFloat(wrap.style.bottom) || 88,
+            }));
+        }
+
+        let navPos  = loadNavPosition();
+        let navSide = navPos.side;
+
+        // URL elemzés lapozáshoz: /tema/nev/hsz_ELSO-UTOLSO.html
+        // Fallbackként marad, de elsődlegesen a PH saját rel="prev"/rel="next" linkjeit használjuk.
+        const pathMatch = window.location.pathname.match(/^(\/tema\/[^/]+\/)hsz_(\d+)-(\d+)\.html$/);
+        const topicBase = pathMatch ? pathMatch[1] : null;
+        const pageFirst = pathMatch ? parseInt(pathMatch[2], 10) : null;
+        const pageLast  = pathMatch ? parseInt(pathMatch[3], 10) : null;
+        const pageSize  = pathMatch ? pageLast - pageFirst + 1 : null;
+
+        function getForumPagerLink(direction) {
+            const rel = direction === -1 ? "prev" : "next";
+
+            // Prioritásos keresés: először a fő navbar mr-sm-auto, majd nav-pager, végül bármi
+            const selectors = [
+                'ul.navbar-nav.mr-sm-auto a[rel="' + rel + '"]',
+                'ul.navbar-nav a[rel="' + rel + '"]',
+                '.nav-pager a[rel="' + rel + '"]',
+                'a[rel="' + rel + '"]',
+            ];
+
+            for (const sel of selectors) {
+                const link = Array.from(document.querySelectorAll(sel)).find(a => {
+                    const href = a.getAttribute("href") || "";
+                    return href.includes("/tema/") && href.includes("/hsz_");
+                });
+                if (link) return link;
+            }
+
+            return null;
+        }
+
+        function getCurrentMsgId() {
+            const currentEl = messages?.[currentIndex];
+            if (currentEl?.id?.match(/^msg\d+$/)) {
+                return currentEl.id.replace("msg", "");
+            }
+
+            const hashMatch = window.location.hash.match(/^#msg(\d+)$/);
+            if (hashMatch) {
+                return hashMatch[1];
+            }
+
+            const pathMatchSingle = window.location.pathname.match(/\/hsz_(\d+)-\1\.html$/);
+            if (pathMatchSingle) {
+                return pathMatchSingle[1];
+            }
+
+            return null;
+        }
+
+        function parseHszRangeFromHref(href) {
+            const m = String(href || "").match(/\/hsz_(\d+)-(\d+)\.html/);
+            if (!m) return null;
+
+            return {
+                first: parseInt(m[1], 10),
+                last: parseInt(m[2], 10),
+            };
+        }
+
+        function getCurrentRangeSize() {
+            if (!Number.isFinite(pageFirst) || !Number.isFinite(pageLast)) return null;
+            return pageLast - pageFirst + 1;
+        }
+
+        function getPagerRangeCandidates() {
+            const links = Array.from(document.querySelectorAll(
+                'ul.navbar-nav.mr-sm-auto a[href*="/hsz_"], ' +
+                'ul.navbar-nav a[href*="/hsz_"], ' +
+                '.nav-pager .dropdown-menu a.dropdown-item[href*="/hsz_"], ' +
+                'a[href*="/hsz_"]'
+            ));
+
+            const seen = new Set();
+
+            return links
+                .map(a => {
+                    const href = a.getAttribute("href") || "";
+                    const range = parseHszRangeFromHref(href);
+                    if (!range) return null;
+
+                    const size = range.last - range.first + 1;
+                    const key = `${range.first}-${range.last}-${href.split("#")[0]}`;
+
+                    if (seen.has(key)) return null;
+                    seen.add(key);
+
+                    return {
+                        href,
+                        first: range.first,
+                        last: range.last,
+                        size,
+                        active: a.classList.contains("active"),
+                    };
+                })
+                .filter(Boolean);
+        }
+
+        function findContainingNormalPage(anchorMsgId) {
+            if (!Number.isFinite(pageFirst) || !Number.isFinite(pageLast)) return null;
+
+            const currentSize = getCurrentRangeSize();
+            if (!currentSize) return null;
+
+            const candidates = getPagerRangeCandidates()
+                .filter(x => {
+                    // Tartalmazza az aktuális szűkített tartományt.
+                    if (x.first > pageFirst || x.last < pageLast) return false;
+
+                    // Saját aktuális oldal ne legyen.
+                    if (x.first === pageFirst && x.last === pageLast) return false;
+
+                    // Csak nagyobb tartomány érdekes.
+                    if (x.size <= currentSize) return false;
+
+                    return true;
+                })
+                .sort((a, b) => {
+                    if (a.size !== b.size) return a.size - b.size;
+                    return Math.abs(a.first - pageFirst) - Math.abs(b.first - pageFirst);
+                });
+
+            const best = candidates[0];
+            if (!best) return null;
+
+            const url = new URL(best.href, window.location.origin);
+            url.hash = "#msg" + anchorMsgId;
+
+            return url.href;
+        }
+
+        function normalizePagerUrl(href, direction) {
+            if (!href) return null;
+
+            const anchorMsgId = getCurrentMsgId() || (Number.isFinite(pageFirst) ? pageFirst : null);
+            const containingUrl = anchorMsgId ? findContainingNormalPage(anchorMsgId) : null;
+
+            if (containingUrl) {
+                return containingUrl;
+            }
+
+            const url = new URL(href, window.location.origin);
+            url.hash = direction === -1 ? "#ph-scroll-last" : "#ph-scroll-first";
+            return url.href;
+        }
+
+        function buildPageUrl(firstHsz, scrollToLast) {
+            if (!pathMatch || !pageSize) return null;
+
+            const lastHsz = firstHsz + pageSize - 1;
+            const anchor  = scrollToLast ? '#ph-scroll-last' : '#ph-scroll-first';
+
+            return `${window.location.origin}${topicBase}hsz_${firstHsz}-${lastHsz}.html${anchor}`;
+        }
+
+        // -------------------------------------------------------
+        // Hozzászólások összegyűjtése
+        // -------------------------------------------------------
+        function collectMessages() {
+            return Array.from(document.querySelectorAll('[id^="msg"]'))
+                .filter(el => /^msg\d+$/.test(el.id))
+                .sort((a, b) =>
+                    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
+                );
+        }
+
+        let messages     = [];
+        let currentIndex = 0;
+
+        function initMessages(anchorId) {
+            messages = collectMessages();
+            if (anchorId) {
+                const idx = messages.findIndex(el => el.id === anchorId);
+                if (idx >= 0) currentIndex = idx;
+            }
+        }
+
+        // -------------------------------------------------------
+        // FontAwesome ikon segédek
+        // -------------------------------------------------------
+        function iconHtml(iconClass) {
+            return `<span class="fas ${iconClass} fa-fw"></span>`;
+        }
+
+        function setIcon(el, iconClass) {
+            el.innerHTML = iconHtml(iconClass);
+        }
+
+        function updateTabIcon() {
+            if (navSide === "right") {
+                setIcon(tab, isHidden ? "fa-chevron-left" : "fa-chevron-right");
+            } else {
+                setIcon(tab, isHidden ? "fa-chevron-right" : "fa-chevron-left");
+            }
+        }
+
+        function applySide(side, persist = true) {
+            navSide = side === "left" ? "left" : "right";
+
+            wrap.classList.toggle("side-left", navSide === "left");
+            wrap.classList.toggle("side-right", navSide === "right");
+
+            updateTabIcon();
+
+            if (persist) saveNavPosition();
+        }
+
+        // -------------------------------------------------------
+        // Görgetés + URL frissítés
+        // -------------------------------------------------------
+        function scrollToEl(el) {
+            if (!el) return;
+            window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - 70, behavior: 'smooth' });
+        }
+
+        // Autohide csak az első megjelenésnél aktív; első navigáció után végleg leáll
+        let autoHideEnabled = true;
+
+        function scrollToIndex(idx) {
+            if (idx < 0 || idx >= messages.length) return;
+            currentIndex = idx;
+            const el = messages[currentIndex];
+            scrollToEl(el);
+
+            // Frissíti a böngésző címsorát görgetés nélkül
+            if (el) history.replaceState(null, '', '#' + el.id);
+
+            updateUI();
+
+            // Első navigáció után az autohide végleg leáll
+            if (autoHideEnabled) {
+                autoHideEnabled = false;
+                clearTimeout(autoHideTimer);
+                progressBar.style.transition = 'none';
+                progressBar.style.transform  = 'scaleX(0)';
+            }
+        }
+
+        // -------------------------------------------------------
+        // Lapozás (csak hsz_X-Y.html oldalakon)
+        // -------------------------------------------------------
+        function navigatePage(direction) {
+            const forumLink = getForumPagerLink(direction);
+            const forumUrl = forumLink ? normalizePagerUrl(forumLink.getAttribute("href"), direction) : null;
+
+            if (forumUrl) {
+                window.location.href = forumUrl;
+                return;
+            }
+
+            if (!pathMatch || !pageSize) return;
+            if (direction === -1 && pageFirst <= 1) return;
+
+            const newFirst = direction === -1 ? pageFirst - pageSize : pageLast + 1;
+            if (newFirst < 1) return;
+
+            const fallbackUrl = buildPageUrl(newFirst, direction === -1);
+            if (fallbackUrl) window.location.href = fallbackUrl;
+        }
+
+        // -------------------------------------------------------
+        // Autohide
+        // -------------------------------------------------------
+        const TOTAL_SECONDS = 10;
+        let autoHideTimer   = null;
+        let isHidden        = false;
+
+        function startCountdown() {
+            progressBar.style.transition = 'none';
+            progressBar.style.transform  = 'scaleX(1)';
+            void progressBar.offsetWidth;
+
+            setTimeout(() => {
+                progressBar.style.transition = `transform ${TOTAL_SECONDS}s linear`;
+                progressBar.style.transform  = 'scaleX(0)';
+            }, 30);
+
+            clearTimeout(autoHideTimer);
+            autoHideTimer = setTimeout(() => collapse(), TOTAL_SECONDS * 1000);
+        }
+
+        function collapse() {
+            isHidden = true;
+            clearTimeout(autoHideTimer);
+            wrap.classList.add('is-hidden');
+            updateTabIcon();
+        }
+
+        function expand() {
+            isHidden = false;
+            wrap.classList.remove('is-hidden');
+            updateTabIcon();
+
+            clearTimeout(autoHideTimer);
+            progressBar.style.transition = 'none';
+            progressBar.style.transform  = 'scaleX(0)';
+        }
+
+        // -------------------------------------------------------
+        // UI frissítés
+        // -------------------------------------------------------
+        function updateUI() {
+            const total = messages.length;
+            const pos   = currentIndex + 1;
+            const el    = messages[currentIndex];
+
+            counterEl.textContent = total > 0 ? `${pos} / ${total}` : '–';
+            labelEl.textContent   = el ? `# ${el.id.replace('msg', '')}` : 'Válassz…';
+
+            const atFirst = currentIndex <= 0;
+            const atLast  = currentIndex >= messages.length - 1;
+
+            const anchorMsgId = getCurrentMsgId() || (Number.isFinite(pageFirst) ? pageFirst : null);
+            const hasContainingNormalPage = !!(anchorMsgId && findContainingNormalPage(anchorMsgId));
+
+            const hasPrevPage = hasContainingNormalPage || !!getForumPagerLink(-1) || (!!pathMatch && pageFirst > 1);
+            const hasNextPage = hasContainingNormalPage || !!getForumPagerLink(+1);
+
+            prevBtn.disabled = atFirst && !hasPrevPage;
+            nextBtn.disabled = atLast && !hasNextPage;
+
+            prevBtn.style.opacity = prevBtn.disabled ? '0.25' : '1';
+            nextBtn.style.opacity = nextBtn.disabled ? '0.25' : '1';
+
+            setIcon(prevBtn, atFirst && hasPrevPage ? 'fa-play fa-flip-horizontal' : 'fa-chevron-up');
+            setIcon(nextBtn, atLast && hasNextPage ? 'fa-play' : 'fa-chevron-down');
+
+            prevBtn.title = atFirst && hasPrevPage ? 'Előző oldal' : 'Előző hozzászólás';
+            nextBtn.title = atLast && hasNextPage ? 'Következő oldal' : 'Következő hozzászólás';
+        }
+
+        // -------------------------------------------------------
+        // CSS
+        // -------------------------------------------------------
+        injectStyleOnce('ph-mobile-scroll-nav-style', `
+            #ph-scroll-btn-wrap {
+                position: fixed;
+                bottom: 88px;
+                z-index: 99999;
+                display: flex;
+                align-items: stretch;
+                transition: transform 0.4s cubic-bezier(.4,0,.2,1), opacity 0.4s ease;
+                touch-action: none;
+                user-select: none;
+                opacity: 1;
+            }
+            
+            @media (min-width: 992px) {
+                #ph-scroll-btn-wrap {
+                    display: none !important;
+                }
+            }
+
+            #ph-scroll-btn-wrap.side-right {
+                right: 0;
+                left: auto;
+                flex-direction: row;
+                filter: drop-shadow(-3px 4px 12px rgba(0,0,0,0.32));
+            }
+
+            #ph-scroll-btn-wrap.side-left {
+                left: 0;
+                right: auto;
+                flex-direction: row-reverse;
+                filter: drop-shadow(3px 4px 12px rgba(0,0,0,0.32));
+            }
+
+            #ph-scroll-btn-wrap.side-right.is-hidden {
+                transform: translateX(calc(100% - 20px));
+                opacity: 0.72;
+            }
+
+            #ph-scroll-btn-wrap.side-left.is-hidden {
+                transform: translateX(calc(-100% + 20px));
+                opacity: 0.72;
+            }
+
+            #ph-scroll-tab {
+                width: 20px;
+                background: rgba(28,28,34,0.84);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                flex-shrink: 0;
+                color: rgba(255,255,255,0.65);
+                font-size: 10px;
+                transition: background 0.2s, color 0.2s;
+            }
+
+            #ph-scroll-btn-wrap.side-right #ph-scroll-tab {
+                border-radius: 10px 0 0 10px;
+            }
+
+            #ph-scroll-btn-wrap.side-left #ph-scroll-tab {
+                border-radius: 0 10px 10px 0;
+            }
+
+            #ph-scroll-tab:active {
+                background: rgba(50,50,62,0.95);
+                color: #fff;
+            }
+
+            #ph-scroll-panel {
+                background: rgba(28,28,34,0.84);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                position: relative;
+                min-width: 132px;
+            }
+
+            #ph-scroll-btn-wrap.side-right #ph-scroll-panel {
+                border-left: 1px solid rgba(255,255,255,0.07);
+            }
+
+            #ph-scroll-btn-wrap.side-left #ph-scroll-panel {
+                border-right: 1px solid rgba(255,255,255,0.07);
+            }
+
+            #ph-scroll-info {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 9px 14px 7px 12px;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+                transition: background 0.15s;
+            }
+
+            #ph-scroll-info:active {
+                background: rgba(255,255,255,0.06);
+            }
+
+            #ph-scroll-counter {
+                font-size: 10px;
+                font-weight: 400;
+                color: rgba(255,255,255,0.4);
+                letter-spacing: 0.3px;
+                text-transform: uppercase;
+            }
+
+            #ph-scroll-label {
+                font-size: 15px;
+                font-weight: 700;
+                color: #fff;
+                letter-spacing: -0.3px;
+                margin-top: 1px;
+            }
+
+            #ph-scroll-divider {
+                height: 1px;
+                background: rgba(255,255,255,0.07);
+            }
+
+            #ph-scroll-nav {
+                display: flex;
+                align-items: stretch;
+            }
+
+            .ph-nav-btn {
+                flex: 1;
+                background: none;
+                border: none;
+                color: rgba(255,255,255,0.8);
+                font-size: 15px;
+                padding: 8px 0;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+                transition: background 0.15s, color 0.15s;
+                line-height: 1;
+            }
+
+            .ph-nav-btn:active {
+                background: rgba(255,255,255,0.1);
+                color: #fff;
+            }
+
+            .ph-nav-btn:disabled {
+                cursor: default;
+            }
+
+            .ph-nav-sep {
+                width: 1px;
+                background: rgba(255,255,255,0.07);
+                flex-shrink: 0;
+            }
+
+            #ph-scroll-progress {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                height: 2px;
+                width: 100%;
+                background: rgba(255,255,255,0.3);
+                transform-origin: left;
+                pointer-events: none;
+            }
+        `);
+
+        // -------------------------------------------------------
+        // HTML
+        // -------------------------------------------------------
+        const wrap = document.createElement('div');
+        wrap.id = 'ph-scroll-btn-wrap';
+        wrap.style.bottom = Math.max(10, Math.min(window.innerHeight - 80, navPos.bottom)) + 'px';
+
+        const tab = document.createElement('div');
+        tab.id = 'ph-scroll-tab';
+
+        const panel = document.createElement('div');
+        panel.id = 'ph-scroll-panel';
+
+        const info = document.createElement('div');
+        info.id = 'ph-scroll-info';
+
+        const counterEl = document.createElement('span');
+        counterEl.id = 'ph-scroll-counter';
+        counterEl.textContent = '…';
+
+        const labelEl = document.createElement('span');
+        labelEl.id = 'ph-scroll-label';
+        labelEl.textContent = 'Válassz…';
+
+        info.appendChild(counterEl);
+        info.appendChild(labelEl);
+
+        const divider = document.createElement('div');
+        divider.id = 'ph-scroll-divider';
+
+        const nav = document.createElement('div');
+        nav.id = 'ph-scroll-nav';
+
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'ph-nav-btn';
+        prevBtn.type = 'button';
+
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'ph-nav-btn';
+        nextBtn.type = 'button';
+
+        const navSep = document.createElement('div');
+        navSep.className = 'ph-nav-sep';
+
+        nav.appendChild(prevBtn);
+        nav.appendChild(navSep);
+        nav.appendChild(nextBtn);
+
+        const progressBar = document.createElement('div');
+        progressBar.id = 'ph-scroll-progress';
+
+        panel.appendChild(info);
+        panel.appendChild(divider);
+        panel.appendChild(nav);
+        panel.appendChild(progressBar);
+
+        wrap.appendChild(tab);
+        wrap.appendChild(panel);
+        document.body.appendChild(wrap);
+
+        applySide(navSide, false);
+
+        // -------------------------------------------------------
+        // Események
+        // -------------------------------------------------------
+        let suppressNextClick = false;
+
+        tab.addEventListener('click', (e) => {
+            e.stopPropagation();
+
+            if (suppressNextClick) {
+                suppressNextClick = false;
+                return;
+            }
+
+            isHidden ? expand() : collapse();
+        });
+
+        info.addEventListener('click', () => scrollToIndex(currentIndex));
+
+        prevBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            currentIndex > 0 ? scrollToIndex(currentIndex - 1) : navigatePage(-1);
+        });
+
+        nextBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            currentIndex < messages.length - 1 ? scrollToIndex(currentIndex + 1) : navigatePage(+1);
+        });
+
+        // Drag:
+        // - függőlegesen továbbra is mozgatható
+        // - vízszintesen húzva bal/jobb oldalra pattintható
+        let startX = 0;
+        let startY = 0;
+        let lastX = 0;
+        let startBottom = 88;
+        let dragging = false;
+        let moved = false;
+
+        tab.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+            lastX = startX;
+            startBottom = parseFloat(wrap.style.bottom) || 88;
+            dragging = true;
+            moved = false;
+        }, { passive: true });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!dragging) return;
+
+            const touch = e.touches[0];
+            lastX = touch.clientX;
+
+            const dx = touch.clientX - startX;
+            const dy = startY - touch.clientY;
+
+            if (Math.abs(dx) > 6 || Math.abs(dy) > 6) moved = true;
+
+            const nb = Math.max(
+                10,
+                Math.min(window.innerHeight - wrap.offsetHeight - 10, startBottom + dy)
+            );
+
+            wrap.style.bottom = nb + 'px';
+
+            // Ha áthúzod a kijelző másik felére, oldalváltás
+            const wantedSide = touch.clientX < (window.innerWidth / 2) ? "left" : "right";
+            if (wantedSide !== navSide) {
+                applySide(wantedSide, false);
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchend', () => {
+            if (!dragging) return;
+
+            dragging = false;
+
+            if (moved) {
+                suppressNextClick = true;
+                const finalSide = lastX < (window.innerWidth / 2) ? "left" : "right";
+                applySide(finalSide, true);
+                saveNavPosition();
+            }
+        }, { passive: true });
+
+        window.addEventListener('resize', () => {
+            const currentBottom = parseFloat(wrap.style.bottom) || 88;
+            wrap.style.bottom = Math.max(
+                10,
+                Math.min(window.innerHeight - wrap.offsetHeight - 10, currentBottom)
+            ) + 'px';
+            saveNavPosition();
+        });
+
+        // -------------------------------------------------------
+        // hashchange figyelés: dupla katt vagy külső hash-változás
+        // (pl. msgAnchorHighlight modul dblclick handlere: location.hash = "#msgXXX")
+        // -------------------------------------------------------
+        window.addEventListener('hashchange', () => {
+            const m = window.location.hash.match(/^#(msg\d+)$/);
+            if (!m) return;
+
+            const newId = m[1];
+
+            // Frissíti az indexet az új hash alapján, görget oda, és felnyitja a panelt
+            initMessages(newId);
+            updateUI();
+            scrollToEl(messages[currentIndex]);
+
+            if (isHidden) expand();
+
+            // Autohide visszaállítás: ha még nem navigált, újraindítja; ha már igen, nem bántja
+            if (autoHideEnabled) startCountdown();
+        });
+
+        // -------------------------------------------------------
+        // Init
+        // -------------------------------------------------------
+        function init() {
+            // Lapozva érkezés kezelése (#ph-scroll-last / #ph-scroll-first)
+            const incoming = window.location.hash;
+
+            if (incoming === '#ph-scroll-last' || incoming === '#ph-scroll-first') {
+                initMessages(null);
+                currentIndex = incoming === '#ph-scroll-last' ? messages.length - 1 : 0;
+                history.replaceState(null, '', window.location.pathname + '#' + (messages[currentIndex]?.id || ''));
+            } else {
+                // Normál betöltés: ha van #msg a hashben, onnan indulunk
+                const m = incoming.match(/^#(msg\d+)$/);
+                initMessages(m ? m[1] : null);
+            }
+
+            updateUI();
+
+            // Autoscroll az aktuális pozícióhoz (ha van kijelölt elem)
+            function tryScroll(n) {
+                if (n <= 0) return;
+
+                const el = messages[currentIndex];
+
+                if (el) {
+                    scrollToEl(el);
+                } else {
+                    setTimeout(() => {
+                        initMessages(null);
+                        tryScroll(n - 1);
+                    }, 600);
+                }
+            }
+
+            // Ha van konkrét kijelölt hozzászólás, görget oda; ha nincs (#msg nélküli oldal),
+            // csak megjelenik a panel
+            if (window.location.hash.match(/^#(msg\d+)$/) ||
+                window.location.hash === '#ph-scroll-last' ||
+                window.location.hash === '#ph-scroll-first') {
+                setTimeout(() => tryScroll(5), 1200);
+            }
+
+            startCountdown();
+        }
+
+        init();
     }
 })();
