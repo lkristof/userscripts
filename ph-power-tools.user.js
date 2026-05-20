@@ -4385,6 +4385,7 @@
             return {
                 side: pos.side === "left" ? "left" : "right",
                 bottom: Number.isFinite(parseFloat(pos.bottom)) ? parseFloat(pos.bottom) : 88,
+                hidden: typeof pos.hidden === "boolean" ? pos.hidden : true,
             };
         }
 
@@ -4392,11 +4393,13 @@
             localStorage.setItem(POSITION_KEY, JSON.stringify({
                 side: navSide,
                 bottom: parseFloat(wrap.style.bottom) || 88,
+                hidden: isHidden,
             }));
         }
 
         let navPos  = loadNavPosition();
         let navSide = navPos.side;
+        let isHidden = navPos.hidden;
 
         // URL elemzés lapozáshoz: /tema/nev/hsz_ELSO-UTOLSO.html
         // Fallbackként marad, de elsődlegesen a PH saját rel="prev"/rel="next" linkjeit használjuk.
@@ -4657,18 +4660,18 @@
         // -------------------------------------------------------
         // Panel nyitás/zárás
         // -------------------------------------------------------
-        let isHidden = true;
-
         function collapse() {
             isHidden = true;
             wrap.classList.add('is-hidden');
             updateTabIcon();
+            saveNavPosition();
         }
 
         function expand() {
             isHidden = false;
             wrap.classList.remove('is-hidden');
             updateTabIcon();
+            saveNavPosition();
         }
 
         // -------------------------------------------------------
@@ -4922,7 +4925,12 @@
         document.body.appendChild(wrap);
 
         applySide(navSide, false);
-        collapse();
+
+        if (isHidden) {
+            collapse();
+        } else {
+            expand();
+        }
 
         // -------------------------------------------------------
         // Események
