@@ -4612,9 +4612,6 @@
             window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top, behavior: 'smooth' });
         }
 
-        // Autohide csak az első megjelenésnél aktív; első navigáció után végleg leáll
-        let autoHideEnabled = true;
-
         function scrollToIndex(idx) {
             if (idx < 0 || idx >= messages.length) return;
             currentIndex = idx;
@@ -4658,29 +4655,12 @@
         }
 
         // -------------------------------------------------------
-        // Autohide
+        // Panel nyitás/zárás
         // -------------------------------------------------------
-        const TOTAL_SECONDS = 5;
-        let autoHideTimer   = null;
-        let isHidden        = false;
-
-        function startCountdown() {
-            progressBar.style.transition = 'none';
-            progressBar.style.transform  = 'scaleX(1)';
-            void progressBar.offsetWidth;
-
-            setTimeout(() => {
-                progressBar.style.transition = `transform ${TOTAL_SECONDS}s linear`;
-                progressBar.style.transform  = 'scaleX(0)';
-            }, 30);
-
-            clearTimeout(autoHideTimer);
-            autoHideTimer = setTimeout(() => collapse(), TOTAL_SECONDS * 1000);
-        }
+        let isHidden = true;
 
         function collapse() {
             isHidden = true;
-            clearTimeout(autoHideTimer);
             wrap.classList.add('is-hidden');
             updateTabIcon();
         }
@@ -4689,10 +4669,6 @@
             isHidden = false;
             wrap.classList.remove('is-hidden');
             updateTabIcon();
-
-            clearTimeout(autoHideTimer);
-            progressBar.style.transition = 'none';
-            progressBar.style.transform  = 'scaleX(0)';
         }
 
         // -------------------------------------------------------
@@ -4744,12 +4720,6 @@
                 opacity: 1;
             }
             
-            @media (min-width: 992px) {
-                #ph-scroll-btn-wrap {
-                    display: none !important;
-                }
-            }
-
             #ph-scroll-btn-wrap.side-right {
                 right: 0;
                 left: auto;
@@ -4782,11 +4752,16 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                cursor: pointer;
+                cursor: grab;
                 flex-shrink: 0;
                 color: rgba(255,255,255,0.65);
                 font-size: 10px;
                 transition: background 0.2s, color 0.2s;
+                touch-action: none;
+            }
+            
+            #ph-scroll-tab:active {
+                cursor: grabbing;
             }
 
             #ph-scroll-btn-wrap.side-right #ph-scroll-tab {
@@ -4888,17 +4863,6 @@
                 background: rgba(255,255,255,0.07);
                 flex-shrink: 0;
             }
-
-            #ph-scroll-progress {
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                height: 2px;
-                width: 100%;
-                background: rgba(255,255,255,0.3);
-                transform-origin: left;
-                pointer-events: none;
-            }
         `);
 
         // -------------------------------------------------------
@@ -4949,19 +4913,16 @@
         nav.appendChild(navSep);
         nav.appendChild(nextBtn);
 
-        const progressBar = document.createElement('div');
-        progressBar.id = 'ph-scroll-progress';
-
         panel.appendChild(info);
         panel.appendChild(divider);
         panel.appendChild(nav);
-        panel.appendChild(progressBar);
 
         wrap.appendChild(tab);
         wrap.appendChild(panel);
         document.body.appendChild(wrap);
 
         applySide(navSide, false);
+        collapse();
 
         // -------------------------------------------------------
         // Események
@@ -4992,32 +4953,40 @@
         });
 
         // Drag:
-        // - függőlegesen továbbra is mozgatható
+        // - függőlegesen mozgatható
         // - vízszintesen húzva bal/jobb oldalra pattintható
+        // - működik egérrel és érintéssel is
         let startX = 0;
         let startY = 0;
         let lastX = 0;
         let startBottom = 88;
         let dragging = false;
         let moved = false;
+        let activePointerId = null;
 
-        tab.addEventListener('touchstart', (e) => {
-            startX = e.touches[0].clientX;
-            startY = e.touches[0].clientY;
+        tab.addEventListener('pointerdown', (e) => {
+            // csak bal egérgombbal húzzuk, touch/pen esetén button általában 0
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+            startX = e.clientX;
+            startY = e.clientY;
             lastX = startX;
             startBottom = parseFloat(wrap.style.bottom) || 88;
             dragging = true;
             moved = false;
-        }, { passive: true });
+            activePointerId = e.pointerId;
 
-        document.addEventListener('touchmove', (e) => {
-            if (!dragging) return;
+            tab.setPointerCapture?.(e.pointerId);
+            e.preventDefault();
+        });
 
-            const touch = e.touches[0];
-            lastX = touch.clientX;
+        tab.addEventListener('pointermove', (e) => {
+            if (!dragging || e.pointerId !== activePointerId) return;
 
-            const dx = touch.clientX - startX;
-            const dy = startY - touch.clientY;
+            lastX = e.clientX;
+
+            const dx = e.clientX - startX;
+            const dy = startY - e.clientY;
 
             if (Math.abs(dx) > 6 || Math.abs(dy) > 6) moved = true;
 
@@ -5029,24 +4998,39 @@
             wrap.style.bottom = nb + 'px';
 
             // Ha áthúzod a kijelző másik felére, oldalváltás
-            const wantedSide = touch.clientX < (window.innerWidth / 2) ? "left" : "right";
+            const wantedSide = e.clientX < (window.innerWidth / 2) ? "left" : "right";
             if (wantedSide !== navSide) {
                 applySide(wantedSide, false);
             }
-        }, { passive: true });
 
-        document.addEventListener('touchend', () => {
-            if (!dragging) return;
+            e.preventDefault();
+        });
+
+        tab.addEventListener('pointerup', (e) => {
+            if (!dragging || e.pointerId !== activePointerId) return;
 
             dragging = false;
 
+            tab.releasePointerCapture?.(e.pointerId);
+            activePointerId = null;
+
             if (moved) {
                 suppressNextClick = true;
+
                 const finalSide = lastX < (window.innerWidth / 2) ? "left" : "right";
                 applySide(finalSide, true);
                 saveNavPosition();
             }
-        }, { passive: true });
+
+            e.preventDefault();
+        });
+
+        tab.addEventListener('pointercancel', (e) => {
+            if (e.pointerId !== activePointerId) return;
+
+            dragging = false;
+            activePointerId = null;
+        });
 
         window.addEventListener('resize', () => {
             const currentBottom = parseFloat(wrap.style.bottom) || 88;
@@ -5067,15 +5051,11 @@
 
             const newId = m[1];
 
-            // Frissíti az indexet az új hash alapján, görget oda, és felnyitja a panelt
+            // Frissíti az indexet az új hash alapján és odagörget.
+            // Nem nyitjuk fel automatikusan a panelt.
             initMessages(newId);
             updateUI();
             scrollToEl(messages[currentIndex]);
-
-            if (isHidden) expand();
-
-            // Autohide visszaállítás: ha még nem navigált, újraindítja; ha már igen, nem bántja
-            if (autoHideEnabled) startCountdown();
         });
 
         // -------------------------------------------------------
@@ -5120,8 +5100,6 @@
                 window.location.hash === '#ph-scroll-first') {
                 setTimeout(() => tryScroll(5), 1200);
             }
-
-            startCountdown();
         }
 
         init();
