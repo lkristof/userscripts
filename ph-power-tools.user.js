@@ -4660,7 +4660,7 @@
         // -------------------------------------------------------
         // Autohide
         // -------------------------------------------------------
-        const TOTAL_SECONDS = 10;
+        const TOTAL_SECONDS = 5;
         let autoHideTimer   = null;
         let isHidden        = false;
 
