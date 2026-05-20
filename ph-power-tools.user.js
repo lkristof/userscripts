@@ -2407,7 +2407,8 @@
 
         function jumpToIndex(posts, index) {
             if (index < 0 || index >= posts.length) return;
-            location.hash = '#msg' + posts[index].dataset.id;
+            history.replaceState(null, '', '#msg' + posts[index].dataset.id);
+            window.dispatchEvent(new HashChangeEvent('hashchange'));
         }
 
         function getMsgIdFromHash() {
@@ -2417,7 +2418,8 @@
 
         function setMsgId(id) {
             if (id < 0) return;
-            location.hash = '#msg' + id;
+            history.replaceState(null, '', '#msg' + id);
+            window.dispatchEvent(new HashChangeEvent('hashchange'));
         }
 
         function findClosestPost(posts, targetId) {
