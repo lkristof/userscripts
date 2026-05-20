@@ -4609,7 +4609,7 @@
         // -------------------------------------------------------
         function scrollToEl(el) {
             if (!el) return;
-            window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - 70, behavior: 'smooth' });
+            window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top, behavior: 'smooth' });
         }
 
         // Autohide csak az első megjelenésnél aktív; első navigáció után végleg leáll
