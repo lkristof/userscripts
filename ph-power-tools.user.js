@@ -4625,14 +4625,6 @@
             if (el) history.replaceState(null, '', '#' + el.id);
 
             updateUI();
-
-            // Első navigáció után az autohide végleg leáll
-            if (autoHideEnabled) {
-                autoHideEnabled = false;
-                clearTimeout(autoHideTimer);
-                progressBar.style.transition = 'none';
-                progressBar.style.transform  = 'scaleX(0)';
-            }
         }
 
         // -------------------------------------------------------
