@@ -1334,6 +1334,7 @@
         if (!isTema && !isPrivat && !isNyeremenyjatek) return;
 
         const modules = [
+            { name: "messageScroller", when: () => isTema, fn: messageScroller },
             { name: "colorize", when: () => isTema && savedSettings.colorize, fn: colorize },
             { name: "markNewPosts", when: () => isTema && savedSettings.markNewPosts, fn: markNewPosts },
             { name: "linkRedirect", when: () => isTema && savedSettings.linkRedirect, fn: linkRedirect },
@@ -1348,7 +1349,6 @@
             { name: "giveawayAnswerChecker", when: () => isNyeremenyjatek && savedSettings.giveawayAnswerChecker, fn: giveawayAnswerChecker },
             { name: "stickySidebar", when: () => savedSettings.stickySidebar, fn: stickySidebar },
             { name: "mobileScrollNav", when: () => isTema && savedSettings.mobileScrollNav, fn: mobileScrollNav },
-            { name: "messageScroller", when: () => isTema, fn: messageScroller },
         ];
 
         for (const m of modules) {
@@ -2427,7 +2427,19 @@
 
         function collectMessages() {
             return Array.from(document.querySelectorAll('[id^="msg"]'))
-                .filter(el => /^msg\d+$/.test(el.id))
+                .filter(el => {
+                    if (!/^msg\d+$/.test(el.id)) return false;
+
+                    const id = el.id.replace('msg', '');
+
+                    const li = el.closest(`li[data-id="${id}"]`)
+                        || document.querySelector(`li[data-id="${id}"]`);
+
+                    if (!li) return false;
+
+                    // Csak valódi, nem törölt hozzászólások.
+                    return !!li.querySelector('.message-body');
+                })
                 .sort((a, b) =>
                     a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
                 );
