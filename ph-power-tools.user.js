@@ -1800,6 +1800,7 @@
         }
 
         function tryScrollToHashMsg(n = 5) {
+            if (cancelInitialHashScroll) return;
             if (n <= 0) return;
 
             if (scrollToHashMsg()) return;
@@ -1837,6 +1838,18 @@
             location.hash = "#msg" + id;
         });
 
+        let cancelInitialHashScroll = false;
+
+        function bindInitialScrollCancelEvents() {
+            const cancel = () => {
+                cancelInitialHashScroll = true;
+            };
+
+            window.addEventListener('wheel', cancel, { once: true, passive: true });
+            window.addEventListener('touchstart', cancel, { once: true, passive: true });
+            window.addEventListener('keydown', cancel, { once: true });
+        }
+
         /**********************
          * INIT
          **********************/
@@ -1845,8 +1858,12 @@
             highlightHashMsg();
 
             if (lastHash.match(/^#msg\d+$/)) {
+                bindInitialScrollCancelEvents();
+
                 setTimeout(() => {
-                    tryScrollToHashMsg(5);
+                    if (!cancelInitialHashScroll) {
+                        tryScrollToHashMsg(5);
+                    }
                 }, 1200);
             }
         }
