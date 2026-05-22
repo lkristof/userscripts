@@ -1348,6 +1348,7 @@
             { name: "giveawayAnswerChecker", when: () => isNyeremenyjatek && savedSettings.giveawayAnswerChecker, fn: giveawayAnswerChecker },
             { name: "stickySidebar", when: () => savedSettings.stickySidebar, fn: stickySidebar },
             { name: "mobileScrollNav", when: () => isTema && savedSettings.mobileScrollNav, fn: mobileScrollNav },
+            { name: "messageScroller", when: () => isTema, fn: messageScroller },
         ];
 
         for (const m of modules) {
@@ -1791,10 +1792,32 @@
             body.classList.add("hash-highlight");
         }
 
+        function scrollToHashMsg() {
+            const m = window.location.hash.match(/^#msg(\d+)$/);
+            if (!m) return false;
+
+            return window.phPtMessageScroller?.scrollToMsgId?.(m[1]) || false;
+        }
+
+        function tryScrollToHashMsg(n = 5) {
+            if (n <= 0) return;
+
+            if (scrollToHashMsg()) return;
+
+            setTimeout(() => {
+                tryScrollToHashMsg(n - 1);
+            }, 600);
+        }
+
         function onHashChange() {
             if (window.location.hash === lastHash) return;
             lastHash = window.location.hash;
+
             highlightHashMsg();
+
+            if (window.location.hash.match(/^#msg\d+$/)) {
+                tryScrollToHashMsg(5);
+            }
         }
 
         /**********************
@@ -1821,10 +1844,10 @@
             lastHash = window.location.hash;
             highlightHashMsg();
 
-            if (lastHash) {
+            if (lastHash.match(/^#msg\d+$/)) {
                 setTimeout(() => {
-                    window.location.hash = lastHash;
-                }, 0);
+                    tryScrollToHashMsg(5);
+                }, 1200);
             }
         }
 
@@ -2399,6 +2422,44 @@
         }
     }
 
+    function messageScroller() {
+        if (window.phPtMessageScroller?.bound) return;
+
+        function collectMessages() {
+            return Array.from(document.querySelectorAll('[id^="msg"]'))
+                .filter(el => /^msg\d+$/.test(el.id))
+                .sort((a, b) =>
+                    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
+                );
+        }
+
+        function scrollToEl(el) {
+            if (!el) return false;
+
+            window.scrollTo({
+                top: window.scrollY + el.getBoundingClientRect().top,
+                behavior: 'smooth'
+            });
+
+            return true;
+        }
+
+        function scrollToMsgId(msgId) {
+            const el = document.getElementById(
+                String(msgId).startsWith('msg') ? msgId : 'msg' + msgId
+            );
+
+            return scrollToEl(el);
+        }
+
+        window.phPtMessageScroller = {
+            bound: true,
+            collectMessages,
+            scrollToEl,
+            scrollToMsgId,
+        };
+    }
+
     function keyboardNavigation() {
         function getPosts() {
             return [...document.querySelectorAll('li[data-id]')];
@@ -2411,8 +2472,10 @@
 
         function jumpToIndex(posts, index) {
             if (index < 0 || index >= posts.length) return;
-            history.replaceState(null, '', '#msg' + posts[index].dataset.id);
+            const id = posts[index].dataset.id;
+            history.replaceState(null, '', '#msg' + id);
             window.dispatchEvent(new HashChangeEvent('hashchange'));
+            window.phPtMessageScroller?.scrollToMsgId(id);
         }
 
         function getMsgIdFromHash() {
@@ -2424,6 +2487,7 @@
             if (id < 0) return;
             history.replaceState(null, '', '#msg' + id);
             window.dispatchEvent(new HashChangeEvent('hashchange'));
+            window.phPtMessageScroller?.scrollToMsgId(id);
         }
 
         function findClosestPost(posts, targetId) {
@@ -4559,7 +4623,7 @@
         // Hozzászólások összegyűjtése
         // -------------------------------------------------------
         function collectMessages() {
-            return Array.from(document.querySelectorAll('[id^="msg"]'))
+            return window.phPtMessageScroller?.collectMessages?.() || Array.from(document.querySelectorAll('[id^="msg"]'))
                 .filter(el => /^msg\d+$/.test(el.id))
                 .sort((a, b) =>
                     a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
@@ -4612,7 +4676,11 @@
         // -------------------------------------------------------
         function scrollToEl(el) {
             if (!el) return;
-            window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top, behavior: 'smooth' });
+            if (window.phPtMessageScroller?.scrollToEl?.(el)) return;
+            window.scrollTo({
+                top: window.scrollY + el.getBoundingClientRect().top,
+                behavior: 'smooth'
+            });
         }
 
         function scrollToIndex(idx) {
@@ -5051,11 +5119,10 @@
 
             const newId = m[1];
 
-            // Frissíti az indexet az új hash alapján és odagörget.
-            // Nem nyitjuk fel automatikusan a panelt.
+            // Csak a panel aktuális indexét frissíti.
+            // A #msg görgetést a msgAnchorHighlight kezeli.
             initMessages(newId);
             updateUI();
-            scrollToEl(messages[currentIndex]);
         });
 
         // -------------------------------------------------------
@@ -5068,7 +5135,7 @@
             if (incoming === '#ph-scroll-last' || incoming === '#ph-scroll-first') {
                 initMessages(null);
                 currentIndex = incoming === '#ph-scroll-last' ? messages.length - 1 : 0;
-                history.replaceState(null, '', window.location.pathname + '#' + (messages[currentIndex]?.id || ''));
+                history.replaceState(null, '', window.location.pathname + window.location.search + '#' + (messages[currentIndex]?.id || ''));
             } else {
                 // Normál betöltés: ha van #msg a hashben, onnan indulunk
                 const m = incoming.match(/^#(msg\d+)$/);
@@ -5093,10 +5160,7 @@
                 }
             }
 
-            // Ha van konkrét kijelölt hozzászólás, görget oda; ha nincs (#msg nélküli oldal),
-            // csak megjelenik a panel
-            if (window.location.hash.match(/^#(msg\d+)$/) ||
-                window.location.hash === '#ph-scroll-last' ||
+            if (window.location.hash === '#ph-scroll-last' ||
                 window.location.hash === '#ph-scroll-first') {
                 setTimeout(() => tryScroll(5), 1200);
             }
