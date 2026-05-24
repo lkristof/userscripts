@@ -4494,6 +4494,23 @@
         let navSide = navPos.side;
         let isHidden = navPos.hidden;
 
+        function getTopicTitle() {
+            const h1 = document.querySelector('h1');
+            if (h1?.textContent?.trim()) {
+                return h1.textContent.trim();
+            }
+
+            const activeBreadcrumb = document.querySelector('.breadcrumb .active, .breadcrumb-item.active');
+            if (activeBreadcrumb?.textContent?.trim()) {
+                return activeBreadcrumb.textContent.trim();
+            }
+
+            return document.title
+                .replace(/\s+-\s+.*$/, '')
+                .replace(/\s+\|\s+.*$/, '')
+                .trim();
+        }
+
         // URL elemzés lapozáshoz: /tema/nev/hsz_ELSO-UTOLSO.html
         // Fallbackként marad, de elsődlegesen a PH saját rel="prev"/rel="next" linkjeit használjuk.
         const pathMatch = window.location.pathname.match(/^(\/tema\/[^/]+\/)hsz_(\d+)-(\d+)\.html$/);
@@ -4897,6 +4914,18 @@
                 -webkit-tap-highlight-color: transparent;
                 transition: background 0.15s;
             }
+            
+            #ph-scroll-topic {
+                max-width: 132px;
+                font-size: 10px;
+                line-height: 1.15;
+                font-weight: 500;
+                color: rgba(255,255,255,0.55);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                margin-bottom: 3px;
+            }
 
             #ph-scroll-info:active {
                 background: rgba(255,255,255,0.06);
@@ -4973,6 +5002,13 @@
         const info = document.createElement('div');
         info.id = 'ph-scroll-info';
 
+        const topicTitle = getTopicTitle();
+
+        const topicEl = document.createElement('span');
+        topicEl.id = 'ph-scroll-topic';
+        topicEl.textContent = topicTitle;
+        topicEl.title = topicTitle;
+
         const counterEl = document.createElement('span');
         counterEl.id = 'ph-scroll-counter';
         counterEl.textContent = '…';
@@ -4980,6 +5016,10 @@
         const labelEl = document.createElement('span');
         labelEl.id = 'ph-scroll-label';
         labelEl.textContent = 'Válassz…';
+
+        if (topicEl.textContent) {
+            info.appendChild(topicEl);
+        }
 
         info.appendChild(counterEl);
         info.appendChild(labelEl);
