@@ -4356,6 +4356,9 @@
             #right.slotSingleColumn {
                 padding-left: 4px;
                 margin-left: -4px;
+                overflow-y: auto;
+                overscroll-behavior-y: contain;
+                overscroll-behavior-x: auto;
             }
             #right.slotSingleColumn::-webkit-scrollbar {
                 width: 4px;
@@ -4407,8 +4410,9 @@
                 position: sticky;
                 top: 85px;
                 max-height: calc(100vh - 55px);
-                overflow-y: overlay;
-                overscroll-behavior: contain;
+                overflow-y: auto;
+                overscroll-behavior-y: contain;
+                overscroll-behavior-x: auto;
                 transition: top 0.3s ease, max-height 0.3s ease;
             }
             html.scroll-down #right.slotSingleColumn,
