@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.2.6
+// @version      2.2.7
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -26,6 +26,7 @@
 // @grant        GM_xmlhttpRequest
 // @connect      kek.sh
 // @connect      api.github.com
+// @connect      gist.githubusercontent.com
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -262,29 +263,93 @@
         return el;
     }
 
+    function userscriptHttpRequest({ method = "GET", url, headers = {}, body = null, timeout = 20000 }) {
+        if (typeof GM_xmlhttpRequest === "function") {
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method,
+                    url,
+                    headers,
+                    data: body,
+                    timeout,
+                    responseType: "text",
+                    onload: resolve,
+                    onerror: () => reject(new Error(`Network error: ${method} ${url}`)),
+                    ontimeout: () => reject(new Error(`Request timeout: ${method} ${url}`)),
+                    onabort: () => reject(new Error(`Request aborted: ${method} ${url}`)),
+                });
+            });
+        }
+
+        // Fallback olyan userscript-kezelőhöz, ahol nincs GM_xmlhttpRequest.
+        return fetch(url, {
+            method,
+            headers,
+            body,
+        }).then(async res => ({
+            status: res.status,
+            statusText: res.statusText,
+            responseText: await res.text(),
+        }));
+    }
+
+    function getGithubHeaders(withJsonBody = false) {
+        return {
+            'Accept': 'application/vnd.github+json',
+            'Authorization': `Bearer ${GIST_TOKEN}`,
+            'X-GitHub-Api-Version': '2022-11-28',
+            ...(withJsonBody ? { 'Content-Type': 'application/json' } : {}),
+        };
+    }
+
     async function fetchGistBlob() {
-        const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-            headers: {
-                'Accept': 'application/vnd.github+json',
-                'Authorization': `token ${GIST_TOKEN}`
-            }
+        const res = await userscriptHttpRequest({
+            method: 'GET',
+            url: `https://api.github.com/gists/${encodeURIComponent(GIST_ID)}`,
+            headers: getGithubHeaders(false),
         });
-        if (!res.ok) throw new Error(`Gist fetch failed: ${res.status} ${res.statusText}`);
-        const data = await res.json();
+
+        if (res.status < 200 || res.status >= 300) {
+            throw new Error(`Gist fetch failed: ${res.status} ${res.statusText || ''}`.trim());
+        }
+
+        const data = safeJsonParse(res.responseText, null);
+        if (!data || typeof data !== 'object') {
+            throw new Error('Gist fetch failed: invalid GitHub response');
+        }
+
         const file = data?.files?.[GIST_FILENAME];
-        if (!file || typeof file.content !== 'string') return {};
-        const blob = safeJsonParse(file.content, {});
-        return (blob && typeof blob === 'object') ? blob : {};
+        if (!file) return {};
+
+        let content = (typeof file.content === 'string') ? file.content : '';
+
+        // A GitHub API a nagyobb Gist-fájlokat csonkolhatja. Ilyenkor a raw URL kell.
+        if ((file.truncated || !content) && file.raw_url) {
+            const raw = await userscriptHttpRequest({
+                method: 'GET',
+                url: file.raw_url,
+                headers: { 'Authorization': `Bearer ${GIST_TOKEN}` },
+            });
+            if (raw.status < 200 || raw.status >= 300) {
+                throw new Error(`Gist raw fetch failed: ${raw.status} ${raw.statusText || ''}`.trim());
+            }
+            content = raw.responseText || '';
+        }
+
+        if (!content.trim()) return {};
+
+        const blob = safeJsonParse(content, null);
+        if (!blob || typeof blob !== 'object' || Array.isArray(blob)) {
+            throw new Error(`A Gist fájl nem érvényes JSON objektum: ${GIST_FILENAME}`);
+        }
+        return blob;
     }
 
     async function pushGistBlob(blob) {
-        const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        const res = await userscriptHttpRequest({
             method: 'PATCH',
-            headers: {
-                'Accept': 'application/vnd.github+json',
-                'Authorization': `token ${GIST_TOKEN}`,
-                'Content-Type': 'application/json'
-            },
+            url: `https://api.github.com/gists/${encodeURIComponent(GIST_ID)}`,
+            headers: getGithubHeaders(true),
             body: JSON.stringify({
                 files: {
                     [GIST_FILENAME]: {
@@ -293,7 +358,10 @@
                 }
             })
         });
-        if (!res.ok) throw new Error(`Gist update failed: ${res.status} ${res.statusText}`);
+
+        if (res.status < 200 || res.status >= 300) {
+            throw new Error(`Gist update failed: ${res.status} ${res.statusText || ''}`.trim());
+        }
     }
 
     function createSyncedStorage() {
@@ -301,7 +369,10 @@
         let pushTimer = null;
         let inited = false;
 
-        const dirtyDeletes = new Set(); // ✅ explicit törlések nyilvántartása
+        // Csak az ebben a futásban ténylegesen módosított helyi kulcsok
+        // szólhatnak bele a következő Gist írásba. A localStorage egyébként cache.
+        const dirtyWrites = new Set();
+        const dirtyDeletes = new Set();
 
         function keyShouldSync(key) {
             return SYNC_KEYS.includes(key);
@@ -311,31 +382,48 @@
             return Array.from(new Set(SYNC_KEYS));
         }
 
-        async function init() {
-            if (inited) return;
-            inited = true;
+        function normalizeRemoteValue(value) {
+            if (typeof value !== 'string') return value;
+            return safeJsonParse(value, value);
+        }
 
-            if (!ENABLE_GIST_SYNC) return;
-
-            try {
-                gistCache = await fetchGistBlob();
-
-                const remoteKeys = Object.keys(gistCache || {});
-                remoteKeys.forEach(k => {
-                    if (!keyShouldSync(k)) return;
-                    localStorage.setItem(k, JSON.stringify(gistCache[k]));
-                });
-            } catch (e) {
-                console.warn('[PH Power Tools] Gist sync (pull) failed:', e);
+        function normalizeRemoteBlob(blob) {
+            const out = {};
+            for (const [key, value] of Object.entries(blob || {})) {
+                out[key] = normalizeRemoteValue(value);
             }
+            return out;
+        }
+
+        function readLocalValue(key) {
+            const raw = localStorage.getItem(key);
+            return raw == null ? null : safeJsonParse(raw, raw);
+        }
+
+        function writeLocalValueDirect(key, value) {
+            if (value == null) localStorage.removeItem(key);
+            else localStorage.setItem(key, JSON.stringify(value));
+        }
+
+        function toTimestamp(value) {
+            const n = parseInt(value, 10);
+            return Number.isFinite(n) ? n : 0;
+        }
+
+        function filterLocalGalleryAfterReset(items, resetTs) {
+            if (!Array.isArray(items) || !resetTs) return Array.isArray(items) ? items : [];
+
+            return items.filter(it => {
+                if (!it?.url) return false;
+                const createdTs = Date.parse(it.createdAt || '');
+                return Number.isFinite(createdTs) && createdTs > resetTs;
+            });
         }
 
         function mergeForKey(key, remoteVal, localVal) {
-            // ha valamelyik hiányzik
             if (remoteVal == null) return localVal;
             if (localVal == null) return remoteVal;
 
-            // 1) Topic max id map: slug -> maxId (itt kell a MAX merge!)
             if (key === KEYS.STATE.TOPIC_MAX_ID_MAP) {
                 const r = (remoteVal && typeof remoteVal === "object") ? remoteVal : {};
                 const l = (localVal && typeof localVal === "object") ? localVal : {};
@@ -350,16 +438,16 @@
                 return out;
             }
 
-            // 2) kek gallery: unió URL alapján, friss rendezés, majd limit
             if (key === KEYS.KEK.GALLERY) {
                 const r = Array.isArray(remoteVal) ? remoteVal : [];
                 const l = Array.isArray(localVal) ? localVal : [];
                 const byUrl = new Map();
 
+                // A Gist-elemek kerülnek be először. A helyi lista csak az ebben
+                // a futásban hozzáadott/módosított elemekkel egészítheti ki őket.
                 for (const it of [...r, ...l]) {
                     if (!it?.url) continue;
                     const prev = byUrl.get(it.url);
-                    // tartsuk meg a "jobb" metaadatot (pl. későbbi createdAt)
                     if (!prev) byUrl.set(it.url, it);
                     else {
                         const pT = Date.parse(prev.createdAt || 0) || 0;
@@ -372,8 +460,7 @@
                     .sort((a, b) => (Date.parse(b.createdAt || 0) || 0) - (Date.parse(a.createdAt || 0) || 0));
 
                 const deleted = safeJsonParse(localStorage.getItem(KEYS.KEK.GALLERY_DELETED) || "{}", {});
-                const filtered = merged.filter(it => it?.url && !deleted[it.url]);
-                return filtered;
+                return merged.filter(it => it?.url && !deleted[it.url]);
             }
 
             if (key === KEYS.KEK.GALLERY_DELETED) {
@@ -390,8 +477,90 @@
                 return out;
             }
 
-            // Default: maradhat a "local wins"
+            if (key === KEYS.KEK.GALLERY_RESET_TS) {
+                return Math.max(toTimestamp(remoteVal), toTimestamp(localVal));
+            }
+
+            // Ezt csak dirty helyi írás esetén hívjuk: ilyenkor a friss helyi
+            // módosítás nyer. Nem dirty kulcsnál a Gist pontos értéke kerül le.
             return localVal;
+        }
+
+        function applyRemoteBlob(remoteBlob) {
+            const remote = normalizeRemoteBlob(remoteBlob);
+            const hasOwn = key => Object.prototype.hasOwnProperty.call(remote, key);
+            const remoteResetTs = hasOwn(KEYS.KEK.GALLERY_RESET_TS)
+                ? toTimestamp(remote[KEYS.KEK.GALLERY_RESET_TS])
+                : 0;
+            const seenResetTs = toTimestamp(localStorage.getItem(KEYS.KEK.GALLERY_SEEN_RESET_TS));
+
+            // A sorrend fontos: előbb a törlési tombstone és a reset, utána a
+            // galéria, hogy a galéria merge már a legfrissebb törléseket lássa.
+            const orderedKeys = [
+                KEYS.KEK.GALLERY_DELETED,
+                KEYS.KEK.GALLERY_RESET_TS,
+                ...listLocalKeysToSync().filter(key => ![
+                    KEYS.KEK.GALLERY,
+                    KEYS.KEK.GALLERY_DELETED,
+                    KEYS.KEK.GALLERY_RESET_TS,
+                ].includes(key)),
+                KEYS.KEK.GALLERY,
+            ];
+
+            for (const key of orderedKeys) {
+                if (dirtyDeletes.has(key)) continue;
+
+                const localIsDirty = dirtyWrites.has(key);
+
+                // Nem módosított helyi kulcsnál a Gist az egyetlen igazságforrás.
+                // Ha a kulcs nincs a Gistben, a régi helyi cache-t is eltávolítjuk.
+                if (!localIsDirty) {
+                    writeLocalValueDirect(key, hasOwn(key) ? remote[key] : null);
+                    continue;
+                }
+
+                // Dirty kulcsnál megőrizzük a friss helyi változtatást, de
+                // előtte beemeljük az időközben más gépről érkezett adatokat.
+                let localVal = readLocalValue(key);
+
+                if (key === KEYS.KEK.GALLERY && remoteResetTs > seenResetTs) {
+                    localVal = filterLocalGalleryAfterReset(localVal, remoteResetTs);
+                }
+
+                if (hasOwn(key)) {
+                    localVal = mergeForKey(key, remote[key], localVal);
+                }
+
+                writeLocalValueDirect(key, localVal);
+            }
+
+            if (remoteResetTs > seenResetTs) {
+                localStorage.setItem(KEYS.KEK.GALLERY_SEEN_RESET_TS, String(remoteResetTs));
+            }
+
+            gistCache = remote;
+            const gallery = readLocalValue(KEYS.KEK.GALLERY);
+            return {
+                galleryCount: Array.isArray(gallery) ? gallery.length : 0,
+            };
+        }
+
+        async function pullAndMergeNow() {
+            if (!ENABLE_GIST_SYNC) return { galleryCount: 0 };
+            const remote = await fetchGistBlob();
+            return applyRemoteBlob(remote);
+        }
+
+        async function init() {
+            if (inited) return;
+            inited = true;
+            if (!ENABLE_GIST_SYNC) return;
+
+            try {
+                await pullAndMergeNow();
+            } catch (e) {
+                console.warn('[PH Power Tools] Gist sync (pull) failed:', e);
+            }
         }
 
         function deepEqualJson(a, b) {
@@ -399,73 +568,97 @@
         }
 
         async function doPushNow() {
-            if (!ENABLE_GIST_SYNC) return;
+            if (!ENABLE_GIST_SYNC) return { ok: false, disabled: true };
 
-            const keysToSync = listLocalKeysToSync();
             const maxAttempts = 3;
+            let lastError = null;
 
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                let remote;
                 try {
-                    remote = await fetchGistBlob();
-                } catch (e) {
-                    console.warn('[PH Power Tools] Push aborted (pull failed):', e);
-                    return;
-                }
+                    const fetchedRemote = await fetchGistBlob();
 
-                // merge lokál + remote
-                const merged = { ...(remote || {}) };
+                    // Pull mindig megelőzi a push-t. A nem dirty helyi cache-t
+                    // felülírja a Gist, a dirty kulcsokat biztonságosan merge-eli.
+                    applyRemoteBlob(fetchedRemote);
+                    const remote = normalizeRemoteBlob(fetchedRemote);
 
-                keysToSync.forEach(k => {
-                    const raw = localStorage.getItem(k);
-
-                    if (raw == null) {
-                        if (dirtyDeletes.has(k)) delete merged[k];
-                    } else {
-                        const localVal = safeJsonParse(raw, raw);
-                        const remoteVal = merged[k];
-                        merged[k] = mergeForKey(k, remoteVal, localVal);
+                    if (!dirtyWrites.size && !dirtyDeletes.size) {
+                        gistCache = remote;
+                        return { ok: true, changed: false };
                     }
-                });
 
-                try {
+                    const merged = { ...remote };
+
+                    for (const key of listLocalKeysToSync()) {
+                        if (dirtyDeletes.has(key)) {
+                            delete merged[key];
+                            continue;
+                        }
+
+                        // Régi vagy üres localStorage-cache soha ne kerüljön fel.
+                        // Csak a futás során ténylegesen módosított kulcsokat írjuk.
+                        if (!dirtyWrites.has(key)) continue;
+
+                        const localVal = readLocalValue(key);
+                        if (localVal == null) continue;
+
+                        const remoteVal = normalizeRemoteValue(merged[key]);
+                        merged[key] = mergeForKey(key, remoteVal, localVal);
+                    }
+
                     await pushGistBlob(merged);
+
+                    const after = normalizeRemoteBlob(await fetchGistBlob());
+                    if (!deepEqualJson(after, merged)) {
+                        throw new Error('A Gist ellenőrző visszaolvasása eltérő tartalmat adott.');
+                    }
+
+                    dirtyWrites.clear();
                     dirtyDeletes.clear();
+                    gistCache = after;
+                    return { ok: true, changed: true };
                 } catch (e) {
-                    console.warn('[PH Power Tools] Push failed:', e);
-                    return;
+                    lastError = e;
+                    console.warn(`[PH Power Tools] Gist push attempt ${attempt}/${maxAttempts} failed:`, e);
+                    if (attempt < maxAttempts) {
+                        await new Promise(r => setTimeout(r, 150 + Math.floor(Math.random() * 250)));
+                    }
                 }
-
-                // verify: visszaolvasunk, és megnézzük, tényleg azt látjuk-e, amit felküldtünk
-                try {
-                    const after = await fetchGistBlob();
-                    if (deepEqualJson(after, merged)) return; // kész
-                } catch {
-                    // ha verify nem sikerül, próbáljuk újra (ritka)
-                }
-
-                // kis várakozás + retry (jitter)
-                await new Promise(r => setTimeout(r, 150 + Math.floor(Math.random() * 250)));
             }
 
-            console.warn('[PH Power Tools] Push gave up after retries (possible concurrent edits).');
+            throw lastError || new Error('Gist sync failed after retries');
         }
 
         function schedulePush() {
             if (!ENABLE_GIST_SYNC) return;
             if (pushTimer) clearTimeout(pushTimer);
-            pushTimer = setTimeout(() => { doPushNow(); }, 2000);
+            pushTimer = setTimeout(() => {
+                pushTimer = null;
+                doPushNow().catch(e => {
+                    console.warn('[PH Power Tools] Scheduled Gist sync failed:', e);
+                });
+            }, 2000);
+        }
+
+        async function cancelTimerAndRun(fn) {
+            if (pushTimer) {
+                clearTimeout(pushTimer);
+                pushTimer = null;
+            }
+            return await fn();
         }
 
         return {
             init,
             async flush() {
-                // ha van ütemezett push, azt most azonnal futtatjuk
-                if (pushTimer) {
-                    clearTimeout(pushTimer);
-                    pushTimer = null;
-                }
-                await doPushNow();
+                return cancelTimerAndRun(doPushNow);
+            },
+            async syncNow() {
+                return cancelTimerAndRun(async () => {
+                    const pulled = await pullAndMergeNow();
+                    await doPushNow();
+                    return pulled;
+                });
             },
             getItem(key) { return localStorage.getItem(key); },
             setItem(key, value) {
@@ -476,13 +669,15 @@
 
                 if (keyShouldSync(key)) {
                     dirtyDeletes.delete(key);
+                    dirtyWrites.add(key);
                     schedulePush();
                 }
             },
             removeItem(key) {
                 localStorage.removeItem(key);
                 if (keyShouldSync(key)) {
-                    dirtyDeletes.add(key); // ✅ explicit törlés
+                    dirtyWrites.delete(key);
+                    dirtyDeletes.add(key);
                     schedulePush();
                 }
             }
@@ -3602,8 +3797,19 @@
             const seenTs = parseInt(localStorage.getItem(SEEN_RESET_KEY) || "0", 10) || 0;
 
             if (resetTs > 0 && resetTs > seenTs) {
-                // volt egy új “mind törlés” másik gépről → dobjuk a lokális galériát
-                storage.removeItem(LS_KEY);
+                // Csak a reset ELŐTTI képeket dobjuk. A korábbi megoldás egy új gépen
+                // a Gistből frissen lehúzott, reset után feltöltött képeket is kitörölte.
+                const current = loadGallery();
+                const kept = current.filter(it => {
+                    const createdTs = Date.parse(it?.createdAt || "");
+                    return Number.isFinite(createdTs) && createdTs > resetTs;
+                });
+
+                if (kept.length !== current.length) {
+                    if (kept.length) storage.setItem(LS_KEY, JSON.stringify(kept));
+                    else storage.removeItem(LS_KEY);
+                }
+
                 // local-only ack, do NOT sync
                 localStorage.setItem(SEEN_RESET_KEY, String(resetTs));
             }
@@ -3943,7 +4149,18 @@
                         size: json.size || file.size || null
                     });
 
-                    setStatus(wrapper, "✅ Feltöltve (elmentve)");
+                    if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                        try {
+                            await storage.flush();
+                            setStatus(wrapper, "✅ Feltöltve és Gistbe szinkronizálva");
+                        } catch (err) {
+                            console.error('[PH Power Tools] Gallery upload sync failed:', err);
+                            setStatus(wrapper, `⚠️ Feltöltve, de a Gist-szinkron hibázott: ${err?.message || 'ismeretlen hiba'}`);
+                        }
+                    } else {
+                        setStatus(wrapper, "✅ Feltöltve (helyileg elmentve)");
+                    }
+
                     renderGallery(wrapper);
                     updateSyncBadge();
                     fileInput.value = "";
@@ -4022,15 +4239,23 @@
                 e.preventDefault();
                 e.stopPropagation();
 
-                // Kézi sync: a shared storage kényszerített push-a
-                if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                // Valódi kétirányú kézi sync: előbb pull + merge, utána push.
+                if (ENABLE_GIST_SYNC && typeof storage.syncNow === "function") {
+                    syncNowBtn.disabled = true;
+                    setStatus(wrapper, "☁️ Szinkronizálás a Gisttel...");
+
                     try {
-                        await storage.flush();
-                        setStatus(wrapper, "☁️ Szinkron kész");
-                    } catch {
-                        setStatus(wrapper, "❌ Szinkron hiba (lásd konzol)");
+                        await storage.syncNow();
+                        applyGalleryResetIfNeeded();
+                        renderGallery(wrapper);
+                        setStatus(wrapper, `☁️ Szinkron kész (${loadGallery().length} kép)`);
+                    } catch (err) {
+                        console.error('[PH Power Tools] Manual Gist sync failed:', err);
+                        setStatus(wrapper, `❌ Szinkron hiba: ${err?.message || 'ismeretlen hiba'}`);
+                    } finally {
+                        syncNowBtn.disabled = false;
+                        updateSyncBadge();
                     }
-                    updateSyncBadge();
                 }
                 return;
             }
