@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.2.6
+// @version      2.2.7
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -26,6 +26,7 @@
 // @grant        GM_xmlhttpRequest
 // @connect      kek.sh
 // @connect      api.github.com
+// @connect      gist.githubusercontent.com
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -142,7 +143,7 @@
         linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
         msgAnchorHighlight: 'URL-ben lévő #msg hozzászólás kiemelése. Színek a 🎨 menüben.',
         offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
-        wideView: 'Szélesebb tartalom, kevesebb oldalsó margó.',
+        wideView: 'Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.',
         threadView: 'Hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése.',
         keyboardNavigation: 'Billentyű navigáció a hozzászólások között\n← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
         hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
@@ -262,29 +263,93 @@
         return el;
     }
 
+    function userscriptHttpRequest({ method = "GET", url, headers = {}, body = null, timeout = 20000 }) {
+        if (typeof GM_xmlhttpRequest === "function") {
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method,
+                    url,
+                    headers,
+                    data: body,
+                    timeout,
+                    responseType: "text",
+                    onload: resolve,
+                    onerror: () => reject(new Error(`Network error: ${method} ${url}`)),
+                    ontimeout: () => reject(new Error(`Request timeout: ${method} ${url}`)),
+                    onabort: () => reject(new Error(`Request aborted: ${method} ${url}`)),
+                });
+            });
+        }
+
+        // Fallback olyan userscript-kezelőhöz, ahol nincs GM_xmlhttpRequest.
+        return fetch(url, {
+            method,
+            headers,
+            body,
+        }).then(async res => ({
+            status: res.status,
+            statusText: res.statusText,
+            responseText: await res.text(),
+        }));
+    }
+
+    function getGithubHeaders(withJsonBody = false) {
+        return {
+            'Accept': 'application/vnd.github+json',
+            'Authorization': `Bearer ${GIST_TOKEN}`,
+            'X-GitHub-Api-Version': '2022-11-28',
+            ...(withJsonBody ? { 'Content-Type': 'application/json' } : {}),
+        };
+    }
+
     async function fetchGistBlob() {
-        const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-            headers: {
-                'Accept': 'application/vnd.github+json',
-                'Authorization': `token ${GIST_TOKEN}`
-            }
+        const res = await userscriptHttpRequest({
+            method: 'GET',
+            url: `https://api.github.com/gists/${encodeURIComponent(GIST_ID)}`,
+            headers: getGithubHeaders(false),
         });
-        if (!res.ok) throw new Error(`Gist fetch failed: ${res.status} ${res.statusText}`);
-        const data = await res.json();
+
+        if (res.status < 200 || res.status >= 300) {
+            throw new Error(`Gist fetch failed: ${res.status} ${res.statusText || ''}`.trim());
+        }
+
+        const data = safeJsonParse(res.responseText, null);
+        if (!data || typeof data !== 'object') {
+            throw new Error('Gist fetch failed: invalid GitHub response');
+        }
+
         const file = data?.files?.[GIST_FILENAME];
-        if (!file || typeof file.content !== 'string') return {};
-        const blob = safeJsonParse(file.content, {});
-        return (blob && typeof blob === 'object') ? blob : {};
+        if (!file) return {};
+
+        let content = (typeof file.content === 'string') ? file.content : '';
+
+        // A GitHub API a nagyobb Gist-fájlokat csonkolhatja. Ilyenkor a raw URL kell.
+        if ((file.truncated || !content) && file.raw_url) {
+            const raw = await userscriptHttpRequest({
+                method: 'GET',
+                url: file.raw_url,
+                headers: { 'Authorization': `Bearer ${GIST_TOKEN}` },
+            });
+            if (raw.status < 200 || raw.status >= 300) {
+                throw new Error(`Gist raw fetch failed: ${raw.status} ${raw.statusText || ''}`.trim());
+            }
+            content = raw.responseText || '';
+        }
+
+        if (!content.trim()) return {};
+
+        const blob = safeJsonParse(content, null);
+        if (!blob || typeof blob !== 'object' || Array.isArray(blob)) {
+            throw new Error(`A Gist fájl nem érvényes JSON objektum: ${GIST_FILENAME}`);
+        }
+        return blob;
     }
 
     async function pushGistBlob(blob) {
-        const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        const res = await userscriptHttpRequest({
             method: 'PATCH',
-            headers: {
-                'Accept': 'application/vnd.github+json',
-                'Authorization': `token ${GIST_TOKEN}`,
-                'Content-Type': 'application/json'
-            },
+            url: `https://api.github.com/gists/${encodeURIComponent(GIST_ID)}`,
+            headers: getGithubHeaders(true),
             body: JSON.stringify({
                 files: {
                     [GIST_FILENAME]: {
@@ -293,7 +358,10 @@
                 }
             })
         });
-        if (!res.ok) throw new Error(`Gist update failed: ${res.status} ${res.statusText}`);
+
+        if (res.status < 200 || res.status >= 300) {
+            throw new Error(`Gist update failed: ${res.status} ${res.statusText || ''}`.trim());
+        }
     }
 
     function createSyncedStorage() {
@@ -301,7 +369,10 @@
         let pushTimer = null;
         let inited = false;
 
-        const dirtyDeletes = new Set(); // ✅ explicit törlések nyilvántartása
+        // Csak az ebben a futásban ténylegesen módosított helyi kulcsok
+        // szólhatnak bele a következő Gist írásba. A localStorage egyébként cache.
+        const dirtyWrites = new Set();
+        const dirtyDeletes = new Set();
 
         function keyShouldSync(key) {
             return SYNC_KEYS.includes(key);
@@ -311,31 +382,48 @@
             return Array.from(new Set(SYNC_KEYS));
         }
 
-        async function init() {
-            if (inited) return;
-            inited = true;
+        function normalizeRemoteValue(value) {
+            if (typeof value !== 'string') return value;
+            return safeJsonParse(value, value);
+        }
 
-            if (!ENABLE_GIST_SYNC) return;
-
-            try {
-                gistCache = await fetchGistBlob();
-
-                const remoteKeys = Object.keys(gistCache || {});
-                remoteKeys.forEach(k => {
-                    if (!keyShouldSync(k)) return;
-                    localStorage.setItem(k, JSON.stringify(gistCache[k]));
-                });
-            } catch (e) {
-                console.warn('[PH Power Tools] Gist sync (pull) failed:', e);
+        function normalizeRemoteBlob(blob) {
+            const out = {};
+            for (const [key, value] of Object.entries(blob || {})) {
+                out[key] = normalizeRemoteValue(value);
             }
+            return out;
+        }
+
+        function readLocalValue(key) {
+            const raw = localStorage.getItem(key);
+            return raw == null ? null : safeJsonParse(raw, raw);
+        }
+
+        function writeLocalValueDirect(key, value) {
+            if (value == null) localStorage.removeItem(key);
+            else localStorage.setItem(key, JSON.stringify(value));
+        }
+
+        function toTimestamp(value) {
+            const n = parseInt(value, 10);
+            return Number.isFinite(n) ? n : 0;
+        }
+
+        function filterLocalGalleryAfterReset(items, resetTs) {
+            if (!Array.isArray(items) || !resetTs) return Array.isArray(items) ? items : [];
+
+            return items.filter(it => {
+                if (!it?.url) return false;
+                const createdTs = Date.parse(it.createdAt || '');
+                return Number.isFinite(createdTs) && createdTs > resetTs;
+            });
         }
 
         function mergeForKey(key, remoteVal, localVal) {
-            // ha valamelyik hiányzik
             if (remoteVal == null) return localVal;
             if (localVal == null) return remoteVal;
 
-            // 1) Topic max id map: slug -> maxId (itt kell a MAX merge!)
             if (key === KEYS.STATE.TOPIC_MAX_ID_MAP) {
                 const r = (remoteVal && typeof remoteVal === "object") ? remoteVal : {};
                 const l = (localVal && typeof localVal === "object") ? localVal : {};
@@ -350,16 +438,16 @@
                 return out;
             }
 
-            // 2) kek gallery: unió URL alapján, friss rendezés, majd limit
             if (key === KEYS.KEK.GALLERY) {
                 const r = Array.isArray(remoteVal) ? remoteVal : [];
                 const l = Array.isArray(localVal) ? localVal : [];
                 const byUrl = new Map();
 
+                // A Gist-elemek kerülnek be először. A helyi lista csak az ebben
+                // a futásban hozzáadott/módosított elemekkel egészítheti ki őket.
                 for (const it of [...r, ...l]) {
                     if (!it?.url) continue;
                     const prev = byUrl.get(it.url);
-                    // tartsuk meg a "jobb" metaadatot (pl. későbbi createdAt)
                     if (!prev) byUrl.set(it.url, it);
                     else {
                         const pT = Date.parse(prev.createdAt || 0) || 0;
@@ -372,8 +460,7 @@
                     .sort((a, b) => (Date.parse(b.createdAt || 0) || 0) - (Date.parse(a.createdAt || 0) || 0));
 
                 const deleted = safeJsonParse(localStorage.getItem(KEYS.KEK.GALLERY_DELETED) || "{}", {});
-                const filtered = merged.filter(it => it?.url && !deleted[it.url]);
-                return filtered;
+                return merged.filter(it => it?.url && !deleted[it.url]);
             }
 
             if (key === KEYS.KEK.GALLERY_DELETED) {
@@ -390,8 +477,90 @@
                 return out;
             }
 
-            // Default: maradhat a "local wins"
+            if (key === KEYS.KEK.GALLERY_RESET_TS) {
+                return Math.max(toTimestamp(remoteVal), toTimestamp(localVal));
+            }
+
+            // Ezt csak dirty helyi írás esetén hívjuk: ilyenkor a friss helyi
+            // módosítás nyer. Nem dirty kulcsnál a Gist pontos értéke kerül le.
             return localVal;
+        }
+
+        function applyRemoteBlob(remoteBlob) {
+            const remote = normalizeRemoteBlob(remoteBlob);
+            const hasOwn = key => Object.prototype.hasOwnProperty.call(remote, key);
+            const remoteResetTs = hasOwn(KEYS.KEK.GALLERY_RESET_TS)
+                ? toTimestamp(remote[KEYS.KEK.GALLERY_RESET_TS])
+                : 0;
+            const seenResetTs = toTimestamp(localStorage.getItem(KEYS.KEK.GALLERY_SEEN_RESET_TS));
+
+            // A sorrend fontos: előbb a törlési tombstone és a reset, utána a
+            // galéria, hogy a galéria merge már a legfrissebb törléseket lássa.
+            const orderedKeys = [
+                KEYS.KEK.GALLERY_DELETED,
+                KEYS.KEK.GALLERY_RESET_TS,
+                ...listLocalKeysToSync().filter(key => ![
+                    KEYS.KEK.GALLERY,
+                    KEYS.KEK.GALLERY_DELETED,
+                    KEYS.KEK.GALLERY_RESET_TS,
+                ].includes(key)),
+                KEYS.KEK.GALLERY,
+            ];
+
+            for (const key of orderedKeys) {
+                if (dirtyDeletes.has(key)) continue;
+
+                const localIsDirty = dirtyWrites.has(key);
+
+                // Nem módosított helyi kulcsnál a Gist az egyetlen igazságforrás.
+                // Ha a kulcs nincs a Gistben, a régi helyi cache-t is eltávolítjuk.
+                if (!localIsDirty) {
+                    writeLocalValueDirect(key, hasOwn(key) ? remote[key] : null);
+                    continue;
+                }
+
+                // Dirty kulcsnál megőrizzük a friss helyi változtatást, de
+                // előtte beemeljük az időközben más gépről érkezett adatokat.
+                let localVal = readLocalValue(key);
+
+                if (key === KEYS.KEK.GALLERY && remoteResetTs > seenResetTs) {
+                    localVal = filterLocalGalleryAfterReset(localVal, remoteResetTs);
+                }
+
+                if (hasOwn(key)) {
+                    localVal = mergeForKey(key, remote[key], localVal);
+                }
+
+                writeLocalValueDirect(key, localVal);
+            }
+
+            if (remoteResetTs > seenResetTs) {
+                localStorage.setItem(KEYS.KEK.GALLERY_SEEN_RESET_TS, String(remoteResetTs));
+            }
+
+            gistCache = remote;
+            const gallery = readLocalValue(KEYS.KEK.GALLERY);
+            return {
+                galleryCount: Array.isArray(gallery) ? gallery.length : 0,
+            };
+        }
+
+        async function pullAndMergeNow() {
+            if (!ENABLE_GIST_SYNC) return { galleryCount: 0 };
+            const remote = await fetchGistBlob();
+            return applyRemoteBlob(remote);
+        }
+
+        async function init() {
+            if (inited) return;
+            inited = true;
+            if (!ENABLE_GIST_SYNC) return;
+
+            try {
+                await pullAndMergeNow();
+            } catch (e) {
+                console.warn('[PH Power Tools] Gist sync (pull) failed:', e);
+            }
         }
 
         function deepEqualJson(a, b) {
@@ -399,73 +568,97 @@
         }
 
         async function doPushNow() {
-            if (!ENABLE_GIST_SYNC) return;
+            if (!ENABLE_GIST_SYNC) return { ok: false, disabled: true };
 
-            const keysToSync = listLocalKeysToSync();
             const maxAttempts = 3;
+            let lastError = null;
 
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                let remote;
                 try {
-                    remote = await fetchGistBlob();
-                } catch (e) {
-                    console.warn('[PH Power Tools] Push aborted (pull failed):', e);
-                    return;
-                }
+                    const fetchedRemote = await fetchGistBlob();
 
-                // merge lokál + remote
-                const merged = { ...(remote || {}) };
+                    // Pull mindig megelőzi a push-t. A nem dirty helyi cache-t
+                    // felülírja a Gist, a dirty kulcsokat biztonságosan merge-eli.
+                    applyRemoteBlob(fetchedRemote);
+                    const remote = normalizeRemoteBlob(fetchedRemote);
 
-                keysToSync.forEach(k => {
-                    const raw = localStorage.getItem(k);
-
-                    if (raw == null) {
-                        if (dirtyDeletes.has(k)) delete merged[k];
-                    } else {
-                        const localVal = safeJsonParse(raw, raw);
-                        const remoteVal = merged[k];
-                        merged[k] = mergeForKey(k, remoteVal, localVal);
+                    if (!dirtyWrites.size && !dirtyDeletes.size) {
+                        gistCache = remote;
+                        return { ok: true, changed: false };
                     }
-                });
 
-                try {
+                    const merged = { ...remote };
+
+                    for (const key of listLocalKeysToSync()) {
+                        if (dirtyDeletes.has(key)) {
+                            delete merged[key];
+                            continue;
+                        }
+
+                        // Régi vagy üres localStorage-cache soha ne kerüljön fel.
+                        // Csak a futás során ténylegesen módosított kulcsokat írjuk.
+                        if (!dirtyWrites.has(key)) continue;
+
+                        const localVal = readLocalValue(key);
+                        if (localVal == null) continue;
+
+                        const remoteVal = normalizeRemoteValue(merged[key]);
+                        merged[key] = mergeForKey(key, remoteVal, localVal);
+                    }
+
                     await pushGistBlob(merged);
+
+                    const after = normalizeRemoteBlob(await fetchGistBlob());
+                    if (!deepEqualJson(after, merged)) {
+                        throw new Error('A Gist ellenőrző visszaolvasása eltérő tartalmat adott.');
+                    }
+
+                    dirtyWrites.clear();
                     dirtyDeletes.clear();
+                    gistCache = after;
+                    return { ok: true, changed: true };
                 } catch (e) {
-                    console.warn('[PH Power Tools] Push failed:', e);
-                    return;
+                    lastError = e;
+                    console.warn(`[PH Power Tools] Gist push attempt ${attempt}/${maxAttempts} failed:`, e);
+                    if (attempt < maxAttempts) {
+                        await new Promise(r => setTimeout(r, 150 + Math.floor(Math.random() * 250)));
+                    }
                 }
-
-                // verify: visszaolvasunk, és megnézzük, tényleg azt látjuk-e, amit felküldtünk
-                try {
-                    const after = await fetchGistBlob();
-                    if (deepEqualJson(after, merged)) return; // kész
-                } catch {
-                    // ha verify nem sikerül, próbáljuk újra (ritka)
-                }
-
-                // kis várakozás + retry (jitter)
-                await new Promise(r => setTimeout(r, 150 + Math.floor(Math.random() * 250)));
             }
 
-            console.warn('[PH Power Tools] Push gave up after retries (possible concurrent edits).');
+            throw lastError || new Error('Gist sync failed after retries');
         }
 
         function schedulePush() {
             if (!ENABLE_GIST_SYNC) return;
             if (pushTimer) clearTimeout(pushTimer);
-            pushTimer = setTimeout(() => { doPushNow(); }, 2000);
+            pushTimer = setTimeout(() => {
+                pushTimer = null;
+                doPushNow().catch(e => {
+                    console.warn('[PH Power Tools] Scheduled Gist sync failed:', e);
+                });
+            }, 2000);
+        }
+
+        async function cancelTimerAndRun(fn) {
+            if (pushTimer) {
+                clearTimeout(pushTimer);
+                pushTimer = null;
+            }
+            return await fn();
         }
 
         return {
             init,
             async flush() {
-                // ha van ütemezett push, azt most azonnal futtatjuk
-                if (pushTimer) {
-                    clearTimeout(pushTimer);
-                    pushTimer = null;
-                }
-                await doPushNow();
+                return cancelTimerAndRun(doPushNow);
+            },
+            async syncNow() {
+                return cancelTimerAndRun(async () => {
+                    const pulled = await pullAndMergeNow();
+                    await doPushNow();
+                    return pulled;
+                });
             },
             getItem(key) { return localStorage.getItem(key); },
             setItem(key, value) {
@@ -476,13 +669,15 @@
 
                 if (keyShouldSync(key)) {
                     dirtyDeletes.delete(key);
+                    dirtyWrites.add(key);
                     schedulePush();
                 }
             },
             removeItem(key) {
                 localStorage.removeItem(key);
                 if (keyShouldSync(key)) {
-                    dirtyDeletes.add(key); // ✅ explicit törlés
+                    dirtyWrites.delete(key);
+                    dirtyDeletes.add(key);
                     schedulePush();
                 }
             }
@@ -2006,26 +2201,33 @@
         const GAP_PX = 0;
         const SIDE_MARGIN_RATIO = 0.20;
         const MIN_CENTER_PX = 710;
+        const VIEWPORT_GUTTER_PX = 16;
+        const RESIZE_STEP_PX = 20;
 
         const STYLE_ID = 'ph-wide-center-style';
         const ROW_CLASS = 'ph-center-row';
+        const HANDLE_CLASS = 'ph-wide-resize-handle';
         const STORAGE_KEY = KEYS.STATE.WIDE_VIEW;
+        const WIDTH_STORAGE_KEY = 'ph_wide_view_center_px';
 
         const STATUS = { ON: 'enabled', OFF: 'disabled' };
         const buttons = [];
 
-        function calculateLayout() {
-            const viewport = window.innerWidth;
-            const usable = viewport * (1 - getSideMarginRatio());
-            const center = Math.max(
-                MIN_CENTER_PX,
-                usable - LEFT_PX - RIGHT_PX - (2 * GAP_PX)
-            );
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
 
-            return {
-                total: LEFT_PX + center + RIGHT_PX + (2 * GAP_PX),
-                center
-            };
+        function getSavedCenterWidth() {
+            const value = parseInt(storage.getItem(WIDTH_STORAGE_KEY), 10);
+            return Number.isFinite(value) ? value : null;
+        }
+
+        function saveCenterWidth(px) {
+            storage.setItem(WIDTH_STORAGE_KEY, String(Math.round(px)));
+        }
+
+        function clearCenterWidth() {
+            storage.removeItem(WIDTH_STORAGE_KEY);
         }
 
         function getSideMarginRatio() {
@@ -2035,8 +2237,74 @@
             return SIDE_MARGIN_RATIO;
         }
 
-        function buildCSS() {
-            const { total, center } = calculateLayout();
+        function getCenterBounds() {
+            const viewport = window.innerWidth;
+
+            // Eddig nőhet a center úgy, hogy a bal és jobb panel is megmarad.
+            const maxWithLeft = Math.max(
+                MIN_CENTER_PX,
+                viewport - LEFT_PX - RIGHT_PX - (2 * GAP_PX) - VIEWPORT_GUTTER_PX
+            );
+
+            // Ha a user a fenti határon túl húz, a bal panel eltűnik,
+            // és annak helyével tovább növelhető a center.
+            const maxWithoutLeft = Math.max(
+                maxWithLeft,
+                viewport - RIGHT_PX - GAP_PX - VIEWPORT_GUTTER_PX
+            );
+
+            return {
+                min: MIN_CENTER_PX,
+                maxWithLeft,
+                maxWithoutLeft,
+            };
+        }
+
+        function getAutoCenterWidth() {
+            const viewport = window.innerWidth;
+            const usable = viewport * (1 - getSideMarginRatio());
+            const { min, maxWithLeft } = getCenterBounds();
+
+            return clamp(
+                usable - LEFT_PX - RIGHT_PX - (2 * GAP_PX),
+                min,
+                maxWithLeft
+            );
+        }
+
+        function calculateLayout(forcedCenter = null) {
+            const { min, maxWithLeft, maxWithoutLeft } = getCenterBounds();
+            const savedCenter = getSavedCenterWidth();
+
+            const manualWidth = forcedCenter !== null || savedCenter !== null;
+            const requestedCenter =
+                forcedCenter ?? savedCenter ?? getAutoCenterWidth();
+
+            // Automatikus módban soha ne lépjük át a bal panellel elérhető maximumot.
+            // Kézi méretezésnél viszont engedjük tovább a center szélességét addig,
+            // ameddig a bal panel eltüntetése után még kifér.
+            const center = clamp(
+                requestedCenter,
+                min,
+                manualWidth ? maxWithoutLeft : maxWithLeft
+            );
+
+            // Pont a maxWithLeft értéken még maradjon látható a bal panel.
+            // Csak akkor tűnjön el, amikor a user ténylegesen azon túl húz.
+            const leftHidden = manualWidth && center > maxWithLeft;
+
+            return {
+                total: (leftHidden ? 0 : LEFT_PX) + center + RIGHT_PX + (2 * GAP_PX),
+                center,
+                baseCenter: center,
+                leftHidden,
+                maxWithLeft,
+                maxWithoutLeft,
+            };
+        }
+
+        function buildCSS(forcedCenter = null) {
+            const { total, center, leftHidden } = calculateLayout(forcedCenter);
 
             return `
                 .container, .container-fluid, #container, .site-container {
@@ -2054,10 +2322,12 @@
                     margin-right: 0 !important;
                 }
                 #left {
+                    ${leftHidden ? 'display: none !important;' : ''}
                     width: ${LEFT_PX}px !important;
                     flex: 0 0 ${LEFT_PX}px !important;
                 }
                 #center {
+                    position: relative !important;
                     width: ${center}px !important;
                     flex: 0 0 ${center}px !important;
                 }
@@ -2065,19 +2335,97 @@
                     width: ${RIGHT_PX}px !important;
                     flex: 0 0 ${RIGHT_PX}px !important;
                 }
+
+                .${HANDLE_CLASS} {
+                    position: absolute;
+                    top: 0;
+                    bottom: 0;
+                    right: -7px;
+                    width: 14px;
+                    z-index: 150;
+                    cursor: ew-resize;
+                    touch-action: none;
+                    user-select: none;
+                    outline: none;
+                }
+                .${HANDLE_CLASS}::after {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    bottom: 0;
+                    left: 6px;
+                    width: 2px;
+                    background: currentColor;
+                    opacity: 0;
+                    transition: opacity 120ms ease, width 120ms ease;
+                }
+                
+                .${HANDLE_CLASS}:hover::after,
+                .${HANDLE_CLASS}:focus-visible::after,
+                .${HANDLE_CLASS}.is-dragging::after {
+                    width: 3px;
+                    opacity: 0.55;
+                }
+                .${HANDLE_CLASS} .ph-wide-resize-value {
+                    position: absolute;
+                    top: 12px;
+                    right: 12px;
+                    display: none;
+                    padding: 3px 7px;
+                    border-radius: 5px;
+                    background: rgba(0,0,0,0.78);
+                    color: #fff;
+                    font-size: 11px;
+                    line-height: 1.2;
+                    white-space: nowrap;
+                    pointer-events: none;
+                }
+                .${HANDLE_CLASS}.is-dragging .ph-wide-resize-value,
+                .${HANDLE_CLASS}:focus-visible .ph-wide-resize-value {
+                    display: block;
+                }
+                html.ph-wide-resizing,
+                html.ph-wide-resizing * {
+                    cursor: ew-resize !important;
+                    user-select: none !important;
+                }
             `;
         }
 
-        function applyLayout() {
-            injectStyleOnce(STYLE_ID, buildCSS());
+        function updateHandleUI(centerPx = null) {
+            const handle = document.querySelector(`.${HANDLE_CLASS}`);
+            if (!handle) return;
+
+            const { baseCenter, leftHidden } = calculateLayout(centerPx);
+            const { min, maxWithoutLeft } = getCenterBounds();
+            const value = handle.querySelector('.ph-wide-resize-value');
+
+            handle.setAttribute('aria-valuemin', String(Math.round(min)));
+            handle.setAttribute('aria-valuemax', String(Math.round(maxWithoutLeft)));
+            handle.setAttribute('aria-valuenow', String(Math.round(baseCenter)));
+            handle.title =
+                `Szélesség: ${Math.round(baseCenter)} px` +
+                (leftHidden ? ' • bal panel elrejtve' : '') +
+                ' • húzás: méretezés • dupla katt: automatikus';
+
+            if (value) value.textContent = `${Math.round(baseCenter)} px`;
+        }
+
+        function applyLayout(forcedCenter = null) {
+            injectStyleOnce(STYLE_ID, buildCSS(forcedCenter));
 
             const center = document.querySelector('#center');
             const row = center?.closest('.row');
             if (row) row.classList.add(ROW_CLASS);
+
+            ensureResizeHandle();
+            updateHandleUI(forcedCenter);
         }
 
         function removeLayout() {
             document.getElementById(STYLE_ID)?.remove();
+            document.querySelector(`.${HANDLE_CLASS}`)?.remove();
+
             const center = document.querySelector('#center');
             const row = center?.closest('.row');
             row?.classList.remove(ROW_CLASS);
@@ -2095,6 +2443,101 @@
             return storage.getItem(STORAGE_KEY) === STATUS.ON;
         }
 
+        function ensureResizeHandle() {
+            const center = document.querySelector('#center');
+            if (!center || center.querySelector(`.${HANDLE_CLASS}`)) return;
+
+            const handle = document.createElement('div');
+            handle.className = HANDLE_CLASS;
+            handle.tabIndex = 0;
+            handle.setAttribute('role', 'separator');
+            handle.setAttribute('aria-orientation', 'vertical');
+            handle.setAttribute('aria-label', 'Széles nézet szélességének állítása');
+            handle.innerHTML = `<span class="ph-wide-resize-value"></span>`;
+
+            let dragStartX = 0;
+            let dragStartCenter = 0;
+            let dragCurrentCenter = 0;
+            let dragging = false;
+
+            function finishDrag() {
+                if (!dragging) return;
+                dragging = false;
+                handle.classList.remove('is-dragging');
+                document.documentElement.classList.remove('ph-wide-resizing');
+
+                saveCenterWidth(dragCurrentCenter);
+                applyLayout();
+                updateAllButtons();
+            }
+
+            handle.addEventListener('pointerdown', e => {
+                if (e.button !== 0 && e.pointerType === 'mouse') return;
+                e.preventDefault();
+
+                const currentCenter = calculateLayout().baseCenter;
+
+                dragging = true;
+                dragStartX = e.clientX;
+                dragStartCenter = currentCenter;
+                dragCurrentCenter = currentCenter;
+
+                handle.classList.add('is-dragging');
+                document.documentElement.classList.add('ph-wide-resizing');
+                handle.setPointerCapture?.(e.pointerId);
+                updateHandleUI(currentCenter);
+            });
+
+            handle.addEventListener('pointermove', e => {
+                if (!dragging) return;
+
+                // A teljes layout középre van igazítva, ezért a jobb él 1 px-es
+                // mozgatásához kb. 2 px-rel kell változtatni a center szélességét.
+                const delta = (e.clientX - dragStartX) * 2;
+                const { min, maxWithoutLeft } = getCenterBounds();
+                const nextCenter = clamp(dragStartCenter + delta, min, maxWithoutLeft);
+
+                dragCurrentCenter = nextCenter;
+                applyLayout(nextCenter);
+                updateHandleUI(nextCenter);
+            });
+
+            handle.addEventListener('pointerup', finishDrag);
+            handle.addEventListener('pointercancel', finishDrag);
+
+            handle.addEventListener('dblclick', e => {
+                e.preventDefault();
+                clearCenterWidth();
+                applyLayout();
+                updateAllButtons();
+            });
+
+            handle.addEventListener('keydown', e => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home') return;
+                e.preventDefault();
+
+                if (e.key === 'Home') {
+                    clearCenterWidth();
+                    applyLayout();
+                    updateAllButtons();
+                    return;
+                }
+
+                const current = calculateLayout().baseCenter;
+                const step = e.shiftKey ? RESIZE_STEP_PX * 5 : RESIZE_STEP_PX;
+                const direction = e.key === 'ArrowLeft' ? -1 : 1;
+                const { min, maxWithoutLeft } = getCenterBounds();
+                const nextCenter = clamp(current + (direction * step), min, maxWithoutLeft);
+
+                saveCenterWidth(nextCenter);
+                applyLayout();
+                updateAllButtons();
+            });
+
+            center.appendChild(handle);
+            updateHandleUI();
+        }
+
         window.addEventListener('resize', () => {
             if (isActive()) applyLayout();
         });
@@ -2107,8 +2550,11 @@
             btn.innerHTML = `<span class="fas fa-expand-arrows-alt fa-fw"></span> Széles nézet`;
 
             function updateUI() {
-                btn.title = isActive() ? 'Eredeti szélesség' : 'Szélesebb nézet';
-                btn.classList.toggle('btn-primary', isActive());
+                const active = isActive();
+                btn.title = active
+                    ? 'Széles nézet kikapcsolása'
+                    : 'Széles nézet bekapcsolása – a szélesség húzással állítható';
+                btn.classList.toggle('btn-primary', active);
             }
 
             btn.addEventListener('click', e => {
@@ -3602,8 +4048,19 @@
             const seenTs = parseInt(localStorage.getItem(SEEN_RESET_KEY) || "0", 10) || 0;
 
             if (resetTs > 0 && resetTs > seenTs) {
-                // volt egy új “mind törlés” másik gépről → dobjuk a lokális galériát
-                storage.removeItem(LS_KEY);
+                // Csak a reset ELŐTTI képeket dobjuk. A korábbi megoldás egy új gépen
+                // a Gistből frissen lehúzott, reset után feltöltött képeket is kitörölte.
+                const current = loadGallery();
+                const kept = current.filter(it => {
+                    const createdTs = Date.parse(it?.createdAt || "");
+                    return Number.isFinite(createdTs) && createdTs > resetTs;
+                });
+
+                if (kept.length !== current.length) {
+                    if (kept.length) storage.setItem(LS_KEY, JSON.stringify(kept));
+                    else storage.removeItem(LS_KEY);
+                }
+
                 // local-only ack, do NOT sync
                 localStorage.setItem(SEEN_RESET_KEY, String(resetTs));
             }
@@ -3943,7 +4400,18 @@
                         size: json.size || file.size || null
                     });
 
-                    setStatus(wrapper, "✅ Feltöltve (elmentve)");
+                    if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                        try {
+                            await storage.flush();
+                            setStatus(wrapper, "✅ Feltöltve és Gistbe szinkronizálva");
+                        } catch (err) {
+                            console.error('[PH Power Tools] Gallery upload sync failed:', err);
+                            setStatus(wrapper, `⚠️ Feltöltve, de a Gist-szinkron hibázott: ${err?.message || 'ismeretlen hiba'}`);
+                        }
+                    } else {
+                        setStatus(wrapper, "✅ Feltöltve (helyileg elmentve)");
+                    }
+
                     renderGallery(wrapper);
                     updateSyncBadge();
                     fileInput.value = "";
@@ -4022,15 +4490,23 @@
                 e.preventDefault();
                 e.stopPropagation();
 
-                // Kézi sync: a shared storage kényszerített push-a
-                if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                // Valódi kétirányú kézi sync: előbb pull + merge, utána push.
+                if (ENABLE_GIST_SYNC && typeof storage.syncNow === "function") {
+                    syncNowBtn.disabled = true;
+                    setStatus(wrapper, "☁️ Szinkronizálás a Gisttel...");
+
                     try {
-                        await storage.flush();
-                        setStatus(wrapper, "☁️ Szinkron kész");
-                    } catch {
-                        setStatus(wrapper, "❌ Szinkron hiba (lásd konzol)");
+                        await storage.syncNow();
+                        applyGalleryResetIfNeeded();
+                        renderGallery(wrapper);
+                        setStatus(wrapper, `☁️ Szinkron kész (${loadGallery().length} kép)`);
+                    } catch (err) {
+                        console.error('[PH Power Tools] Manual Gist sync failed:', err);
+                        setStatus(wrapper, `❌ Szinkron hiba: ${err?.message || 'ismeretlen hiba'}`);
+                    } finally {
+                        syncNowBtn.disabled = false;
+                        updateSyncBadge();
                     }
-                    updateSyncBadge();
                 }
                 return;
             }
@@ -4356,6 +4832,9 @@
             #right.slotSingleColumn {
                 padding-left: 4px;
                 margin-left: -4px;
+                overflow-y: auto;
+                overscroll-behavior-y: contain;
+                overscroll-behavior-x: auto;
             }
             #right.slotSingleColumn::-webkit-scrollbar {
                 width: 4px;
@@ -4407,8 +4886,9 @@
                 position: sticky;
                 top: 85px;
                 max-height: calc(100vh - 55px);
-                overflow-y: overlay;
-                overscroll-behavior: contain;
+                overflow-y: auto;
+                overscroll-behavior-y: contain;
+                overscroll-behavior-x: auto;
                 transition: top 0.3s ease, max-height 0.3s ease;
             }
             html.scroll-down #right.slotSingleColumn,
@@ -4493,6 +4973,23 @@
         let navPos  = loadNavPosition();
         let navSide = navPos.side;
         let isHidden = navPos.hidden;
+
+        function getTopicTitle() {
+            const h1 = document.querySelector('h1');
+            if (h1?.textContent?.trim()) {
+                return h1.textContent.trim();
+            }
+
+            const activeBreadcrumb = document.querySelector('.breadcrumb .active, .breadcrumb-item.active');
+            if (activeBreadcrumb?.textContent?.trim()) {
+                return activeBreadcrumb.textContent.trim();
+            }
+
+            return document.title
+                .replace(/\s+-\s+.*$/, '')
+                .replace(/\s+\|\s+.*$/, '')
+                .trim();
+        }
 
         // URL elemzés lapozáshoz: /tema/nev/hsz_ELSO-UTOLSO.html
         // Fallbackként marad, de elsődlegesen a PH saját rel="prev"/rel="next" linkjeit használjuk.
@@ -4897,6 +5394,18 @@
                 -webkit-tap-highlight-color: transparent;
                 transition: background 0.15s;
             }
+            
+            #ph-scroll-topic {
+                max-width: 132px;
+                font-size: 10px;
+                line-height: 1.15;
+                font-weight: 500;
+                color: rgba(255,255,255,0.55);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                margin-bottom: 3px;
+            }
 
             #ph-scroll-info:active {
                 background: rgba(255,255,255,0.06);
@@ -4973,6 +5482,13 @@
         const info = document.createElement('div');
         info.id = 'ph-scroll-info';
 
+        const topicTitle = getTopicTitle();
+
+        const topicEl = document.createElement('span');
+        topicEl.id = 'ph-scroll-topic';
+        topicEl.textContent = topicTitle;
+        topicEl.title = topicTitle;
+
         const counterEl = document.createElement('span');
         counterEl.id = 'ph-scroll-counter';
         counterEl.textContent = '…';
@@ -4980,6 +5496,10 @@
         const labelEl = document.createElement('span');
         labelEl.id = 'ph-scroll-label';
         labelEl.textContent = 'Válassz…';
+
+        if (topicEl.textContent) {
+            info.appendChild(topicEl);
+        }
 
         info.appendChild(counterEl);
         info.appendChild(labelEl);
