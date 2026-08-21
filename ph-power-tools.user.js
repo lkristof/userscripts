@@ -143,7 +143,7 @@
         linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
         msgAnchorHighlight: 'URL-ben lévő #msg hozzászólás kiemelése. Színek a 🎨 menüben.',
         offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
-        wideView: 'Szélesebb tartalom, kevesebb oldalsó margó.',
+        wideView: 'Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.',
         threadView: 'Hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése.',
         keyboardNavigation: 'Billentyű navigáció a hozzászólások között\n← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
         hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
@@ -2201,26 +2201,33 @@
         const GAP_PX = 0;
         const SIDE_MARGIN_RATIO = 0.20;
         const MIN_CENTER_PX = 710;
+        const VIEWPORT_GUTTER_PX = 16;
+        const RESIZE_STEP_PX = 20;
 
         const STYLE_ID = 'ph-wide-center-style';
         const ROW_CLASS = 'ph-center-row';
+        const HANDLE_CLASS = 'ph-wide-resize-handle';
         const STORAGE_KEY = KEYS.STATE.WIDE_VIEW;
+        const WIDTH_STORAGE_KEY = 'ph_wide_view_center_px';
 
         const STATUS = { ON: 'enabled', OFF: 'disabled' };
         const buttons = [];
 
-        function calculateLayout() {
-            const viewport = window.innerWidth;
-            const usable = viewport * (1 - getSideMarginRatio());
-            const center = Math.max(
-                MIN_CENTER_PX,
-                usable - LEFT_PX - RIGHT_PX - (2 * GAP_PX)
-            );
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
 
-            return {
-                total: LEFT_PX + center + RIGHT_PX + (2 * GAP_PX),
-                center
-            };
+        function getSavedCenterWidth() {
+            const value = parseInt(storage.getItem(WIDTH_STORAGE_KEY), 10);
+            return Number.isFinite(value) ? value : null;
+        }
+
+        function saveCenterWidth(px) {
+            storage.setItem(WIDTH_STORAGE_KEY, String(Math.round(px)));
+        }
+
+        function clearCenterWidth() {
+            storage.removeItem(WIDTH_STORAGE_KEY);
         }
 
         function getSideMarginRatio() {
@@ -2230,8 +2237,45 @@
             return SIDE_MARGIN_RATIO;
         }
 
-        function buildCSS() {
-            const { total, center } = calculateLayout();
+        function getCenterBounds() {
+            const viewport = window.innerWidth;
+            const maxCenter = Math.max(
+                MIN_CENTER_PX,
+                viewport - LEFT_PX - RIGHT_PX - (2 * GAP_PX) - VIEWPORT_GUTTER_PX
+            );
+
+            return {
+                min: MIN_CENTER_PX,
+                max: maxCenter,
+            };
+        }
+
+        function getAutoCenterWidth() {
+            const viewport = window.innerWidth;
+            const usable = viewport * (1 - getSideMarginRatio());
+            const { min, max } = getCenterBounds();
+
+            return clamp(
+                usable - LEFT_PX - RIGHT_PX - (2 * GAP_PX),
+                min,
+                max
+            );
+        }
+
+        function calculateLayout(forcedCenter = null) {
+            const { min, max } = getCenterBounds();
+            const savedCenter = getSavedCenterWidth();
+            const requestedCenter = forcedCenter ?? savedCenter ?? getAutoCenterWidth();
+            const center = clamp(requestedCenter, min, max);
+
+            return {
+                total: LEFT_PX + center + RIGHT_PX + (2 * GAP_PX),
+                center,
+            };
+        }
+
+        function buildCSS(forcedCenter = null) {
+            const { total, center } = calculateLayout(forcedCenter);
 
             return `
                 .container, .container-fluid, #container, .site-container {
@@ -2253,6 +2297,7 @@
                     flex: 0 0 ${LEFT_PX}px !important;
                 }
                 #center {
+                    position: relative !important;
                     width: ${center}px !important;
                     flex: 0 0 ${center}px !important;
                 }
@@ -2260,19 +2305,93 @@
                     width: ${RIGHT_PX}px !important;
                     flex: 0 0 ${RIGHT_PX}px !important;
                 }
+
+                .${HANDLE_CLASS} {
+                    position: absolute;
+                    top: 0;
+                    bottom: 0;
+                    right: -7px;
+                    width: 14px;
+                    z-index: 150;
+                    cursor: ew-resize;
+                    touch-action: none;
+                    user-select: none;
+                    outline: none;
+                }
+                .${HANDLE_CLASS}::after {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    bottom: 0;
+                    left: 6px;
+                    width: 2px;
+                    background: currentColor;
+                    opacity: 0;
+                    transition: opacity 120ms ease, width 120ms ease;
+                }
+                
+                .${HANDLE_CLASS}:hover::after,
+                .${HANDLE_CLASS}:focus-visible::after,
+                .${HANDLE_CLASS}.is-dragging::after {
+                    width: 3px;
+                    opacity: 0.55;
+                }
+                .${HANDLE_CLASS} .ph-wide-resize-value {
+                    position: absolute;
+                    top: 12px;
+                    right: 12px;
+                    display: none;
+                    padding: 3px 7px;
+                    border-radius: 5px;
+                    background: rgba(0,0,0,0.78);
+                    color: #fff;
+                    font-size: 11px;
+                    line-height: 1.2;
+                    white-space: nowrap;
+                    pointer-events: none;
+                }
+                .${HANDLE_CLASS}.is-dragging .ph-wide-resize-value,
+                .${HANDLE_CLASS}:focus-visible .ph-wide-resize-value {
+                    display: block;
+                }
+                html.ph-wide-resizing,
+                html.ph-wide-resizing * {
+                    cursor: ew-resize !important;
+                    user-select: none !important;
+                }
             `;
         }
 
-        function applyLayout() {
-            injectStyleOnce(STYLE_ID, buildCSS());
+        function updateHandleUI(centerPx = null) {
+            const handle = document.querySelector(`.${HANDLE_CLASS}`);
+            if (!handle) return;
+
+            const { center } = calculateLayout(centerPx);
+            const { min, max } = getCenterBounds();
+            const value = handle.querySelector('.ph-wide-resize-value');
+
+            handle.setAttribute('aria-valuemin', String(Math.round(min)));
+            handle.setAttribute('aria-valuemax', String(Math.round(max)));
+            handle.setAttribute('aria-valuenow', String(Math.round(center)));
+            handle.title = `Szélesség: ${Math.round(center)} px • húzás: méretezés • dupla katt: automatikus`;
+            if (value) value.textContent = `${Math.round(center)} px`;
+        }
+
+        function applyLayout(forcedCenter = null) {
+            injectStyleOnce(STYLE_ID, buildCSS(forcedCenter));
 
             const center = document.querySelector('#center');
             const row = center?.closest('.row');
             if (row) row.classList.add(ROW_CLASS);
+
+            ensureResizeHandle();
+            updateHandleUI(forcedCenter);
         }
 
         function removeLayout() {
             document.getElementById(STYLE_ID)?.remove();
+            document.querySelector(`.${HANDLE_CLASS}`)?.remove();
+
             const center = document.querySelector('#center');
             const row = center?.closest('.row');
             row?.classList.remove(ROW_CLASS);
@@ -2290,6 +2409,101 @@
             return storage.getItem(STORAGE_KEY) === STATUS.ON;
         }
 
+        function ensureResizeHandle() {
+            const center = document.querySelector('#center');
+            if (!center || center.querySelector(`.${HANDLE_CLASS}`)) return;
+
+            const handle = document.createElement('div');
+            handle.className = HANDLE_CLASS;
+            handle.tabIndex = 0;
+            handle.setAttribute('role', 'separator');
+            handle.setAttribute('aria-orientation', 'vertical');
+            handle.setAttribute('aria-label', 'Széles nézet szélességének állítása');
+            handle.innerHTML = `<span class="ph-wide-resize-value"></span>`;
+
+            let dragStartX = 0;
+            let dragStartCenter = 0;
+            let dragging = false;
+
+            function finishDrag() {
+                if (!dragging) return;
+                dragging = false;
+                handle.classList.remove('is-dragging');
+                document.documentElement.classList.remove('ph-wide-resizing');
+
+                const actualCenter = document.querySelector('#center')?.getBoundingClientRect().width;
+                if (actualCenter) saveCenterWidth(actualCenter);
+                applyLayout();
+                updateAllButtons();
+            }
+
+            handle.addEventListener('pointerdown', e => {
+                if (e.button !== 0 && e.pointerType === 'mouse') return;
+                e.preventDefault();
+
+                const currentCenter = document.querySelector('#center')?.getBoundingClientRect().width;
+                if (!currentCenter) return;
+
+                dragging = true;
+                dragStartX = e.clientX;
+                dragStartCenter = currentCenter;
+
+                handle.classList.add('is-dragging');
+                document.documentElement.classList.add('ph-wide-resizing');
+                handle.setPointerCapture?.(e.pointerId);
+                updateHandleUI(currentCenter);
+            });
+
+            handle.addEventListener('pointermove', e => {
+                if (!dragging) return;
+
+                // A teljes layout középre van igazítva, ezért a jobb él 1 px-es
+                // mozgatásához kb. 2 px-rel kell változtatni a center szélességét.
+                const delta = (e.clientX - dragStartX) * 2;
+                const { min, max } = getCenterBounds();
+                const nextCenter = clamp(dragStartCenter + delta, min, max);
+
+                applyLayout(nextCenter);
+                updateHandleUI(nextCenter);
+            });
+
+            handle.addEventListener('pointerup', finishDrag);
+            handle.addEventListener('pointercancel', finishDrag);
+
+            handle.addEventListener('dblclick', e => {
+                e.preventDefault();
+                clearCenterWidth();
+                applyLayout();
+                updateAllButtons();
+            });
+
+            handle.addEventListener('keydown', e => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home') return;
+                e.preventDefault();
+
+                if (e.key === 'Home') {
+                    clearCenterWidth();
+                    applyLayout();
+                    updateAllButtons();
+                    return;
+                }
+
+                const current = document.querySelector('#center')?.getBoundingClientRect().width
+                    || calculateLayout().center;
+                const step = e.shiftKey ? RESIZE_STEP_PX * 5 : RESIZE_STEP_PX;
+                const direction = e.key === 'ArrowLeft' ? -1 : 1;
+                const { min, max } = getCenterBounds();
+                const nextCenter = clamp(current + (direction * step), min, max);
+
+                saveCenterWidth(nextCenter);
+                applyLayout();
+                updateAllButtons();
+            });
+
+            center.appendChild(handle);
+            updateHandleUI();
+        }
+
         window.addEventListener('resize', () => {
             if (isActive()) applyLayout();
         });
@@ -2302,8 +2516,11 @@
             btn.innerHTML = `<span class="fas fa-expand-arrows-alt fa-fw"></span> Széles nézet`;
 
             function updateUI() {
-                btn.title = isActive() ? 'Eredeti szélesség' : 'Szélesebb nézet';
-                btn.classList.toggle('btn-primary', isActive());
+                const active = isActive();
+                btn.title = active
+                    ? 'Széles nézet kikapcsolása'
+                    : 'Széles nézet bekapcsolása – a szélesség húzással állítható';
+                btn.classList.toggle('btn-primary', active);
             }
 
             btn.addEventListener('click', e => {
