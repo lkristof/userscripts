@@ -2239,43 +2239,72 @@
 
         function getCenterBounds() {
             const viewport = window.innerWidth;
-            const maxCenter = Math.max(
+
+            // Eddig nőhet a center úgy, hogy a bal és jobb panel is megmarad.
+            const maxWithLeft = Math.max(
                 MIN_CENTER_PX,
                 viewport - LEFT_PX - RIGHT_PX - (2 * GAP_PX) - VIEWPORT_GUTTER_PX
             );
 
+            // Ha a user a fenti határon túl húz, a bal panel eltűnik,
+            // és annak helyével tovább növelhető a center.
+            const maxWithoutLeft = Math.max(
+                maxWithLeft,
+                viewport - RIGHT_PX - GAP_PX - VIEWPORT_GUTTER_PX
+            );
+
             return {
                 min: MIN_CENTER_PX,
-                max: maxCenter,
+                maxWithLeft,
+                maxWithoutLeft,
             };
         }
 
         function getAutoCenterWidth() {
             const viewport = window.innerWidth;
             const usable = viewport * (1 - getSideMarginRatio());
-            const { min, max } = getCenterBounds();
+            const { min, maxWithLeft } = getCenterBounds();
 
             return clamp(
                 usable - LEFT_PX - RIGHT_PX - (2 * GAP_PX),
                 min,
-                max
+                maxWithLeft
             );
         }
 
         function calculateLayout(forcedCenter = null) {
-            const { min, max } = getCenterBounds();
+            const { min, maxWithLeft, maxWithoutLeft } = getCenterBounds();
             const savedCenter = getSavedCenterWidth();
-            const requestedCenter = forcedCenter ?? savedCenter ?? getAutoCenterWidth();
-            const center = clamp(requestedCenter, min, max);
+
+            const manualWidth = forcedCenter !== null || savedCenter !== null;
+            const requestedCenter =
+                forcedCenter ?? savedCenter ?? getAutoCenterWidth();
+
+            // Automatikus módban soha ne lépjük át a bal panellel elérhető maximumot.
+            // Kézi méretezésnél viszont engedjük tovább a center szélességét addig,
+            // ameddig a bal panel eltüntetése után még kifér.
+            const center = clamp(
+                requestedCenter,
+                min,
+                manualWidth ? maxWithoutLeft : maxWithLeft
+            );
+
+            // Pont a maxWithLeft értéken még maradjon látható a bal panel.
+            // Csak akkor tűnjön el, amikor a user ténylegesen azon túl húz.
+            const leftHidden = manualWidth && center > maxWithLeft;
 
             return {
-                total: LEFT_PX + center + RIGHT_PX + (2 * GAP_PX),
+                total: (leftHidden ? 0 : LEFT_PX) + center + RIGHT_PX + (2 * GAP_PX),
                 center,
+                baseCenter: center,
+                leftHidden,
+                maxWithLeft,
+                maxWithoutLeft,
             };
         }
 
         function buildCSS(forcedCenter = null) {
-            const { total, center } = calculateLayout(forcedCenter);
+            const { total, center, leftHidden } = calculateLayout(forcedCenter);
 
             return `
                 .container, .container-fluid, #container, .site-container {
@@ -2293,6 +2322,7 @@
                     margin-right: 0 !important;
                 }
                 #left {
+                    ${leftHidden ? 'display: none !important;' : ''}
                     width: ${LEFT_PX}px !important;
                     flex: 0 0 ${LEFT_PX}px !important;
                 }
@@ -2366,15 +2396,19 @@
             const handle = document.querySelector(`.${HANDLE_CLASS}`);
             if (!handle) return;
 
-            const { center } = calculateLayout(centerPx);
-            const { min, max } = getCenterBounds();
+            const { baseCenter, leftHidden } = calculateLayout(centerPx);
+            const { min, maxWithoutLeft } = getCenterBounds();
             const value = handle.querySelector('.ph-wide-resize-value');
 
             handle.setAttribute('aria-valuemin', String(Math.round(min)));
-            handle.setAttribute('aria-valuemax', String(Math.round(max)));
-            handle.setAttribute('aria-valuenow', String(Math.round(center)));
-            handle.title = `Szélesség: ${Math.round(center)} px • húzás: méretezés • dupla katt: automatikus`;
-            if (value) value.textContent = `${Math.round(center)} px`;
+            handle.setAttribute('aria-valuemax', String(Math.round(maxWithoutLeft)));
+            handle.setAttribute('aria-valuenow', String(Math.round(baseCenter)));
+            handle.title =
+                `Szélesség: ${Math.round(baseCenter)} px` +
+                (leftHidden ? ' • bal panel elrejtve' : '') +
+                ' • húzás: méretezés • dupla katt: automatikus';
+
+            if (value) value.textContent = `${Math.round(baseCenter)} px`;
         }
 
         function applyLayout(forcedCenter = null) {
@@ -2423,6 +2457,7 @@
 
             let dragStartX = 0;
             let dragStartCenter = 0;
+            let dragCurrentCenter = 0;
             let dragging = false;
 
             function finishDrag() {
@@ -2431,8 +2466,7 @@
                 handle.classList.remove('is-dragging');
                 document.documentElement.classList.remove('ph-wide-resizing');
 
-                const actualCenter = document.querySelector('#center')?.getBoundingClientRect().width;
-                if (actualCenter) saveCenterWidth(actualCenter);
+                saveCenterWidth(dragCurrentCenter);
                 applyLayout();
                 updateAllButtons();
             }
@@ -2441,12 +2475,12 @@
                 if (e.button !== 0 && e.pointerType === 'mouse') return;
                 e.preventDefault();
 
-                const currentCenter = document.querySelector('#center')?.getBoundingClientRect().width;
-                if (!currentCenter) return;
+                const currentCenter = calculateLayout().baseCenter;
 
                 dragging = true;
                 dragStartX = e.clientX;
                 dragStartCenter = currentCenter;
+                dragCurrentCenter = currentCenter;
 
                 handle.classList.add('is-dragging');
                 document.documentElement.classList.add('ph-wide-resizing');
@@ -2460,9 +2494,10 @@
                 // A teljes layout középre van igazítva, ezért a jobb él 1 px-es
                 // mozgatásához kb. 2 px-rel kell változtatni a center szélességét.
                 const delta = (e.clientX - dragStartX) * 2;
-                const { min, max } = getCenterBounds();
-                const nextCenter = clamp(dragStartCenter + delta, min, max);
+                const { min, maxWithoutLeft } = getCenterBounds();
+                const nextCenter = clamp(dragStartCenter + delta, min, maxWithoutLeft);
 
+                dragCurrentCenter = nextCenter;
                 applyLayout(nextCenter);
                 updateHandleUI(nextCenter);
             });
@@ -2488,12 +2523,11 @@
                     return;
                 }
 
-                const current = document.querySelector('#center')?.getBoundingClientRect().width
-                    || calculateLayout().center;
+                const current = calculateLayout().baseCenter;
                 const step = e.shiftKey ? RESIZE_STEP_PX * 5 : RESIZE_STEP_PX;
                 const direction = e.key === 'ArrowLeft' ? -1 : 1;
-                const { min, max } = getCenterBounds();
-                const nextCenter = clamp(current + (direction * step), min, max);
+                const { min, maxWithoutLeft } = getCenterBounds();
+                const nextCenter = clamp(current + (direction * step), min, maxWithoutLeft);
 
                 saveCenterWidth(nextCenter);
                 applyLayout();
