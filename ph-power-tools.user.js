@@ -5303,6 +5303,7 @@
                 z-index: 99999;
                 display: flex;
                 align-items: stretch;
+                --ph-scroll-tab-width: 30px;
                 transition: transform 0.4s cubic-bezier(.4,0,.2,1), opacity 0.4s ease;
                 touch-action: none;
                 user-select: none;
@@ -5324,17 +5325,17 @@
             }
 
             #ph-scroll-btn-wrap.side-right.is-hidden {
-                transform: translateX(calc(100% - 20px));
+                transform: translateX(calc(100% - var(--ph-scroll-tab-width)));
                 opacity: 0.72;
             }
 
             #ph-scroll-btn-wrap.side-left.is-hidden {
-                transform: translateX(calc(-100% + 20px));
+                transform: translateX(calc(-100% + var(--ph-scroll-tab-width)));
                 opacity: 0.72;
             }
 
             #ph-scroll-tab {
-                width: 20px;
+                width: var(--ph-scroll-tab-width);
                 background: rgba(28,28,34,0.84);
                 backdrop-filter: blur(10px);
                 -webkit-backdrop-filter: blur(10px);
