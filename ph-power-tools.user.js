@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.2.7
+// @version      2.2.8
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -145,7 +145,7 @@
         offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
         wideView: 'Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.',
         threadView: 'Hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése.',
-        keyboardNavigation: 'Billentyű navigáció a hozzászólások között\n← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő',
+        keyboardNavigation: 'Billentyű navigáció a hozzászólások között\n← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő\nR előzmény\nshift + R vissza az R-el bejárt útvonalon',
         hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
         markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
         extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
@@ -2936,6 +2936,28 @@
     }
 
     function keyboardNavigation() {
+        const REPLY_HISTORY_KEY = 'ph_pt_reply_history';
+        const REPLY_HISTORY_TOPIC_KEY = 'ph_pt_reply_history_topic';
+
+        function getCurrentTopicKey() {
+            const m = location.pathname.match(/^\/tema\/([^/]+)\//);
+            return m ? m[1] : null;
+        }
+
+        function resetReplyHistoryOnTopicChange() {
+            const currentTopic = getCurrentTopicKey();
+            if (!currentTopic) return;
+
+            const savedTopic = sessionStorage.getItem(REPLY_HISTORY_TOPIC_KEY);
+
+            if (savedTopic !== currentTopic) {
+                sessionStorage.removeItem(REPLY_HISTORY_KEY);
+                sessionStorage.setItem(REPLY_HISTORY_TOPIC_KEY, currentTopic);
+            }
+        }
+
+        resetReplyHistoryOnTopicChange();
+
         function getPosts() {
             return [...document.querySelectorAll('li[data-id]')];
         }
@@ -3008,6 +3030,141 @@
             return closest ? posts.indexOf(closest) : 0;
         }
 
+        function loadReplyHistory() {
+            try {
+                const history = JSON.parse(
+                    sessionStorage.getItem(REPLY_HISTORY_KEY) || '[]'
+                );
+
+                return Array.isArray(history) ? history : [];
+            } catch {
+                return [];
+            }
+        }
+
+        function saveReplyHistory(history) {
+            try {
+                sessionStorage.setItem(
+                    REPLY_HISTORY_KEY,
+                    JSON.stringify(history)
+                );
+            } catch {}
+        }
+
+        function pushReplyHistory(locationData) {
+            if (!locationData?.id || !locationData?.url) return;
+
+            const history = loadReplyHistory();
+            const last = history[history.length - 1];
+
+            // Ugyanazt a pontot ne tegyük be kétszer egymás után.
+            if (
+                last &&
+                String(last.id) === String(locationData.id) &&
+                last.url === locationData.url
+            ) {
+                return;
+            }
+
+            history.push(locationData);
+
+            // Biztonsági limit, nehogy végtelenre nőjön.
+            if (history.length > 100) {
+                history.splice(0, history.length - 100);
+            }
+
+            saveReplyHistory(history);
+        }
+
+        function jumpBackInReplyHistory(posts) {
+            const history = loadReplyHistory();
+            if (!history.length) return;
+
+            const target = history.pop();
+            saveReplyHistory(history);
+
+            if (!target?.id || !target?.url) return;
+
+            const targetId = String(target.id);
+
+            // Ha a cél hozzászólás már az aktuális oldalon van,
+            // csak odagörgetünk.
+            const targetPost = posts.find(
+                li => li.dataset.id === targetId
+            );
+
+            if (targetPost) {
+                setMsgId(parseInt(targetId, 10));
+                return;
+            }
+
+            // Ha másik oldalon van, visszamegyünk a pontos mentett URL-re.
+            window.location.href = target.url;
+        }
+
+        function jumpToRepliedPost(posts) {
+            const currentId = getMsgIdFromHash();
+            if (currentId === null) return;
+
+            const currentPost = posts.find(
+                li => li.dataset.id === String(currentId)
+            );
+            if (!currentPost) return;
+
+            // Elsősorban a fejlécben lévő előzmény linket használjuk.
+            // Pl. /tema/.../friss.html#msg361118
+            const replyLink =
+                currentPost.querySelector(
+                    '.message-head-infos .message-reply a.message-id[href*="#msg"]'
+                ) ||
+                currentPost.querySelector(
+                    '.message-content-replied .message-reply a.message-id[href*="#msg"]'
+                );
+
+            let replyId = null;
+
+            if (replyLink) {
+                try {
+                    const url = new URL(replyLink.href, location.href);
+                    const match = url.hash.match(/^#msg(\d+)$/);
+
+                    if (match) {
+                        replyId = match[1];
+                    }
+                } catch {}
+            }
+
+            // Fallback: ha valamiért nincs használható link,
+            // próbáljuk a data-rplid-et.
+            if (!replyId) {
+                replyId = currentPost.dataset.rplid;
+            }
+
+            if (!replyId) return;
+
+            // Mielőtt R-rel továbbmegyünk, eltesszük az aktuális pontot
+            // a visszalépési stack-be.
+            pushReplyHistory({
+                id: String(currentId),
+                url: location.href
+            });
+
+            const repliedPost = posts.find(
+                li => li.dataset.id === String(replyId)
+            );
+
+            // Ha az előzmény ezen az oldalon van, csak odagörgetünk.
+            if (repliedPost) {
+                setMsgId(parseInt(replyId, 10));
+                return;
+            }
+
+            // Ha nincs az aktuális oldalon, követjük a fórum saját linkjét.
+            if (replyLink?.href) {
+                window.location.href = replyLink.href;
+            }
+        }
+
         document.addEventListener('keydown', (e) => {
             // gallery / input védelem
             if (document.querySelector('.layer-gallery')) return;
@@ -3021,6 +3178,34 @@
 
             const posts = getPosts();
             if (!posts.length) return;
+
+            // SHIFT + R:
+            // egy lépés vissza az R-rel bejárt előzmény stack-en.
+            if (
+                e.shiftKey &&
+                !e.ctrlKey &&
+                !e.altKey &&
+                !e.metaKey &&
+                e.key.toLowerCase() === 'r'
+            ) {
+                e.preventDefault();
+                jumpBackInReplyHistory(posts);
+                return;
+            }
+
+            // R:
+            // ugrás arra a hozzászólásra, amire az aktuális válaszolt.
+            if (
+                !e.shiftKey &&
+                !e.ctrlKey &&
+                !e.altKey &&
+                !e.metaKey &&
+                e.key.toLowerCase() === 'r'
+            ) {
+                e.preventDefault();
+                jumpToRepliedPost(posts);
+                return;
+            }
 
             let currentIndex = getSafeCurrentIndex(posts);
 
@@ -5303,6 +5488,7 @@
                 z-index: 99999;
                 display: flex;
                 align-items: stretch;
+                --ph-scroll-tab-width: 30px;
                 transition: transform 0.4s cubic-bezier(.4,0,.2,1), opacity 0.4s ease;
                 touch-action: none;
                 user-select: none;
@@ -5324,17 +5510,17 @@
             }
 
             #ph-scroll-btn-wrap.side-right.is-hidden {
-                transform: translateX(calc(100% - 20px));
+                transform: translateX(calc(100% - var(--ph-scroll-tab-width)));
                 opacity: 0.72;
             }
 
             #ph-scroll-btn-wrap.side-left.is-hidden {
-                transform: translateX(calc(-100% + 20px));
+                transform: translateX(calc(-100% + var(--ph-scroll-tab-width)));
                 opacity: 0.72;
             }
 
             #ph-scroll-tab {
-                width: 20px;
+                width: var(--ph-scroll-tab-width);
                 background: rgba(28,28,34,0.84);
                 backdrop-filter: blur(10px);
                 -webkit-backdrop-filter: blur(10px);
