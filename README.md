@@ -45,20 +45,23 @@ A scriptek futtatásához kell egy userscript kezelő:
 > [!NOTE]
 > A **PH Power Tools** egyesíti az alábbi funkciókat, egy beállítási panellel.
 
-| Funkció                         | Rövid leírás                                                                                                                                |
-|---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
-| **Hozzászólás színezés**        | saját, rád válaszoló és #akció jelölésű hozzászólások + avatar fókusz + hozzászólás-lánc kiemelés                                           |
-| **Link átirányítás**            | PH! lapcsalád linkjeit az aktuális oldalra irányítja                                                                                        |
-| **Üzenet kiemelés**             | kiemeli az aktuális `#msgXXXX` hozzászólást<br/>törölt hozzászólás esetén a legközelebbit<br/>dupla katt a fejlécen kijelöli a hozzászólást |
-| **OFF hozzászólások elrejtése** | `[OFF]` jelölésű hozzászólások elrejtése és visszakapcsolása gombnyomásra                                                                   |
-| **Széles nézet**                | a fórum maximális szélességének kibővítése nagy felbontású kijelzőkön                                                                       |
-| **Thread nézet**                | hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése                                                                     |
-| **Billentyűzetes navigáció**    | gyors navigáció a fórumon billentyűzet segítségével                                                                                         |
-| **Felhasználók elrejtése**      | megadott felhasználók hozzászólásait elrejti                                                                                                |
-| **Új hozzászólás jelölése**     | az új hozzászólások fejléce kap egy kis jelölést                                                                                            |
-| **Extra smiley-k**              | az alap smiley-k alá egy extra adag smiley                                                                                                  |
-| **Képfeltöltés kek.sh-ra**      | képfeltöltés kek.sh-ra galéria 2 füllel: rács, lista nézet                                                                                  |
-| **Gist szinkronizáció**         | GitHub Gist alapú szinkronizáció, hogy a script beállításai és mentett adatai több eszköz között is szinkronban maradjanak                  |
+| Funkció                             | Rövid leírás                                                                                                                                                                  |
+|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Hozzászólás színezés**            | saját, rád válaszoló és `#akció` / `#akcio` jelölésű hozzászólások + avatar fókusz + hozzászólás-lánc kiemelés                                                                |
+| **Link átirányítás**                | PH! lapcsalád linkjeit az aktuális oldalra irányítja                                                                                                                          |
+| **Üzenet kiemelés**                 | kiemeli az aktuális `#msgXXXX` hozzászólást; törölt hozzászólás esetén a legközelebbit; dupla katt a fejlécen kijelöli a hozzászólást                                         |
+| **OFF hozzászólások elrejtése**     | `[OFF]` jelölésű hozzászólások elrejtése és visszakapcsolása gombnyomásra                                                                                                     |
+| **Széles nézet**                    | szélesebb fórumelrendezés; a középső oszlop jobb széle húzással méretezhető, dupla kattintással automatikus méretre állítható, nagy szélességnél a bal oldalsáv elrejthető    |
+| **Thread nézet**                    | hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése                                                                                                       |
+| **Billentyűzetes navigáció**        | gyors navigáció a fórumon billentyűzet segítségével                                                                                                                           |
+| **Felhasználók elrejtése**          | megadott felhasználók hozzászólásait elrejti                                                                                                                                  |
+| **Új hozzászólás jelölése**         | témánként megjegyzi a legutóbb látott hozzászólásazonosítót, és az újabb hozzászólások fejlécét megjelöli                                                                     |
+| **Extra smiley-k**                  | az alap smiley-k alá egy extra adag smiley                                                                                                                                    |
+| **Képfeltöltés kek.sh-ra**          | képfeltöltés kek.sh-ra galéria 2 füllel: rács, lista nézet                                                                                                                    |
+| **Nyereményjáték válasz ellenőrző** | a `/nyeremenyjatek` oldalon a játék lezárása után végigellenőrzi a megadott válaszokat, jelzi a helyes/hibás vagy hiányzó választ, és kiemeli a saját nevet a nyerteslistában |
+| **Fix oldalsávok**                  | a bal és jobb oldalsáv görgetés közben a képernyőn marad; az aktuális témát az oldalsávban és a mobil/tablet fejléc listájában is kiemeli                                     |
+| **Mobil navigációs panel**          | összecsukható és húzható lebegő panel az előző/következő hozzászóláshoz és oldalhoz; bal/jobb oldalra áthúzható és megjegyzi a pozícióját                                     |
+| **Gist szinkronizáció**             | GitHub Gist alapú szinkronizáció, hogy a script beállításai és mentett adatai több eszköz között is szinkronban maradjanak                                                    |
 
 ---
 
@@ -115,6 +118,7 @@ A létrejövő `github_pat_...` token **csak egyszer látható**, ezért **máso
 3. Töltsd ki:
     - **GitHub token**
     - **Gist ID**
+    - **Gist fájlnév** – alapértelmezés: `ph_forum_settings.json`
 4. Mentsd el a beállításokat
 
 Ezután a script automatikusan szinkronizálja az adatokat.
