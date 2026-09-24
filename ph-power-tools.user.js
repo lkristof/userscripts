@@ -1828,7 +1828,7 @@
     function linkRedirect() {
         // Konfiguráció
         const phDomains = ["prohardver.hu", "mobilarena.hu", "gamepod.hu", "itcafe.hu", "logout.hu", "fototrend.hu"];
-        const forbiddenPaths = ["/fooldal", "/nyeremenyjatek", "/cikk", "/hir", "/teszt"];
+        const forbiddenPaths = ["/fooldal", "/nyeremenyjatek", "/cikk", "/hir", "/teszt", "/foto"];
 
         // Segédfüggvény: Eldönti, hogy a linket cserélni kell-e
         function shouldRedirect(urlObj) {
