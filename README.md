@@ -193,53 +193,46 @@ Ezután a script automatikusan szinkronizálja az adatokat.
 
 ## 📦 nCore
 
-### 🔹 nCore – 3+ pluszos torrentek kiemelése
+### 🧰 nCore – Tools
 
-A letöltések listájában kiemeli a több pozitív visszajelzéssel rendelkező torrenteket.  
-Segít gyorsabban megtalálni a népszerű tartalmakat.
+**`ncore-tools.user.js`** az eddigi nCore userscripteket **egyetlen scriptbe egyesíti**, közös **beállítási panellel** és külön-külön kapcsolható funkciókkal.
+
+### ⚡ Előnyök
+
+- 📦 egyetlen telepítés
+- 🔄 frissítéskor csak **egy** scriptet kell karbantartani
+- ⚙️ a funkciók külön-külön ki-/bekapcsolhatók
+- 🔗 a qBittorrent WebUI címe közvetlenül az nCore infosávjából beállítható
 
 > 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-torrent-highlight.user.js
+> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-tools.user.js
 
 ---
 
-### 🔹 nCore – qBittorrent Add
+### 📦 nCore Tools összetevői
 
-A torrent oldalakhoz **qBittorrent letöltés gombot** ad, lehetővé téve a torrentek közvetlen hozzáadását a qBittorrent
-WebUI-hoz.
+> [!NOTE]
+> Az **nCore – Tools** az alábbi funkciókat egyesíti. A beállítások az nCore infosávjában megjelenő **[Beállítások]** linken érhetők el.
 
-> 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-qbittorrent-add.user.js
+| Funkció                            | Rövid leírás                                                                                                            |
+|------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| **qBittorrent integráció**         | A torrentek közvetlenül elküldhetők a qBittorrent WebUI-nak. A WebUI címe az infosáv **[qB URL]** linkjén állítható be. |
+| **Dereferer linkek eltávolítása**  | Eltávolítja a támogatott dereferer köztes linkeket, miközben `nofollow` és `noreferrer` attribútumokat használ.         |
+| **Köszönetek elrejtése**           | Elrejti az nCore köszönetek blokkját.                                                                                   |
+| **„Láttam már” jelölés**           | A torrentlistában dupla kattintással elhalványíthatók a már látott filmek; ugyanígy vissza is vonható a jelölés.        |
+| **3+ pluszos torrentek kiemelése** | Kiemeli a legalább három pozitív visszajelzéssel rendelkező torrenteket.                                                |
 
----
+### ⚙️ Beállítások
 
-### 🔹 nCore – Láttam már!
+Az infosávban megjelenő **[Beállítások]** menüben minden modul külön kapcsolható. A módosítások mentés után, az oldal újratöltésével lépnek életbe.
 
-Dupla kattintással elhalványíthatod a már látott filmeket a listában, a jelölést pedig vissza is vonhatod.
+A **qBittorrent integrációhoz** a **[qB URL]** linken add meg a qBittorrent WebUI címét, például:
 
-> 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-seen.user.js
-
----
-
-### 🔹 nCore – No thanks
-
-Elrejti az nCore köszönéseket a torrent oldalon.
-
-> 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-no-thanks.user.js
+```text
+http://127.0.0.1:8080
+```
 
 ---
-
-### 🔹 nCore – De-dereferer
-
-Dereferer linkek eltávolítása, de az anonimitás megtartása
-
-> 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-de-dereferer.user.js
-
----
-
 
 ## ⭐ Tipp
 
