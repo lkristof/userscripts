@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.2.8
+// @version      2.3.0
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -9,6 +9,7 @@
 // @match        https://mobilarena.hu/*
 // @match        https://logout.hu/*
 // @match        https://fototrend.hu/*
+// @match        https://hardverapro.hu/*
 //
 // @homepageURL  https://github.com/lkristof/userscripts
 // @supportURL   https://github.com/lkristof/userscripts/issues
@@ -116,6 +117,7 @@
         giveawayAnswerChecker: true,
         stickySidebar: true,
         mobileScrollNav: true,
+        sortThreadListsByNewPosts: true,
 
         colorizePalette: DEFAULT_COLORIZE_PALETTE,
     };
@@ -123,8 +125,8 @@
     const settingGroups = {
         appearance: {
             label: 'Megjelenés',
-            keys: ['colorize', 'markNewPosts', 'wideView', 'threadView',
-                'stickySidebar'],
+            keys: ['colorize', 'sortThreadListsByNewPosts', 'markNewPosts',
+                'wideView', 'threadView', 'stickySidebar'],
             defaultOpen: true,
         },
         filtering: {
@@ -141,7 +143,7 @@
     const tooltips = {
         colorize: 'Saját / válasz / #akció + avatar fókusz + hozzászólás-lánc kiemelés. Színek a 🎨 menüben.',
         linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
-        msgAnchorHighlight: 'URL-ben lévő #msg hozzászólás kiemelése. Színek a 🎨 menüben.',
+        msgAnchorHighlight: 'Az URL-ben megadott #msg hozzászóláshoz görget és kiemeli azt. Színek a 🎨 menüben.',
         offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
         wideView: 'Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.',
         threadView: 'Hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése.',
@@ -152,6 +154,8 @@
         kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
         stickySidebar: 'A bal és jobb oldalsáv a képernyőn marad.',
         mobileScrollNav: 'Lebegő panel a hozzászólások közti lépkedéshez.',
+        giveawayAnswerChecker: 'A játék lezárása után ellenőrzi a válaszaidat, ✅/❌ jelöli őket, és kiemeli a neved a nyerteslistában.',
+        sortThreadListsByNewPosts: 'A „Kedvenc fórumtémáim” és „Itt szóltam hozzá” listákat az új hozzászólások száma szerint rendezi, csökkenő sorrendben.',
     };
 
     function prettyName(key) {
@@ -170,6 +174,7 @@
             giveawayAnswerChecker: 'Nyereményjáték válasz ellenőrző',
             stickySidebar: 'Fix oldalsávok',
             mobileScrollNav: 'Mobil navigációs panel',
+            sortThreadListsByNewPosts: 'Témalisták rendezése',
         }[key] || key;
     }
 
@@ -730,9 +735,32 @@
         return false;
     }
 
+    function phPtSyncSitePalette() {
+        if (!document.body) return;
+
+        // A lapcsalád saját gombszíneiből vesszük az accentet, így a Power Tools
+        // automatikusan követi a Prohardver / Mobilarena / Logout / Fototrend témát.
+        const probe = document.createElement('button');
+        probe.type = 'button';
+        probe.className = 'btn btn-forum btn-primary';
+        probe.setAttribute('aria-hidden', 'true');
+        probe.style.cssText = 'position:fixed;left:-10000px;top:-10000px;visibility:hidden;pointer-events:none;';
+        document.body.appendChild(probe);
+
+        const cs = getComputedStyle(probe);
+        const accent = cs.backgroundColor;
+        const accentFg = cs.color;
+        probe.remove();
+
+        const validColor = value => value && value !== 'transparent' && value !== 'rgba(0, 0, 0, 0)';
+        if (validColor(accent)) document.body.style.setProperty('--ph-ui-accent', accent);
+        if (validColor(accentFg)) document.body.style.setProperty('--ph-ui-accent-fg', accentFg);
+    }
+
     function phPtSyncThemeAttr() {
         const isDark = phPtDetectDark();
         document.body.dataset.theme = isDark ? "dark" : "light";
+        phPtSyncSitePalette();
         return isDark;
     }
 
@@ -782,6 +810,7 @@
 
     function insertSettingsDropdown(container) {
         if (container.querySelector('#ph-power-tools-dropdown')) return;
+        phPtSyncSitePalette();
         const li = document.createElement('li');
         li.id = 'ph-power-tools-dropdown';
         li.className = 'dropdown';
@@ -792,59 +821,75 @@
                 title="PH Power Tools beállítások">
                 <span class="fas fa-sliders-h fa-fw"></span>
             </a>
-            <div class="dropdown-menu dropdown-menu-right p-2 ph-power-menu">
-                <h6 class="dropdown-header"
-                    style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0;">
-                    <span>PH Power Tools</span>
-                    <div style="display:flex; align-items:center; gap:6px;">
+            <div class="dropdown-menu dropdown-menu-right ph-power-menu">
+                <div class="ph-menu-head">
+                    <div class="ph-menu-title-wrap">
+                        <span class="ph-menu-mark"><span class="fas fa-bolt"></span></span>
+                        <span>
+                            <strong class="ph-menu-title">PH Power Tools</strong>
+                            <small class="ph-menu-subtitle">Fórum finomhangolása</small>
+                        </span>
+                    </div>
+                    <div class="ph-menu-actions">
                         ${(savedSettings.colorize || savedSettings.msgAnchorHighlight) ? `
                             <button type="button"
                                     id="ph-open-colors"
-                                    class="btn btn-forum btn-sm"
-                                    title="Hozzászólás színek (Colorize)"
-                                    style="padding:2px 6px;">
+                                    class="ph-icon-btn"
+                                    title="Hozzászólás színek"
+                                    aria-label="Hozzászólás színek">
                                 <span class="fas fa-palette"></span>
                             </button>
                         ` : ``}
-                      
+
                         <button type="button"
                                 id="ph-open-secrets"
-                                class="btn btn-forum btn-sm"
-                                title="Kulcsok / Szinkron beállítások"
-                                style="padding:2px 6px;">
-                          <span class="fas fa-cog"></span>
+                                class="ph-icon-btn"
+                                title="Kulcsok és szinkron"
+                                aria-label="Kulcsok és szinkron">
+                            <span class="fas fa-cog"></span>
                         </button>
                     </div>
-                </h6>
+                </div>
                 <div class="ph-accordion">
-                    ${Object.entries(settingGroups).map(([groupKey, group], index) => `
+                    ${Object.entries(settingGroups).map(([groupKey, group]) => `
                         <div class="ph-acc-group">
-                            <div class="ph-acc-header" data-group="${groupKey}">
-                                ${group.label}
-                                <i class="ph-acc-arrow fas ${group.defaultOpen ? 'fa-caret-down' : 'fa-caret-right'} fa-fw"></i>
-                            </div>
+                            <button type="button"
+                                    class="ph-acc-header"
+                                    data-group="${groupKey}"
+                                    aria-expanded="${group.defaultOpen ? 'true' : 'false'}">
+                                <span>${group.label}</span>
+                                <i class="ph-acc-arrow fas fa-chevron-down fa-fw"></i>
+                            </button>
                             <div class="ph-acc-body ${group.defaultOpen ? 'open' : ''}">
-                                ${group.keys.map(key => `
-                                    <a href="javascript:;" 
-                                        class="btn btn-forum dropdown-item ${draftSettings[key] ? 'btn-primary' : ''}" 
-                                        data-key="${key}">
-                                        <span>
-                                            ${prettyName(key)}
-                                            ${tooltips[key] ? `<i class="fas fa-info-circle ph-tooltip-icon" data-tooltip="${tooltips[key]}"></i>` : ''}
-                                        </span>
-                                        <span class="ph-toggle-state">
-                                            ${draftSettings[key] ? '<span class="fas fa-toggle-on"></span>' : '<span class="fas fa-toggle-off"></span>'}
-                                        </span>
-                                    </a>
-                                `).join('')}
+                                <div class="ph-setting-list">
+                                    ${group.keys.map(key => `
+                                        <button type="button"
+                                                class="dropdown-item ph-setting-row"
+                                                data-key="${key}"
+                                                data-active="${draftSettings[key] ? 'true' : 'false'}"
+                                                aria-pressed="${draftSettings[key] ? 'true' : 'false'}">
+                                            <span class="ph-setting-copy">
+                                                <span class="ph-setting-label">
+                                                    ${prettyName(key)}
+                                                    ${tooltips[key] ? `<i class="fas fa-info-circle ph-tooltip-icon" data-tooltip="${tooltips[key]}"></i>` : ''}
+                                                </span>
+                                            </span>
+                                            <span class="ph-toggle-state" aria-hidden="true">
+                                                <span class="ph-switch-knob"></span>
+                                            </span>
+                                        </button>
+                                    `).join('')}
+                                </div>
                             </div>
                         </div>
                     `).join('')}
                 </div>
-                <div class="dropdown-divider"></div>
-                <button class="btn btn-sm btn-primary btn-block ph-apply-btn" disabled>
-                    Alkalmaz
-                </button>
+                <div class="ph-menu-footer">
+                    <span class="ph-menu-dirty" aria-live="polite">Nincs mentetlen módosítás</span>
+                    <button class="btn btn-sm btn-forum btn-primary ph-apply-btn" disabled>
+                        Mentés
+                    </button>
+                </div>
             </div>
         `;
 
@@ -852,78 +897,71 @@
         if (!document.getElementById('ph-secrets-modal')) {
             const modal = document.createElement('div');
             modal.id = 'ph-secrets-modal';
-            modal.style.cssText = `
-                position: fixed; inset: 0; z-index: 10050;
-                display: none;
-                background: rgba(0,0,0,0.45);
-                backdrop-filter: blur(2px);
-                align-items: center; justify-content: center;
-                padding: 16px;
-            `;
+            modal.className = 'ph-pt-modal';
 
             modal.innerHTML = `
-                <div id="ph-secrets-panel" style="
-                    width: min(720px, 100%);
-                    background: inherit;
-                    border-radius: 10px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-                    overflow: hidden;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
-                        padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
-                        <div style="font-weight:700;">PH Power Tools – Kulcsok / Szinkron</div>
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <span id="ph-sync-status-icon"
-                                  title=""
-                                  style="
-                                    width:10px; height:10px; border-radius:999px;
-                                    display:inline-block;
-                                    box-shadow: 0 0 0 2px rgba(0,0,0,0.08) inset;
-                                    opacity:0.95;">
+                <div id="ph-secrets-panel" class="ph-pt-dialog ph-pt-dialog-wide"
+                     role="dialog" aria-modal="true" aria-labelledby="ph-secrets-title">
+                    <div class="ph-dialog-head">
+                        <div class="ph-dialog-title-wrap">
+                            <span class="ph-dialog-mark"><span class="fas fa-key"></span></span>
+                            <span>
+                                <strong id="ph-secrets-title" class="ph-dialog-title">Kulcsok és szinkron</strong>
+                                <small class="ph-dialog-subtitle">PH Power Tools kapcsolat- és API-beállítások</small>
                             </span>
-                            <button type="button" class="btn btn-sm btn-light" id="ph-secrets-close">✕</button>
+                        </div>
+                        <div class="ph-dialog-head-actions">
+                            <span class="ph-sync-state">
+                                <span id="ph-sync-status-icon"></span>
+                                <span>Gist</span>
+                            </span>
+                            <button type="button" class="ph-icon-btn ph-dialog-close" id="ph-secrets-close"
+                                    title="Bezárás" aria-label="Bezárás">
+                                <span class="fas fa-times"></span>
+                            </button>
                         </div>
                     </div>
-            
-                    <div style="padding: 14px; display:flex; flex-direction:column; gap:10px;">
-                        <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
-                            <label style="font-size:12px; margin:0;">
-                            GitHub Gist Token
-                            <input id="ph-secret-gist-token" type="text" class="form-control form-control-sm"
-                                   placeholder="ghp_0123456789abcdef...">
+
+                    <div class="ph-dialog-body">
+                        <div class="ph-field-grid">
+                            <label class="ph-field">
+                                <span class="ph-field-label">GitHub Gist Token</span>
+                                <input id="ph-secret-gist-token" type="text" class="form-control form-control-sm ph-field-input"
+                                       placeholder="github_pat_...">
                             </label>
-                
-                            <label style="font-size:12px; margin:0;">
-                            Gist ID
-                            <input id="ph-secret-gist-id" type="text" class="form-control form-control-sm"
-                                   placeholder="0123456789abcdef...">
+
+                            <label class="ph-field">
+                                <span class="ph-field-label">Gist ID</span>
+                                <input id="ph-secret-gist-id" type="text" class="form-control form-control-sm ph-field-input"
+                                       placeholder="0123456789abcdef...">
                             </label>
-                
-                            <label style="font-size:12px; margin:0;">
-                            Gist fájlnév
-                            <input id="ph-secret-gist-filename" type="text" class="form-control form-control-sm"
-                                 placeholder='pl. ph_forum_settings.json'>
+
+                            <label class="ph-field">
+                                <span class="ph-field-label">Gist fájlnév</span>
+                                <input id="ph-secret-gist-filename" type="text" class="form-control form-control-sm ph-field-input"
+                                       placeholder="pl. ph_forum_settings.json">
                             </label>
-                
-                            <label style="font-size:12px; margin:0;">
-                            kek.sh API key
-                            <a href="https://kek.sh/settings/api"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style="margin-left:6px; font-size:11px; text-decoration:none;">
-                                [API kulcs itt]
-                            </a>
-                            <input id="ph-secret-kek-key" type="text" class="form-control form-control-sm"
-                                   placeholder="0123456789abcdef...">
+
+                            <label class="ph-field">
+                                <span class="ph-field-label">
+                                    kek.sh API key
+                                    <a href="https://kek.sh/settings/api" target="_blank" rel="noopener noreferrer"
+                                       class="ph-field-help">API kulcs</a>
+                                </span>
+                                <input id="ph-secret-kek-key" type="text" class="form-control form-control-sm ph-field-input"
+                                       placeholder="0123456789abcdef...">
                             </label>
                         </div>
-                
-                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:6px;">
-                            <button type="button" class="btn btn-sm btn-secondary" id="ph-secret-save">Mentés</button>
-                            <button type="button" class="btn btn-sm btn-light" id="ph-secret-clear">Törlés</button>
-                            <span id="ph-secret-status" style="font-size:12px; opacity:0.85;"></span>
-                            <span style="margin-left:auto; font-size:12px; opacity:0.7;">
-                                Mentés után újratöltés történik.
-                            </span>
+                    </div>
+
+                    <div class="ph-dialog-footer">
+                        <span id="ph-secret-status" class="ph-dialog-status" aria-live="polite"></span>
+                        <span class="ph-dialog-note">Mentés után újratöltés történik.</span>
+                        <div class="ph-dialog-buttons">
+                            <button type="button" class="btn btn-sm btn-forum ph-secondary-btn" id="ph-secret-clear">Törlés</button>
+                            <button type="button" class="btn btn-sm btn-forum btn-primary" id="ph-secret-save">
+                                Mentés
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -936,54 +974,43 @@
         if (!document.getElementById('ph-colors-modal')) {
             const modal = document.createElement('div');
             modal.id = 'ph-colors-modal';
-            modal.style.cssText = `
-                position: fixed; inset: 0; z-index: 10050;
-                display: none;
-                background: rgba(0,0,0,0.45);
-                backdrop-filter: blur(2px);
-                align-items: center; justify-content: center;
-                padding: 16px;
-            `;
+            modal.className = 'ph-pt-modal';
 
             modal.innerHTML = `
-                <div id="ph-colors-panel" style="
-                    width: min(500px, 100%);
-                    border-radius: 10px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-                    overflow: hidden;">
-                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
-                        padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08);">
-                        <div style="font-weight:700;">PH Power Tools – Hozzászólás színek</div>
-                        <button type="button" class="btn btn-sm btn-light" id="ph-colors-close">✕</button>
+                <div id="ph-colors-panel" class="ph-pt-dialog ph-colors-dialog"
+                     role="dialog" aria-modal="true" aria-labelledby="ph-colors-title">
+                    <div class="ph-dialog-head">
+                        <div class="ph-dialog-title-wrap">
+                            <span class="ph-dialog-mark"><span class="fas fa-palette"></span></span>
+                            <span>
+                                <strong id="ph-colors-title" class="ph-dialog-title">Hozzászólás színek</strong>
+                                <small class="ph-dialog-subtitle">Világos és sötét téma kiemelései</small>
+                            </span>
+                        </div>
+                        <button type="button" class="ph-icon-btn ph-dialog-close" id="ph-colors-close"
+                                title="Bezárás" aria-label="Bezárás">
+                            <span class="fas fa-times"></span>
+                        </button>
                     </div>
-                    <div style="padding: 14px; display:flex; flex-direction:column; gap:12px;">
+                    <div class="ph-dialog-body">
                         <div id="ph-colors-body"></div>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <button type="button" class="btn btn-sm btn-secondary" id="ph-colors-save">Mentés</button>
-                            <button type="button" class="btn btn-sm btn-light" id="ph-colors-reset">Alaphelyzet</button>
+                    </div>
+                    <div class="ph-dialog-footer">
+                        <span class="ph-dialog-note">A módosítások mentéskor lépnek életbe.</span>
+                        <div class="ph-dialog-buttons">
+                            <button type="button" class="btn btn-sm btn-forum ph-secondary-btn" id="ph-colors-reset">Alaphelyzet</button>
+                            <button type="button" class="btn btn-sm btn-forum btn-primary" id="ph-colors-save">
+                                Mentés
+                            </button>
                         </div>
                     </div>
                 </div>
-              `;
+            `;
             document.body.appendChild(modal);
         }
 
         function applyColorsTheme() {
-            const panel = document.getElementById('ph-colors-panel');
-            if (!panel) return;
-
-            if (!document.body.dataset.theme) phPtSyncThemeAttr();
-            const isDark = document.body.dataset.theme === "dark";
-
-            if (isDark) {
-                panel.style.background = "#2b2b2b";
-                panel.style.color = "#f1f1f1";
-                panel.style.border = "1px solid rgba(255,255,255,0.1)";
-            } else {
-                panel.style.background = "#ffffff";
-                panel.style.color = "#212529";
-                panel.style.border = "1px solid rgba(0,0,0,0.1)";
-            }
+            phPtSyncThemeAttr();
         }
 
         function renderColorsModal(settings) {
@@ -1017,66 +1044,38 @@
                             : [];
 
             if (!fields.length) {
-                body.innerHTML = `<div style="font-size:13px; opacity:0.8;">
-                    Nincs bekapcsolt színezős funkció.
-                </div>`;
+                body.innerHTML = `<div class="ph-empty-state">Nincs bekapcsolt színezős funkció.</div>`;
                 return;
             }
 
             body.innerHTML = `
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
-                    ${["light","dark"].map(theme => {
-                        const boxBg = theme === "light" ? "#ffffff" : "#2b2b2b";
-                        const boxFg = theme === "light" ? "#212529" : "#f1f1f1";
-                        const boxBorder = theme === "light" ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.14)";
-                        const rowHover = theme === "light" ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.06)";
-        
-                        return `
-                            <div style="
-                                background:${boxBg};
-                                color:${boxFg};
-                                border:1px solid ${boxBorder};
-                                border-radius:10px;
-                                padding:12px;">
-                                <div style="font-weight:700; margin-bottom:10px;">
-                                    ${theme === "light" ? "Világos" : "Sötét"}
-                                </div>
-                                <div style="display:grid; grid-template-columns: 1fr auto; gap:8px 12px; align-items:center;">
-                                    ${fields.map(f => `
-                                    <label style="margin:0; font-size:13px;">${f.label}</label>
-                                    <input type="color"
-                                        data-theme="${theme}"
-                                        data-k="${f.key}"
-                                        value="${pal?.[theme]?.[f.key] || DEFAULT_COLORIZE_PALETTE[theme][f.key]}"
-                                        style="
-                                            width:44px; height:28px; padding:0;
-                                            border:none; background:transparent; cursor:pointer;
-                                            border-radius: 4px;">
-                                    `).join("")}
-                                </div>
+                <div class="ph-color-grid">
+                    ${["light","dark"].map(theme => `
+                        <section class="ph-color-card" data-preview-theme="${theme}">
+                            <div class="ph-color-card-title">
+                                <span class="fas ${theme === "light" ? "fa-sun" : "fa-moon"}"></span>
+                                ${theme === "light" ? "Világos" : "Sötét"}
                             </div>
-                        `;
-                    }).join("")}
+                            <div class="ph-color-rows">
+                                ${fields.map(f => `
+                                    <label class="ph-color-row">
+                                        <span>${f.label}</span>
+                                        <input type="color"
+                                            class="ph-color-input"
+                                            data-theme="${theme}"
+                                            data-k="${f.key}"
+                                            value="${pal?.[theme]?.[f.key] || DEFAULT_COLORIZE_PALETTE[theme][f.key]}">
+                                    </label>
+                                `).join("")}
+                            </div>
+                        </section>
+                    `).join("")}
                 </div>
             `;
         }
 
         function applySecretsTheme() {
-            const panel = document.getElementById('ph-secrets-panel');
-            if (!panel) return;
-
-            if (!document.body.dataset.theme) phPtSyncThemeAttr();
-            const isDark = document.body.dataset.theme === "dark";
-
-            if (isDark) {
-                panel.style.background = "#2b2b2b";
-                panel.style.color = "#f1f1f1";
-                panel.style.border = "1px solid rgba(255,255,255,0.1)";
-            } else {
-                panel.style.background = "#ffffff";
-                panel.style.color = "#212529";
-                panel.style.border = "1px solid rgba(0,0,0,0.1)";
-            }
+            phPtSyncThemeAttr();
         }
 
         container.prepend(li);
@@ -1165,6 +1164,7 @@
             const s = await loadSecrets();
 
             const syncIcon = modal.querySelector('#ph-sync-status-icon');
+            const syncState = modal.querySelector('.ph-sync-state');
             if (syncIcon) {
                 const active = !!(
                     (s.gistToken || '').trim() &&
@@ -1174,10 +1174,10 @@
 
                 if (active) {
                     syncIcon.style.background = 'limegreen';
-                    syncIcon.title = 'Szinkron: aktív (Gist beállítva)';
+                    syncState.title = 'Szinkron: aktív (Gist beállítva)';
                 } else {
                     syncIcon.style.background = '#9aa0a6';
-                    syncIcon.title = 'Szinkron: inaktív (hiányzó Gist adatok)';
+                    syncState.title = 'Szinkron: inaktív (hiányzó Gist adatok)';
                 }
             }
 
@@ -1320,11 +1320,17 @@
                 const key = item.dataset.key;
                 draftSettings[key] = !draftSettings[key];
 
-                item.classList.toggle('btn-primary', draftSettings[key]);
-                item.querySelector('.ph-toggle-state').innerHTML = draftSettings[key] ? '<span class="fas fa-toggle-on"></span>' : '<span class="fas fa-toggle-off"></span>';
+                const active = !!draftSettings[key];
+                item.dataset.active = active ? 'true' : 'false';
+                item.setAttribute('aria-pressed', active ? 'true' : 'false');
 
-                applyBtn.disabled =
-                    JSON.stringify(draftSettings) === JSON.stringify(savedSettings);
+                const isDirty = JSON.stringify(draftSettings) !== JSON.stringify(savedSettings);
+                applyBtn.disabled = !isDirty;
+                const dirtyLabel = li.querySelector('.ph-menu-dirty');
+                if (dirtyLabel) {
+                    dirtyLabel.textContent = isDirty ? 'Mentetlen módosítások' : 'Nincs mentetlen módosítás';
+                    dirtyLabel.classList.toggle('is-dirty', isDirty);
+                }
             });
         });
 
@@ -1344,11 +1350,9 @@
                 e.stopPropagation();
 
                 const allBodies = li.querySelectorAll('.ph-acc-body');
-                const allArrows = li.querySelectorAll('.ph-acc-arrow');
+                const allHeaders = li.querySelectorAll('.ph-acc-header');
 
                 const body = header.nextElementSibling;
-                const arrow = header.querySelector('.ph-acc-arrow');
-
                 const isOpen = body.classList.contains('open');
 
                 // close all
@@ -1356,18 +1360,13 @@
                     b.style.maxHeight = null;
                     b.classList.remove('open');
                 });
-
-                allArrows.forEach(a => {
-                    a.classList.remove('fa-caret-down');
-                    a.classList.add('fa-caret-right');
-                });
+                allHeaders.forEach(h => h.setAttribute('aria-expanded', 'false'));
 
                 // open clicked if it wasn't open
                 if (!isOpen) {
                     body.classList.add('open');
                     body.style.maxHeight = body.scrollHeight + "px";
-                    arrow.classList.remove('fa-caret-right');
-                    arrow.classList.add('fa-caret-down');
+                    header.setAttribute('aria-expanded', 'true');
                 }
             });
         });
@@ -1415,53 +1414,642 @@
 
     function injectBaseStyle() {
         injectStyleOnce('ph-pt-base-style', `
+            body {
+                --ph-ui-bg: #ffffff;
+                --ph-ui-fg: #202124;
+                --ph-ui-muted: #6b7280;
+                --ph-ui-border: rgba(17, 24, 39, 0.11);
+                --ph-ui-soft: rgba(17, 24, 39, 0.045);
+                --ph-ui-hover: rgba(17, 24, 39, 0.07);
+                --ph-ui-accent: #4f7fb2;
+                --ph-ui-accent-fg: #ffffff;
+                --ph-ui-shadow: 0 16px 42px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+            }
+            body[data-theme="dark"] {
+                --ph-ui-bg: #242526;
+                --ph-ui-fg: #f1f3f4;
+                --ph-ui-muted: #aeb4bc;
+                --ph-ui-border: rgba(255, 255, 255, 0.11);
+                --ph-ui-soft: rgba(255, 255, 255, 0.05);
+                --ph-ui-hover: rgba(255, 255, 255, 0.08);
+                --ph-ui-shadow: 0 16px 42px rgba(0, 0, 0, 0.44), 0 2px 8px rgba(0, 0, 0, 0.25);
+            }
+
+            #ph-power-tools-dropdown {
+                --ph-menu-bg: var(--ph-ui-bg);
+                --ph-menu-fg: var(--ph-ui-fg);
+                --ph-menu-muted: var(--ph-ui-muted);
+                --ph-menu-border: var(--ph-ui-border);
+                --ph-menu-soft: var(--ph-ui-soft);
+                --ph-menu-hover: var(--ph-ui-hover);
+                --ph-menu-accent: var(--ph-ui-accent);
+                --ph-menu-accent-soft: color-mix(in srgb, var(--ph-ui-accent) 16%, transparent);
+                --ph-menu-shadow: var(--ph-ui-shadow);
+            }
+            .ph-power-menu {
+                width: 306px;
+                min-width: 306px;
+                max-height: min(68vh, 620px);
+                padding: 0 !important;
+                overflow: hidden;
+                color: var(--ph-menu-fg);
+                background: var(--ph-menu-bg);
+                border: 1px solid var(--ph-menu-border);
+                border-radius: 12px;
+                box-shadow: var(--ph-menu-shadow);
+            }
+            .ph-menu-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                padding: 10px 11px 9px;
+                border-bottom: 1px solid var(--ph-menu-border);
+            }
+            .ph-menu-title-wrap,
+            .ph-dialog-title-wrap {
+                min-width: 0;
+                display: flex;
+                align-items: center;
+                gap: 9px;
+            }
+            .ph-menu-mark,
+            .ph-dialog-mark {
+                width: 28px;
+                height: 28px;
+                flex: 0 0 28px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 8px;
+                color: var(--ph-ui-accent);
+                background: color-mix(in srgb, var(--ph-ui-accent) 15%, transparent);
+            }
+            .ph-menu-title,
+            .ph-menu-subtitle,
+            .ph-dialog-title,
+            .ph-dialog-subtitle {
+                display: block;
+                line-height: 1.18;
+            }
+            .ph-menu-title,
+            .ph-dialog-title {
+                font-size: 13px;
+                font-weight: 700;
+                color: var(--ph-ui-fg);
+            }
+            .ph-menu-subtitle,
+            .ph-dialog-subtitle {
+                margin-top: 2px;
+                font-size: 10.5px;
+                color: var(--ph-ui-muted);
+                font-weight: 500;
+            }
+            .ph-menu-actions,
+            .ph-dialog-head-actions,
+            .ph-dialog-buttons {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .ph-icon-btn {
+                width: 28px;
+                height: 28px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 8px;
+                color: var(--ph-ui-muted);
+                background: var(--ph-ui-soft);
+                cursor: pointer;
+                transition: background 140ms ease, color 140ms ease, border-color 140ms ease, transform 140ms ease;
+            }
+            .ph-icon-btn:hover,
+            .ph-icon-btn:focus-visible {
+                color: var(--ph-ui-accent);
+                background: color-mix(in srgb, var(--ph-ui-accent) 14%, transparent);
+                border-color: color-mix(in srgb, var(--ph-ui-accent) 38%, transparent);
+                outline: none;
+            }
+            .ph-icon-btn:active {
+                transform: scale(0.96);
+            }
+            .ph-accordion {
+                max-height: calc(min(68vh, 620px) - 96px);
+                padding: 6px;
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                scrollbar-width: thin;
+            }
+            .ph-acc-group {
+                position: relative;
+                overflow: hidden;
+                border: 1px solid var(--ph-menu-border);
+                border-radius: 9px;
+                background: var(--ph-menu-soft);
+                transition: border-color 140ms ease;
+            }
+            .ph-acc-group + .ph-acc-group {
+                margin-top: 6px;
+            }
+            .ph-acc-group:has(.ph-acc-header[aria-expanded="true"]) {
+                border-color: color-mix(in srgb, var(--ph-menu-accent) 34%, var(--ph-menu-border));
+            }
+            .ph-acc-group:has(.ph-acc-header[aria-expanded="true"])::before {
+                content: '';
+                position: absolute;
+                z-index: 2;
+                top: 0;
+                bottom: 0;
+                left: 0;
+                width: 11px;
+                box-sizing: border-box;
+                box-shadow: inset 3px 0 0 var(--ph-menu-accent);
+                border-right: 0;
+                border-radius: 8px 0 0 8px;
+                pointer-events: none;
+            }
             .ph-acc-header {
-                font-weight: 600;
+                width: 100%;
+                border: 0;
+                padding: 7px 9px;
+                font: inherit;
+                font-size: 10.5px;
+                font-weight: 700;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
                 cursor: pointer;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                transition: background 0.2s ease;
+                color: var(--ph-menu-muted);
+                background: color-mix(in srgb, var(--ph-menu-bg) 72%, transparent);
+                border-radius: 0;
+                transition: background 140ms ease, color 140ms ease;
             }
-            .ph-acc-header:hover {
-                background: color-mix(in srgb, currentColor 8%, transparent);
+            .ph-acc-header:hover,
+            .ph-acc-header:focus-visible {
+                color: var(--ph-menu-fg);
+                background: var(--ph-menu-hover);
+                outline: none;
+            }
+            .ph-acc-header[aria-expanded="true"] {
+                color: var(--ph-menu-accent);
+                background: color-mix(in srgb, var(--ph-menu-accent) 11%, var(--ph-menu-bg));
+            }
+            .ph-acc-arrow {
+                width: 18px;
+                height: 18px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 999px;
+                background: var(--ph-menu-hover);
+                font-size: 9px;
+                transition: transform 180ms ease, background 140ms ease;
+            }
+            .ph-acc-header[aria-expanded="true"] .ph-acc-arrow {
+                background: color-mix(in srgb, var(--ph-menu-accent) 16%, transparent);
+                transform: rotate(180deg);
             }
             .ph-acc-body {
                 max-height: 0;
                 overflow: hidden;
-                transition: max-height 0.5s ease;
+                border-top: 0 solid transparent;
+                transition: max-height 230ms cubic-bezier(0.4, 0, 0.2, 1);
             }
-            .ph-acc-body .dropdown-item {
+            .ph-acc-body.open {
+                border-top-width: 1px;
+                border-top-color: var(--ph-menu-border);
+            }
+            .ph-setting-list {
+                padding: 3px 5px 5px;
+            }
+            .ph-setting-row.dropdown-item {
+                width: 100%;
+                min-height: 34px;
+                margin: 1px 0;
+                padding: 5px 7px 5px 8px;
                 display: flex;
-                justify-content: space-between;
                 align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                border: 0;
+                border-radius: 7px;
+                color: var(--ph-menu-fg) !important;
+                background: transparent !important;
+                white-space: normal;
+                text-align: left;
+                box-shadow: none !important;
+                transition: background 120ms ease;
+            }
+            .ph-setting-row.dropdown-item:hover,
+            .ph-setting-row.dropdown-item:focus-visible {
+                background: var(--ph-menu-hover) !important;
+                outline: none;
+            }
+            .ph-setting-copy {
+                min-width: 0;
+                display: flex;
+                align-items: center;
+            }
+            .ph-setting-label {
+                min-width: 0;
+                font-size: 12.5px;
+                font-weight: 500;
+                line-height: 1.18;
+            }
+            .ph-toggle-state {
+                position: relative;
+                width: 30px;
+                height: 18px;
+                flex: 0 0 30px;
+                display: inline-flex;
+                align-items: center;
+                padding: 2px;
+                border-radius: 999px;
+                background: color-mix(in srgb, var(--ph-menu-muted) 28%, transparent);
+                transition: background 160ms ease, box-shadow 160ms ease;
+            }
+            .ph-switch-knob {
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                background: #fff;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+                transform: translateX(0);
+                transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .ph-setting-row[data-active="true"] .ph-toggle-state {
+                background: var(--ph-menu-accent);
+                box-shadow: 0 0 0 2px var(--ph-menu-accent-soft);
+            }
+            .ph-setting-row[data-active="true"] .ph-switch-knob {
+                transform: translateX(12px);
+            }
+            .ph-menu-footer {
+                min-height: 44px;
+                padding: 7px 9px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                border-top: 1px solid var(--ph-menu-border);
+                background: color-mix(in srgb, var(--ph-menu-bg) 95%, var(--ph-menu-fg));
+            }
+            .ph-menu-dirty {
+                min-width: 0;
+                font-size: 10.5px;
+                color: var(--ph-menu-muted);
+                transition: color 140ms ease;
+            }
+            .ph-menu-dirty.is-dirty {
+                color: var(--ph-menu-accent);
+                font-weight: 600;
+            }
+            .ph-apply-btn,
+            .ph-dialog-buttons .btn {
+                flex: 0 0 auto;
+                min-width: 78px;
+                min-height: 30px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 5px;
+                border-radius: 7px;
+            }
+            .ph-apply-btn:disabled {
+                cursor: default;
+                opacity: 0.45;
+            }
+
+            /* Közös Power Tools popup-megjelenés. */
+            .ph-pt-modal {
+                position: fixed;
+                inset: 0;
+                z-index: 10050;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                padding: 14px;
+                background: rgba(0, 0, 0, 0.48);
+                backdrop-filter: blur(3px);
+            }
+            .ph-pt-dialog {
+                width: min(520px, calc(100vw - 28px));
+                max-height: min(86dvh, 760px);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                color: var(--ph-ui-fg);
+                background: var(--ph-ui-bg) !important;
+                border: 1px solid var(--ph-ui-border) !important;
+                border-radius: 14px !important;
+                box-shadow: var(--ph-ui-shadow) !important;
+            }
+            .ph-pt-dialog-wide {
+                width: min(590px, calc(100vw - 28px));
+            }
+            .ph-dialog-head {
+                min-height: 50px;
+                padding: 10px 12px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                border-bottom: 1px solid var(--ph-ui-border);
+            }
+            .ph-dialog-body {
+                min-height: 0;
+                padding: 12px;
+                overflow: auto;
+            }
+            .ph-dialog-footer {
+                min-height: 46px;
+                padding: 8px 10px;
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                border-top: 1px solid var(--ph-ui-border);
+                background: color-mix(in srgb, var(--ph-ui-bg) 95%, var(--ph-ui-fg));
+            }
+            .ph-dialog-note,
+            .ph-dialog-status {
+                font-size: 10.5px;
+                color: var(--ph-ui-muted);
+            }
+            .ph-dialog-status {
+                color: var(--ph-ui-accent);
+                font-weight: 600;
+            }
+            .ph-dialog-note {
+                margin-left: auto;
+            }
+            .ph-dialog-buttons {
+                flex: 0 0 auto;
+            }
+            .ph-pt-dialog .btn {
+                border-radius: 7px;
+            }
+            .ph-power-menu .btn-primary,
+            .ph-pt-dialog .btn-primary {
+                color: var(--ph-ui-accent-fg) !important;
+                background: var(--ph-ui-accent) !important;
+                border-color: var(--ph-ui-accent) !important;
+            }
+            .ph-secondary-btn {
+                color: var(--ph-ui-fg) !important;
+                background: var(--ph-ui-soft) !important;
+                border-color: var(--ph-ui-border) !important;
+            }
+            .ph-secondary-btn:hover,
+            .ph-secondary-btn:focus-visible {
+                color: var(--ph-ui-accent) !important;
+                background: color-mix(in srgb, var(--ph-ui-accent) 12%, transparent) !important;
+                border-color: color-mix(in srgb, var(--ph-ui-accent) 34%, transparent) !important;
+            }
+            .ph-sync-state {
+                height: 26px;
+                padding: 0 8px;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 999px;
+                color: var(--ph-ui-muted);
+                background: var(--ph-ui-soft);
+                font-size: 10.5px;
+                font-weight: 600;
+            }
+            #ph-sync-status-icon {
+                width: 8px;
+                height: 8px;
+                display: inline-block;
+                border-radius: 999px;
+                box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 10%, transparent);
+            }
+            .ph-field-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+            .ph-field {
+                min-width: 0;
+                margin: 0;
+            }
+            .ph-field-label {
+                min-height: 18px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
                 margin-bottom: 4px;
-                padding: 4px 10px;
+                color: var(--ph-ui-muted);
+                font-size: 10.5px;
+                font-weight: 700;
+                letter-spacing: 0.02em;
             }
-            .ph-power-menu {
-                min-width: 260px;
-                max-height: 70vh;
+            .ph-field-help {
+                color: var(--ph-ui-accent) !important;
+                font-size: 10px;
+                font-weight: 600;
+                text-decoration: none !important;
+            }
+            .ph-field-input.form-control {
+                height: 33px;
+                padding: 5px 8px;
+                color: var(--ph-ui-fg);
+                background: var(--ph-ui-soft);
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 7px;
+                box-shadow: none;
+            }
+            .ph-field-input.form-control:focus {
+                border-color: var(--ph-ui-accent);
+                box-shadow: 0 0 0 2px color-mix(in srgb, var(--ph-ui-accent) 16%, transparent);
+            }
+            .ph-color-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+            .ph-color-card {
+                overflow: hidden;
+                border-radius: 10px;
+                border: 1px solid rgba(0,0,0,0.12);
+            }
+            .ph-color-card[data-preview-theme="light"] {
+                color: #212529;
+                background: #fff;
+                border-color: rgba(0,0,0,0.12);
+            }
+            .ph-color-card[data-preview-theme="dark"] {
+                color: #f1f1f1;
+                background: #2b2b2b;
+                border-color: rgba(255,255,255,0.14);
+            }
+            .ph-color-card-title {
+                padding: 8px 9px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                border-bottom: 1px solid currentColor;
+                border-bottom-color: color-mix(in srgb, currentColor 13%, transparent);
+                font-size: 11.5px;
+                font-weight: 700;
+            }
+            .ph-color-rows {
+                padding: 5px 7px;
+            }
+            .ph-color-row {
+                min-height: 32px;
+                margin: 0;
+                padding: 3px 2px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                font-size: 11.5px;
+            }
+            .ph-color-row + .ph-color-row {
+                border-top: 1px solid color-mix(in srgb, currentColor 8%, transparent);
+            }
+            .ph-color-input {
+                width: 38px;
+                height: 24px;
+                padding: 0;
+                border: 0;
+                border-radius: 6px;
+                background: transparent;
+                cursor: pointer;
+            }
+
+            /* Rejtett felhasználók szerkesztő. */
+            .ph-editor-overlay {
+                display: flex;
+            }
+            .ph-editor-panel {
+                width: min(620px, calc(100vw - 28px));
+            }
+            .dual-list-container {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 38px minmax(0, 1fr);
+                align-items: stretch;
+                gap: 8px;
+            }
+            .dual-list-column {
+                min-width: 0;
+            }
+            .dual-list-label {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                min-height: 22px;
+                margin-bottom: 5px;
+                color: var(--ph-ui-muted);
+                font-size: 10.5px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            .dual-list {
+                min-height: 170px;
+                max-height: 300px;
+                padding: 5px;
                 overflow-y: auto;
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 9px;
+                background: var(--ph-ui-soft);
+                scrollbar-width: thin;
             }
+            .dual-list:empty::after {
+                content: 'Nincs elem';
+                display: block;
+                padding: 14px 8px;
+                color: var(--ph-ui-muted);
+                font-size: 11px;
+                text-align: center;
+            }
+            .dual-list-item {
+                padding: 6px 7px;
+                cursor: pointer;
+                border: 1px solid transparent;
+                border-radius: 6px;
+                color: var(--ph-ui-fg);
+                background: var(--ph-ui-bg);
+                font-size: 12px;
+                line-height: 1.2;
+                transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+            }
+            .dual-list-item + .dual-list-item {
+                margin-top: 3px;
+            }
+            .dual-list-item:hover {
+                border-color: color-mix(in srgb, var(--ph-ui-accent) 28%, transparent);
+                background: color-mix(in srgb, var(--ph-ui-accent) 8%, var(--ph-ui-bg));
+            }
+            .dual-list-item.selected {
+                color: var(--ph-ui-accent-fg);
+                background: var(--ph-ui-accent);
+                border-color: var(--ph-ui-accent);
+            }
+            .dual-list-buttons {
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 6px;
+            }
+            .ph-dual-move {
+                width: 34px;
+                height: 34px;
+            }
+            .ph-dual-mobile {
+                display: none;
+            }
+            .ph-hidden-summary {
+                margin-left: 0;
+                margin-right: auto;
+            }
+            .ph-empty-state {
+                padding: 18px 10px;
+                color: var(--ph-ui-muted);
+                background: var(--ph-ui-soft);
+                border: 1px dashed var(--ph-ui-border);
+                border-radius: 9px;
+                font-size: 11.5px;
+                text-align: center;
+            }
+            .editor-buttons {
+                margin-left: auto;
+            }
+
             .ph-tooltip {
                 white-space: pre-line;
                 hyphens: auto;
                 overflow-wrap: break-word;
                 position: fixed;
-                background: rgba(0,0,0,0.8);
+                background: rgba(18, 20, 23, 0.94);
                 color: white;
-                padding: 4px 8px;
-                border-radius: 4px;
+                padding: 7px 9px;
+                border: 1px solid rgba(255,255,255,0.10);
+                border-radius: 7px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.24);
                 font-size: 12px;
-                z-index: 9999;
+                line-height: 1.35;
+                z-index: 10060;
                 display: none;
                 pointer-events: none;
-                max-width: 280px;
+                max-width: min(320px, calc(100vw - 24px));
             }
             .ph-tooltip-icon {
                 margin-left: 5px;
-                cursor: pointer;
+                color: var(--ph-menu-muted);
+                cursor: help;
+                font-size: 11px;
             }
+
             @media (max-width: 991.98px) {
                 .ph-power-btn + .dropdown-menu {
                     display: none !important;
@@ -1471,34 +2059,163 @@
                 .ph-power-btn + .dropdown-menu.show {
                     display: block !important;
                 }
-                .ph-acc-body .dropdown-item {
-                    padding: 10px 10px;
-                }
                 ul.navbar-nav.navbar-buttons {
-                overflow-x: auto !important;
-                overflow-y: hidden !important;
-                -webkit-overflow-scrolling: touch;
-                scrollbar-width: none;
-                -ms-overflow-style: none;
+                    overflow-x: auto !important;
+                    overflow-y: hidden !important;
+                    -webkit-overflow-scrolling: touch;
+                    scrollbar-width: none;
+                    -ms-overflow-style: none;
                 }
                 ul.navbar-nav.navbar-buttons::-webkit-scrollbar {
-                    display:none;
+                    display: none;
                 }
                 #ph-power-tools-dropdown .dropdown-menu.ph-power-menu {
                     position: fixed !important;
+                    width: auto !important;
+                    min-width: 0 !important;
                     left: 8px !important;
                     right: 8px !important;
-                    top: 40px !important;
-                    max-height: calc(100vh - 72px) !important;
-                    overflow: auto !important;
+                    top: 44px !important;
+                    max-height: calc(100dvh - 56px) !important;
                     z-index: 2000 !important;
                 }
+                .ph-accordion {
+                    max-height: calc(100dvh - 150px);
+                }
+                .ph-setting-row.dropdown-item {
+                    min-height: 40px;
+                    padding: 8px;
+                }
             }
-            @media (min-width: 419.98px) and (max-width: 991.98px) {
+            @media (max-width: 575.98px) {
+                .ph-pt-modal {
+                    width: 100vw;
+                    height: 100dvh;
+                    padding: 8px;
+                    box-sizing: border-box;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .ph-pt-dialog,
+                .ph-pt-dialog-wide,
+                .ph-editor-panel {
+                    width: 100%;
+                    max-height: calc(100dvh - 16px);
+                    border-radius: 14px !important;
+                }
+                .ph-field-grid {
+                    grid-template-columns: 1fr;
+                }
+                .ph-color-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 6px;
+                }
+                .ph-colors-dialog .ph-dialog-body,
+                .ph-editor-panel .ph-dialog-body {
+                    padding: 8px;
+                }
+                .ph-color-card-title {
+                    padding: 6px;
+                    gap: 4px;
+                    font-size: 10.5px;
+                }
+                .ph-color-rows {
+                    padding: 4px;
+                }
+                .ph-color-row {
+                    min-height: 30px;
+                    padding: 2px 0;
+                    gap: 4px;
+                    font-size: 10.5px;
+                }
+                .ph-color-row > span {
+                    min-width: 0;
+                    overflow-wrap: anywhere;
+                }
+                .ph-color-input {
+                    width: 32px;
+                    height: 22px;
+                    flex: 0 0 32px;
+                }
+                .ph-dialog-footer {
+                    flex-wrap: nowrap;
+                    gap: 6px;
+                }
+                .ph-dialog-note {
+                    flex: 1 1 auto;
+                    min-width: 0;
+                    width: auto;
+                    margin-left: 0;
+                    margin-right: auto;
+                    font-size: 10px;
+                    line-height: 1.2;
+                }
+                .ph-dialog-status:empty {
+                    display: none;
+                }
+                .ph-dialog-buttons {
+                    flex: 0 0 auto;
+                    margin-left: 0;
+                    gap: 4px;
+                }
+                .ph-dialog-footer .btn {
+                    min-width: 78px;
+                    min-height: 30px;
+                }
+                .dual-list-container {
+                    grid-template-columns: minmax(0, 1fr) 30px minmax(0, 1fr);
+                    gap: 5px;
+                }
+                .dual-list-buttons {
+                    flex-direction: column;
+                    gap: 5px;
+                }
+                .ph-dual-desktop {
+                    display: inline-block;
+                }
+                .ph-dual-mobile {
+                    display: none;
+                }
+                .ph-dual-move {
+                    width: 30px;
+                    height: 30px;
+                }
+                .dual-list-label {
+                    min-height: 28px;
+                    align-items: flex-end;
+                    margin-bottom: 4px;
+                    font-size: 9.5px;
+                    line-height: 1.15;
+                    letter-spacing: 0;
+                    text-transform: none;
+                }
+                .dual-list {
+                    min-height: 150px;
+                    max-height: 240px;
+                    padding: 4px;
+                }
+                .dual-list-item {
+                    padding: 5px 4px;
+                    font-size: 11px;
+                    overflow-wrap: anywhere;
+                }
+            }
+            @media (min-width: 520px) and (max-width: 991.98px) {
                 #ph-power-tools-dropdown .dropdown-menu.ph-power-menu {
-                    width: 260px !important;
+                    width: 306px !important;
                     left: auto !important;
                     right: 8px !important;
+                }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .ph-acc-body,
+                .ph-acc-arrow,
+                .ph-switch-knob,
+                .ph-toggle-state,
+                .ph-setting-row.dropdown-item,
+                .ph-icon-btn,
+                .dual-list-item {
+                    transition: none !important;
                 }
             }
         `);
@@ -1526,7 +2243,12 @@
         const isTema = isOnPage("tema");
         const isPrivat = isOnPage("privat");
         const isNyeremenyjatek = isOnPage("nyeremenyjatek");
-        if (!isTema && !isPrivat && !isNyeremenyjatek) return;
+
+        const hasThreadLists = !!document.querySelector(
+            '.user-thread-list-lms, .user-thread-list-fav'
+        );
+
+        if (!isTema && !isPrivat && !isNyeremenyjatek && !hasThreadLists) return;
 
         const modules = [
             { name: "messageScroller", when: () => isTema, fn: messageScroller },
@@ -1544,6 +2266,7 @@
             { name: "giveawayAnswerChecker", when: () => isNyeremenyjatek && savedSettings.giveawayAnswerChecker, fn: giveawayAnswerChecker },
             { name: "stickySidebar", when: () => savedSettings.stickySidebar, fn: stickySidebar },
             { name: "mobileScrollNav", when: () => isTema && savedSettings.mobileScrollNav, fn: mobileScrollNav },
+            { name: "sortThreadListsByNewPosts", when: () => hasThreadLists && savedSettings.sortThreadListsByNewPosts, fn: sortThreadListsByNewPosts },
         ];
 
         for (const m of modules) {
@@ -3476,73 +4199,103 @@
         function openEditor(onSave) {
             const buttonPlaceholder = document.querySelector(".list-message");
             if (!buttonPlaceholder) return;
-            const btnForum = buttonPlaceholder.querySelector(".btn-forum");
-            const btnPrimary = buttonPlaceholder.querySelector(".btn-primary");
-            const btnForumColor = btnForum ? getComputedStyle(btnForum).color : "white";
-            const btnForumBackgroundColor = btnForum ? getComputedStyle(btnForum).backgroundColor : "#007bff";
-            const btnPrimaryColor = btnPrimary ? getComputedStyle(btnPrimary).backgroundColor : "black";
-            const bg = buttonPlaceholder ? getComputedStyle(buttonPlaceholder).backgroundColor : "white";
-            const color = buttonPlaceholder ? getComputedStyle(buttonPlaceholder).color : "black";
 
-            injectStyleOnce("ph-pt-dual-list-style", `
-                .ph-editor-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px);}
-                .ph-editor-panel { background: ${bg}; padding: 20px; border-radius: 5px; min-width: 400px; max-width: 600px; color: ${color}; }
-                .dual-list-container { display: flex; gap: 10px; margin-top: 10px; }
-                .dual-list { flex: 1; border: 1px solid #fff; min-height: 141px; max-height: 273px; padding: 5px; background: ${bg}; overflow-y: auto; }
-                .dual-list-item { padding: 4px 6px; cursor: pointer; border-radius: 3px; margin: 2px 0; background: ${btnForumBackgroundColor}; color: ${btnForumColor}; border: 1px solid #fff; }
-                .dual-list-item.selected { background: ${btnPrimaryColor}; color: white; border-color: white; }
-                .dual-list-buttons { display: flex; flex-direction: column; justify-content: center; gap: 5px; }
-                .dual-list-buttons button { width: 36px; height: 36px; font-weight: bold; border-radius: 3px; cursor: pointer; }
-                .editor-buttons { margin-top: 10px; display: flex; gap: 5px; justify-content: flex-end; }
-            `);
+            phPtSyncThemeAttr();
 
             const overlay = document.createElement("div");
-            overlay.className = "ph-editor-overlay";
+            overlay.className = "ph-pt-modal ph-editor-overlay";
 
             const panel = document.createElement("div");
-            panel.className = "ph-editor-panel";
+            panel.className = "ph-pt-dialog ph-editor-panel";
+            panel.setAttribute('role', 'dialog');
+            panel.setAttribute('aria-modal', 'true');
+            panel.setAttribute('aria-labelledby', 'ph-hidden-users-title');
 
-            const title = document.createElement("h3");
-            title.textContent = "Rejtett felhasználók szerkesztése";
+            const header = document.createElement("div");
+            header.className = "ph-dialog-head";
+            header.innerHTML = `
+                <div class="ph-dialog-title-wrap">
+                    <span class="ph-dialog-mark"><span class="fas fa-eye-slash"></span></span>
+                    <span>
+                        <strong id="ph-hidden-users-title" class="ph-dialog-title">Rejtett felhasználók</strong>
+                        <small class="ph-dialog-subtitle">A témában látható és elrejtett szerzők kezelése</small>
+                    </span>
+                </div>
+            `;
+
+            const closeBtn = document.createElement("button");
+            closeBtn.type = "button";
+            closeBtn.className = "ph-icon-btn ph-dialog-close";
+            closeBtn.title = "Bezárás";
+            closeBtn.setAttribute('aria-label', 'Bezárás');
+            closeBtn.innerHTML = '<span class="fas fa-times"></span>';
+            closeBtn.addEventListener("click", closeEditor);
+            header.appendChild(closeBtn);
+
+            const body = document.createElement("div");
+            body.className = "ph-dialog-body";
 
             // ===== Lista konténerek =====
             const container = document.createElement("div");
             container.className = "dual-list-container";
 
+            const leftColumn = document.createElement("div");
+            leftColumn.className = "dual-list-column";
+            leftColumn.innerHTML = '<div class="dual-list-label">Látható a témában</div>';
             const leftList = document.createElement("div");
             leftList.className = "dual-list";
+            leftColumn.appendChild(leftList);
 
+            const rightColumn = document.createElement("div");
+            rightColumn.className = "dual-list-column";
+            rightColumn.innerHTML = '<div class="dual-list-label">Rejtett</div>';
             const rightList = document.createElement("div");
             rightList.className = "dual-list";
+            rightColumn.appendChild(rightList);
 
             const buttonsDiv = document.createElement("div");
             buttonsDiv.className = "dual-list-buttons";
 
             const btnRight = document.createElement("button");
-            btnRight.className = "btn btn-forum btn-sm fas fa-arrow-right fa-fw";
+            btnRight.type = "button";
+            btnRight.className = "ph-icon-btn ph-dual-move";
+            btnRight.title = "Kijelöltek elrejtése";
+            btnRight.setAttribute('aria-label', 'Kijelöltek elrejtése');
+            btnRight.innerHTML = '<span class="fas fa-arrow-right fa-fw ph-dual-desktop"></span><span class="fas fa-arrow-down fa-fw ph-dual-mobile"></span>';
+
             const btnLeft = document.createElement("button");
-            btnLeft.className = "btn btn-forum btn-sm fas fa-arrow-left fa-fw";
+            btnLeft.type = "button";
+            btnLeft.className = "ph-icon-btn ph-dual-move";
+            btnLeft.title = "Kijelöltek feloldása";
+            btnLeft.setAttribute('aria-label', 'Kijelöltek feloldása');
+            btnLeft.innerHTML = '<span class="fas fa-arrow-left fa-fw ph-dual-desktop"></span><span class="fas fa-arrow-up fa-fw ph-dual-mobile"></span>';
 
             buttonsDiv.append(btnRight, btnLeft);
-            container.append(leftList, buttonsDiv, rightList);
-
-            panel.append(title, container);
+            container.append(leftColumn, buttonsDiv, rightColumn);
+            body.appendChild(container);
 
             // ===== Gombok mentés / mégse =====
-            const editorButtonsDiv = document.createElement("div");
-            editorButtonsDiv.className = "editor-buttons";
+            const footer = document.createElement("div");
+            footer.className = "ph-dialog-footer";
 
-            const saveBtn = document.createElement("button");
-            saveBtn.textContent = "Mentés";
-            saveBtn.className = "btn btn-forum btn-primary";
+            const summary = document.createElement("span");
+            summary.className = "ph-dialog-note ph-hidden-summary";
+
+            const editorButtonsDiv = document.createElement("div");
+            editorButtonsDiv.className = "ph-dialog-buttons editor-buttons";
 
             const cancelBtn = document.createElement("button");
             cancelBtn.textContent = "Mégse";
-            cancelBtn.className = "btn btn-forum";
+            cancelBtn.className = "btn btn-sm btn-forum ph-secondary-btn";
 
-            editorButtonsDiv.append(saveBtn, cancelBtn);
-            panel.append(editorButtonsDiv);
+            const saveBtn = document.createElement("button");
+            saveBtn.innerHTML = 'Mentés';
+            saveBtn.className = "btn btn-sm btn-forum btn-primary";
 
+            editorButtonsDiv.append(cancelBtn, saveBtn);
+            footer.append(summary, editorButtonsDiv);
+
+            panel.append(header, body, footer);
             overlay.appendChild(panel);
             document.body.appendChild(overlay);
 
@@ -3573,6 +4326,10 @@
                     div.addEventListener("click", () => div.classList.toggle("selected"));
                     rightList.appendChild(div);
                 });
+
+                summary.textContent = tempHiddenUsers.length
+                    ? `${tempHiddenUsers.length} rejtett felhasználó`
+                    : 'Nincs rejtett felhasználó';
             }
 
             refreshLists();
@@ -5902,5 +6659,92 @@
         }
 
         init();
+    }
+
+    function sortThreadListsByNewPosts() {
+        const LIST_SELECTOR = [
+            '.user-thread-list-lms > .card > ul.list-group',
+            '.user-thread-list-fav > .card > ul.list-group'
+        ].join(', ');
+
+        let scheduled = false;
+
+        function getNewPostCount(li) {
+            const el = li.querySelector('a.new-msgs');
+            if (!el) return 0;
+
+            const match = el.textContent.match(/\d+/);
+            if (!match) return 0;
+
+            const count = parseInt(match[0], 10);
+            return Number.isFinite(count) ? count : 0;
+        }
+
+        function sortList(ul) {
+            const items = Array.from(ul.children)
+                .filter(el => el.matches('li.list-group-item'));
+
+            if (items.length < 2) return;
+
+            const originalIndex = new Map(
+                items.map((item, index) => [item, index])
+            );
+
+            const sorted = [...items].sort((a, b) => {
+                const countDiff = getNewPostCount(b) - getNewPostCount(a);
+                if (countDiff !== 0) return countDiff;
+
+                return originalIndex.get(a) - originalIndex.get(b);
+            });
+
+            const alreadySorted = sorted.every(
+                (item, index) => item === items[index]
+            );
+
+            if (alreadySorted) return;
+
+            const fragment = document.createDocumentFragment();
+            sorted.forEach(item => fragment.appendChild(item));
+            ul.appendChild(fragment);
+        }
+
+        function sortAllLists() {
+            document.querySelectorAll(LIST_SELECTOR).forEach(sortList);
+        }
+
+        function scheduleSort() {
+            if (scheduled) return;
+            scheduled = true;
+
+            requestAnimationFrame(() => {
+                scheduled = false;
+                sortAllLists();
+            });
+        }
+
+        sortAllLists();
+
+        const observer = new MutationObserver(mutations => {
+            const relevant = mutations.some(mutation => {
+                if (mutation.type !== 'childList') return false;
+
+                const target = mutation.target;
+                if (!(target instanceof Element)) return false;
+
+                return target.matches(LIST_SELECTOR)
+                    || !!target.closest('.user-thread-list-lms, .user-thread-list-fav');
+            });
+
+            if (relevant) scheduleSort();
+        });
+
+        document.querySelectorAll(
+            '.user-thread-list-lms, .user-thread-list-fav'
+        ).forEach(root => {
+            observer.observe(root, {
+                childList: true,
+                subtree: true
+            });
+        });
     }
 })();
