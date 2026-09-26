@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.1.1
+// @version      1.1.2
 // @description  nCore segédek egyben: qBittorrent, de-dereferer, köszönetek elrejtése, látott filmek, 3+ kiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
@@ -1570,9 +1570,20 @@
                         const url = new URL(href);
 
                         if (url.hostname === dereferer.host) {
-                            const target = url.searchParams.get(dereferer.param);
+                            // Nyers cél-URL esetén az & utáni rész is a célhoz tartozik.
+                            const rawTarget = url.search.slice(1).match(
+                                new RegExp(`(?:^|&)${dereferer.param}=(.*)`)
+                            )?.[1];
+
+                            // Csak a teljesen kódolt célt dekódoljuk; a nyers URL
+                            // saját %-kódolása és + karakterei maradjanak érintetlenek.
+                            let target = rawTarget && /^https?:\/\//i.test(rawTarget)
+                                ? rawTarget
+                                : url.searchParams.get(dereferer.param);
 
                             if (target && /^https?:\/\//i.test(target)) {
+                                // A külső fragmentet is őrizzük meg, ha a célnak nincs sajátja.
+                                if (url.hash && !target.includes('#')) target += url.hash;
                                 return target;
                             }
                         }
