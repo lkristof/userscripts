@@ -1233,10 +1233,80 @@
     // -------------------------------------------------------------------------
 
     function initSeen() {
-        if (!location.pathname.endsWith('/torrents.php') || new URLSearchParams(location.search).has('action')) return;
+        if (!location.pathname.endsWith('/torrents.php')) return;
 
+        const params = new URLSearchParams(location.search);
+        const action = params.get('action');
         const TORRENT_SELECTOR = '.box_torrent';
         const SEEN_CLASS = 'ncore-seen';
+
+        function normalizeTitle(value) {
+            return String(value || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function initDetailsSeenButton() {
+            if (action !== 'details') return;
+
+            // Csak filmek jelölhetők. Sorozatnál vagy más torrenttípusnál nincs gomb.
+            const isMovie = Boolean(
+                document.querySelector('.torrent_reszletek .torrent_col1 a[href*="csoport_listazas=osszes_film"]')
+            );
+            if (!isMovie) return;
+
+            const imdbLink = document.querySelector('.torrent_leiras a[href*="imdb.com/title/tt"]');
+            const imdbMatch = imdbLink?.href?.match(/tt(\d+)/);
+            const imdbId = imdbMatch ? imdbMatch[1] : null;
+            if (!imdbId) return;
+
+            const container = document.querySelector('.torrent_reszletek_konyvjelzo');
+            if (!container || container.querySelector('.ncore-seen-details-btn')) return;
+
+            function getDetailsMovieTitle() {
+                const titleEl = document.querySelector('.infobar_title');
+                if (titleEl) {
+                    let firstLine = '';
+                    for (const node of titleEl.childNodes) {
+                        if (node.nodeName === 'BR') break;
+                        firstLine += node.textContent || '';
+                    }
+                    const movieTitle = normalizeTitle(firstLine);
+                    if (movieTitle) return movieTitle;
+                }
+
+                return normalizeTitle(document.querySelector('.torrent_reszletek_cim')?.textContent);
+            }
+
+            const seenLink = document.createElement('a');
+            seenLink.href = 'javascript:void(0);';
+            seenLink.className = 'ncore-seen-details-btn';
+            seenLink.style.fontWeight = 'normal';
+
+            function updateDetailsButton() {
+                const seen = seenSync.isSeen(imdbId);
+                seenLink.textContent = seen ? '[✓ láttam már]' : '[láttam már]';
+                seenLink.title = seen
+                    ? 'Látott jelölés visszavonása'
+                    : 'Megjelölés látott filmként';
+                seenLink.style.color = seen ? '#84bd00' : '';
+            }
+
+            seenLink.addEventListener('click', event => {
+                event.preventDefault();
+                const nextSeen = !seenSync.isSeen(imdbId);
+                seenSync.setSeen(imdbId, nextSeen, getDetailsMovieTitle());
+                updateDetailsButton();
+                showToast(nextSeen ? 'Film megjelölve látottként.' : 'Látott jelölés visszavonva.');
+            });
+
+            updateDetailsButton();
+            container.appendChild(document.createTextNode(' '));
+            container.appendChild(seenLink);
+        }
+
+        if (action) {
+            initDetailsSeenButton();
+            return;
+        }
 
         const style = document.createElement('style');
         style.textContent = `
@@ -1253,15 +1323,11 @@
 
         function getMovieTitle(row) {
             const titleSpan = row.querySelector('.torrent_txt .siterank span[title]');
-            const movieTitle = String(titleSpan?.getAttribute('title') || titleSpan?.textContent || '')
-                .replace(/\s+/g, ' ')
-                .trim();
+            const movieTitle = normalizeTitle(titleSpan?.getAttribute('title') || titleSpan?.textContent);
             if (movieTitle) return movieTitle;
 
             const torrentLink = row.querySelector('.torrent_txt > a[href*="action=details"]');
-            return String(torrentLink?.getAttribute('title') || torrentLink?.textContent || '')
-                .replace(/\s+/g, ' ')
-                .trim();
+            return normalizeTitle(torrentLink?.getAttribute('title') || torrentLink?.textContent);
         }
 
         function isSeries(row) {
@@ -1438,9 +1504,9 @@
 
     if (settings.dedereferer) initDedereferer();
     if (settings.noThanks) initNoThanks();
-    if (settings.seen) initSeen();
     if (settings.highlight) initHighlight();
     if (settings.qbittorrent) initQBittorrent();
+    if (settings.seen) initSeen();
 
     ensureInfosavLinks();
 
