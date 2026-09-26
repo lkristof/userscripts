@@ -366,11 +366,35 @@
             return normalizeState(blob.movies || {});
         }
 
+        function serializeGistState(state) {
+            const entries = Object.entries(normalizeState(state))
+                .sort(([, a], [, b]) => (Number(b?.ts) || 0) - (Number(a?.ts) || 0));
+
+            const moviesJson = entries.map(([imdbId, entry]) => {
+                const entryJson = JSON.stringify(entry, null, 2)
+                    .split('\n')
+                    .map((line, index) => index === 0 ? line : '    ' + line)
+                    .join('\n');
+                return `    ${JSON.stringify(imdbId)}: ${entryJson}`;
+            }).join(',\n');
+
+            return [
+                '{',
+                '  "version": 1,',
+                '  "movies": {',
+                moviesJson,
+                '  }',
+                '}',
+            ].filter((line, index) => line || index !== 3).join('\n');
+        }
+
         async function pushRemote(config, state) {
             const body = {
                 files: {
                     [config.gistFilename]: {
-                        content: JSON.stringify({ version: 1, movies: normalizeState(state) }, null, 2),
+                        // Kézzel sorosítjuk, mert a JSON.stringify a csak számjegyekből álló
+                        // objektumkulcsokat numerikusan rendezi, függetlenül a beszúrási sorrendtől.
+                        content: serializeGistState(state),
                     },
                 },
             };
@@ -385,7 +409,7 @@
             }
         }
 
-        async function doSync() {
+        async function doSync(forcePush = false) {
             const config = await getEnabledConfig();
             if (!config) return { ok: false, disabled: true };
 
@@ -402,7 +426,13 @@
                     const latestRemote = await fetchRemote(config);
                     const latestMerged = mergeStates(latestRemote, loadLocalState());
                     applyState(latestMerged);
-                    if (!sameState(latestRemote, latestMerged)) await pushRemote(config, latestMerged);
+                    if (!sameState(latestRemote, latestMerged) || forcePush) {
+                        await pushRemote(config, latestMerged);
+                    }
+                } else if (forcePush) {
+                    // A kézi szinkron a tartalmilag változatlan Gistet is újraírja,
+                    // így a korábbi fájl is azonnal ts DESC sorrendbe kerül.
+                    await pushRemote(config, merged);
                 }
                 return { ok: true, count: Object.values(merged).filter(entry => entry.seen).length };
             })();
@@ -453,7 +483,7 @@
                 clearTimeout(pushTimer);
                 pushTimer = null;
             }
-            return doSync();
+            return doSync(true);
         }
 
         return { init, isSeen, setSeen, syncNow };
