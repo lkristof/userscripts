@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.1.2
-// @description  nCore segédek egyben: qBittorrent, de-dereferer, köszönetek elrejtése, látott filmek, 3+ kiemelés.
+// @version      1.2.0
+// @description  nCore segédscript: qBittorrent integráció, linktisztítás, reklám- és köszönetrejtés, képbeágyazás, látott filmek és torrentkiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
 // @match        https://ncore.pro/*
@@ -19,6 +19,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
+// @grant        unsafeWindow
 //
 // @connect      api.github.com
 // @connect      gist.githubusercontent.com
@@ -44,10 +45,12 @@
 
     const DEFAULT_SETTINGS = {
         qbittorrent: true,
-        dedereferer: true,
-        noThanks: true,
-        seen: true,
         highlight: true,
+        seen: true,
+        embedImages: true,
+        removeAds: true,
+        noThanks: true,
+        dedereferer: true,
     };
 
     async function gmGet(key, def = '') {
@@ -678,13 +681,30 @@
     // Beállítások modal
     // -------------------------------------------------------------------------
 
-    const SETTING_LABELS = {
-        qbittorrent: 'qBittorrent integráció',
-        dedereferer: 'Dereferer linkek eltávolítása',
-        noThanks: 'Köszönetek elrejtése',
-        seen: '„Láttam már” jelölés dupla kattintással',
-        highlight: '3+ pluszos torrentek kiemelése',
-    };
+    const SETTING_GROUPS = [
+        {
+            title: 'Integrációk',
+            settings: [
+                ['qbittorrent', 'qBittorrent integráció'],
+            ],
+        },
+        {
+            title: 'Torrentlista',
+            settings: [
+                ['highlight', '3+ pluszos torrentek kiemelése'],
+                ['seen', '„Láttam már” jelölés dupla kattintással'],
+                ['embedImages', 'Képek beágyazása a torrentlistán'],
+            ],
+        },
+        {
+            title: 'Oldal tisztítása',
+            settings: [
+                ['removeAds', 'Reklámok eltávolítása'],
+                ['noThanks', 'Köszönetek elrejtése'],
+                ['dedereferer', 'Dereferer linkek eltávolítása'],
+            ],
+        },
+    ];
 
     let settingsKeydownHandler = null;
 
@@ -819,6 +839,26 @@
 
             .ncore-tools-settings-tab-panel[hidden] { display: none; }
 
+            .ncore-tools-setting-group {
+                margin-top: 9px;
+                overflow: hidden;
+                border: 1px solid #303135;
+                border-radius: 3px;
+                background: #1e1f22;
+            }
+
+            .ncore-tools-setting-group:first-child { margin-top: 0; }
+
+            .ncore-tools-setting-group-title {
+                padding: 6px 8px;
+                border-bottom: 1px solid #303135;
+                background: #292a2e;
+                color: #84bd00;
+                font-size: 9px;
+                font-weight: bold;
+                line-height: 13px;
+            }
+
             .ncore-tools-setting-row {
                 display: flex;
                 align-items: center;
@@ -832,7 +872,7 @@
                 box-sizing: border-box;
             }
 
-            .ncore-tools-setting-row:first-child { border-top: 0; }
+            .ncore-tools-setting-group .ncore-tools-setting-row:first-of-type { border-top: 0; }
 
             .ncore-tools-setting-row:hover {
                 background: #2a2b2f;
@@ -1178,21 +1218,35 @@
         generalPanel.setAttribute('role', 'tabpanel');
         generalPanel.setAttribute('aria-labelledby', 'ncore-tools-tab-general');
 
-        for (const [key, labelText] of Object.entries(SETTING_LABELS)) {
-            const label = document.createElement('label');
-            label.className = 'ncore-tools-setting-row';
+        for (const groupConfig of SETTING_GROUPS) {
+            const group = document.createElement('div');
+            group.className = 'ncore-tools-setting-group';
+            group.setAttribute('role', 'group');
+            group.setAttribute('aria-label', groupConfig.title);
 
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.dataset.settingKey = key;
-            checkbox.checked = Boolean(settings[key]);
+            const groupTitle = document.createElement('div');
+            groupTitle.className = 'ncore-tools-setting-group-title';
+            groupTitle.textContent = groupConfig.title;
+            group.appendChild(groupTitle);
 
-            const text = document.createElement('span');
-            text.className = 'ncore-tools-setting-label';
-            text.textContent = labelText;
+            for (const [key, labelText] of groupConfig.settings) {
+                const label = document.createElement('label');
+                label.className = 'ncore-tools-setting-row';
 
-            label.append(checkbox, text);
-            generalPanel.appendChild(label);
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.dataset.settingKey = key;
+                checkbox.checked = Boolean(settings[key]);
+
+                const text = document.createElement('span');
+                text.className = 'ncore-tools-setting-label';
+                text.textContent = labelText;
+
+                label.append(checkbox, text);
+                group.appendChild(label);
+            }
+
+            generalPanel.appendChild(group);
         }
 
         const seenPanel = document.createElement('div');
@@ -1644,7 +1698,283 @@
     }
 
     // -------------------------------------------------------------------------
-    // 3) Láttam már
+    // 3) Reklámok eltávolítása
+    // -------------------------------------------------------------------------
+
+    function initRemoveAds() {
+        const AD_SELECTORS = [];
+        const isMainPage = location.pathname === '/' || location.pathname.endsWith('/index.php');
+        const isTorrentPage = location.pathname.endsWith('/torrents.php');
+
+        if (isMainPage) {
+            AD_SELECTORS.push('.hessteg-ad-block', '.news_block_right iframe');
+        }
+        if (isTorrentPage) AD_SELECTORS.push('.banner');
+        if (!AD_SELECTORS.length) return;
+
+        const style = document.createElement('style');
+        style.id = 'ncore-tools-remove-ads-style';
+        style.textContent = `${AD_SELECTORS.join(',\n')} { display: none !important; }`;
+        document.head.appendChild(style);
+
+        function hideAds(root = document) {
+            if (root instanceof Element) {
+                for (const selector of AD_SELECTORS) {
+                    if (root.matches(selector)) root.style.setProperty('display', 'none', 'important');
+                }
+            }
+
+            for (const selector of AD_SELECTORS) {
+                root.querySelectorAll?.(selector).forEach(element => {
+                    element.style.setProperty('display', 'none', 'important');
+                });
+            }
+        }
+
+        hideAds();
+
+        new MutationObserver(mutations => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node instanceof Element) hideAds(node);
+                }
+            }
+        }).observe(document.body, { childList: true, subtree: true });
+    }
+
+    // -------------------------------------------------------------------------
+    // 4) Képek beágyazása a torrent lenyíló leírásába
+    // -------------------------------------------------------------------------
+
+    function initEmbedImages() {
+        if (!location.pathname.endsWith('/torrents.php')) return;
+
+        const params = new URLSearchParams(location.search);
+        if (params.get('action')) return;
+
+        function requestText(url) {
+            const absoluteUrl = new URL(url, window.location.href).href;
+
+            if (typeof GM_xmlhttpRequest === 'function') {
+                return new Promise((resolve, reject) => {
+                    GM_xmlhttpRequest({
+                        method: 'GET',
+                        url: absoluteUrl,
+                        responseType: 'text',
+                        timeout: 15000,
+                        onload: response => {
+                            if (response.status >= 200 && response.status < 400) {
+                                resolve(response.responseText || '');
+                            } else {
+                                reject(new Error(`HTTP ${response.status}: ${absoluteUrl}`));
+                            }
+                        },
+                        onerror: () => reject(new Error(`Hálózati hiba: ${absoluteUrl}`)),
+                        ontimeout: () => reject(new Error(`Időtúllépés: ${absoluteUrl}`)),
+                    });
+                });
+            }
+
+            return fetch(absoluteUrl, { credentials: 'include' }).then(response => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${absoluteUrl}`);
+                return response.text();
+            });
+        }
+
+        function findImageUrl(html, pageUrl) {
+            try {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const images = Array.from(doc.querySelectorAll('img[src]'));
+                const matching = images.filter(img => /\.(?:jpe?g|png|bmp|gif|tiff?)(?:[?#]|$)/i.test(img.getAttribute('src') || ''));
+                const image = matching.at(-1) || images.at(-1);
+                if (!image) return '';
+                return new URL(image.getAttribute('src'), pageUrl).href;
+            } catch (_) {
+                const match = String(html).match(/<img[^>]+src=["']([^"']+\.(?:jpe?g|png|bmp|gif|tiff?)(?:[?#][^"']*)?)["']/i);
+                if (!match) return '';
+                try { return new URL(match[1], pageUrl).href; } catch (_) { return match[1]; }
+            }
+        }
+
+        function stylePreviewImage(image, maxWidth = '280px', maxHeight = '500px') {
+            Object.assign(image.style, {
+                border: '0px',
+                width: 'auto',
+                height: 'auto',
+                maxWidth,
+                maxHeight,
+            });
+        }
+
+        function initializeFancyBox(root) {
+            try {
+                const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+                const jq = pageWindow.jQuery || pageWindow.$;
+                if (typeof jq !== 'function' || typeof jq.fn?.fancybox !== 'function') return;
+
+                const links = Array.from(root.querySelectorAll('a.fancy_groups'))
+                    .filter(link => link.dataset.ncoreFancyBoxBound !== '1');
+                if (!links.length) return;
+
+                jq(links).fancybox({
+                    type: 'image',
+                    overlayColor: '#000',
+                    overlayOpacity: 0.9,
+                    ...(typeof pageWindow.disableKeys === 'function' ? { onStart: pageWindow.disableKeys } : {}),
+                    ...(typeof pageWindow.enableKeys === 'function' ? { onClosed: pageWindow.enableKeys } : {}),
+                });
+                links.forEach(link => { link.dataset.ncoreFancyBoxBound = '1'; });
+            } catch (error) {
+                console.debug('[nCore Tools] FancyBox init kihagyva:', error);
+            }
+        }
+
+        async function processAttachedPreview(preview) {
+            if (!(preview instanceof HTMLImageElement) || preview.dataset.ncoreEmbedProcessed === '1') return;
+            preview.dataset.ncoreEmbedProcessed = '1';
+
+            const anchor = preview.closest('a[href]');
+            if (!anchor) return;
+
+            stylePreviewImage(preview);
+            anchor.parentElement?.removeAttribute('class');
+
+            if (anchor.classList.contains('fancy_groups')) {
+                preview.src = anchor.href;
+                return;
+            }
+
+            anchor.target = '_blank';
+            anchor.rel = [anchor.rel, 'noopener', 'noreferrer'].filter(Boolean).join(' ');
+
+            try {
+                const html = await requestText(anchor.href);
+                const imageUrl = findImageUrl(html, anchor.href);
+                if (imageUrl) preview.src = imageUrl;
+            } catch (error) {
+                console.debug('[nCore Tools] Előnézeti kép lekérése sikertelen:', error);
+            }
+        }
+
+        function revealSpoilerForImage(anchor) {
+            const spoiler = anchor.closest('.bb-quote');
+            if (!spoiler) return;
+
+            const previous = spoiler.previousSibling;
+            if (previous?.parentNode === spoiler.parentNode && previous.nodeType === Node.ELEMENT_NODE) {
+                previous.remove();
+            }
+
+            const first = spoiler.firstElementChild;
+            if (first && /spoiler|quote/i.test(first.className || '')) first.remove();
+            Array.from(spoiler.children).forEach(child => {
+                if (getComputedStyle(child).display === 'none') child.style.display = 'block';
+            });
+            spoiler.classList.remove('bb-quote');
+        }
+
+        function processDescriptionImage(description, fancyMode, groupRel) {
+            if (!(description instanceof Element) || description.dataset.ncoreEmbedProcessed === '1') return;
+
+            const anchor = description.closest('a[href]');
+            if (!anchor || anchor.title !== 'Csatolt kép megnyitása') return;
+            description.dataset.ncoreEmbedProcessed = '1';
+
+            const imageUrl = anchor.href;
+            anchor.removeAttribute('title');
+            revealSpoilerForImage(anchor);
+
+            if (!anchor.querySelector('.ncore-embedded-description-image')) {
+                const image = document.createElement('img');
+                image.className = 'ncore-embedded-description-image';
+                image.src = imageUrl;
+                image.alt = description.getAttribute('alt') || 'Csatolt kép';
+                stylePreviewImage(image, '600px', '400px');
+                anchor.appendChild(image);
+            }
+
+            description.style.display = 'none';
+            anchor.target = fancyMode ? '' : '_blank';
+            if (!fancyMode) anchor.rel = [anchor.rel, 'noopener', 'noreferrer'].filter(Boolean).join(' ');
+
+            if (fancyMode) {
+                anchor.classList.add('fancy_groups');
+                if (groupRel) anchor.setAttribute('rel', groupRel);
+
+                const parent = anchor.parentElement;
+                if (parent && !parent.querySelector('.ncore-embed-open-new')) {
+                    const openLink = document.createElement('a');
+                    openLink.className = 'ncore-embed-open-new';
+                    openLink.href = imageUrl;
+                    openLink.target = '_blank';
+                    openLink.rel = 'noopener noreferrer';
+                    openLink.textContent = 'Megnyitás új ablakban...';
+                    openLink.style.fontStyle = 'italic';
+                    openLink.style.display = 'block';
+                    parent.appendChild(openLink);
+                }
+            }
+        }
+
+        function processEmbedRoot(root) {
+            if (!(root instanceof Element)) return;
+
+            const previews = Array.from(root.querySelectorAll('img.attached_link'));
+            const fancyPreviews = previews.filter(preview => preview.closest('a[href]')?.classList.contains('fancy_groups'));
+            const fancyMode = previews.length > 0 && fancyPreviews.length === previews.length;
+            const groupRel = fancyPreviews[0]?.closest('a[href]')?.getAttribute('rel') || '';
+
+            previews.forEach(preview => processAttachedPreview(preview));
+
+            root.querySelectorAll('.kepmeret_txt').forEach(size => {
+                size.style.textAlign = 'center';
+            });
+
+            Array.from(root.querySelectorAll('.description')).forEach(description => {
+                processDescriptionImage(description, fancyMode, groupRel);
+            });
+
+            if (fancyMode) initializeFancyBox(root);
+        }
+
+        function findDropRoot(node) {
+            let current = node instanceof Element ? node : node?.parentElement;
+            while (current && current !== document.body) {
+                if (/^\d+$/.test(current.id || '') && current.querySelector('.torrent_lenyilo_tartalom')) {
+                    return current;
+                }
+                current = current.parentElement;
+            }
+            return node instanceof Element ? node : null;
+        }
+
+        document.querySelectorAll('.torrent_lenyilo_tartalom').forEach(content => {
+            processEmbedRoot(findDropRoot(content) || content);
+        });
+
+        new MutationObserver(mutations => {
+            const roots = new Set();
+
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (!(node instanceof Element)) continue;
+
+                    if (node.matches('img.attached_link, .description, .torrent_lenyilo_tartalom')) {
+                        roots.add(findDropRoot(node) || node.parentElement || node);
+                    }
+
+                    if (node.querySelector?.('img.attached_link, .description, .torrent_lenyilo_tartalom')) {
+                        roots.add(findDropRoot(node) || node);
+                    }
+                }
+            }
+
+            roots.forEach(processEmbedRoot);
+        }).observe(document.body, { childList: true, subtree: true });
+    }
+
+    // -------------------------------------------------------------------------
+    // 5) Láttam már
     // -------------------------------------------------------------------------
 
     function initSeen() {
@@ -1761,7 +2091,7 @@
             if (!imdbId) return;
 
             seenSync.setSeen(imdbId, !seenSync.isSeen(imdbId), getMovieTitle(row));
-            updateRow(row);
+            document.querySelectorAll(TORRENT_SELECTOR).forEach(updateRow);
         }
 
         function bindRow(row) {
@@ -1791,7 +2121,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // 4) 3+ pluszos torrentek kiemelése
+    // 6) 3+ pluszos torrentek kiemelése
     // -------------------------------------------------------------------------
 
     function initHighlight() {
@@ -1831,7 +2161,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // 5) qBittorrent integráció
+    // 7) qBittorrent integráció
     // -------------------------------------------------------------------------
 
     function initQBittorrent() {
@@ -1957,11 +2287,13 @@
 
     if (settings.seen || settings.qbittorrent) await seenSync.init();
 
-    if (settings.dedereferer) initDedereferer();
-    if (settings.noThanks) initNoThanks();
-    if (settings.highlight) initHighlight();
     if (settings.qbittorrent) initQBittorrent();
+    if (settings.highlight) initHighlight();
     if (settings.seen) initSeen();
+    if (settings.embedImages) initEmbedImages();
+    if (settings.removeAds) initRemoveAds();
+    if (settings.noThanks) initNoThanks();
+    if (settings.dedereferer) initDedereferer();
 
     ensureInfosavLinks();
 
