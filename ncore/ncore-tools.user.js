@@ -486,7 +486,14 @@
             return doSync(true);
         }
 
-        return { init, isSeen, setSeen, syncNow };
+        function getSeenMovies() {
+            return Object.entries(normalizeState(loadLocalState()))
+                .filter(([, entry]) => entry.seen)
+                .sort(([, a], [, b]) => (Number(b?.ts) || 0) - (Number(a?.ts) || 0))
+                .map(([imdbId, entry]) => ({ imdbId, ...entry }));
+        }
+
+        return { init, isSeen, setSeen, syncNow, getSeenMovies };
     }
 
     const seenSync = createSeenSync();
@@ -814,6 +821,83 @@
                 line-height: 13px;
             }
 
+            #ncore-tools-seen-list {
+                max-height: min(52vh, 430px);
+                overflow-y: auto;
+                border: 1px solid #303135;
+                border-radius: 3px;
+                background: #1e1f22;
+            }
+
+            .ncore-tools-seen-row {
+                display: flex;
+                align-items: stretch;
+                border-top: 1px solid #303135;
+            }
+
+            .ncore-tools-seen-row:first-child { border-top: 0; }
+
+            .ncore-tools-seen-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                min-width: 0;
+                min-height: 35px;
+                flex: 1 1 auto;
+                padding: 6px 9px;
+                box-sizing: border-box;
+                color: #adafb2;
+                text-decoration: none !important;
+            }
+
+            .ncore-tools-seen-item:hover,
+            .ncore-tools-seen-item:focus-visible {
+                background: #2a2b2f;
+                color: #cbCDD0;
+                outline: none;
+            }
+
+            .ncore-tools-seen-delete {
+                flex: 0 0 auto;
+                min-width: 58px;
+                padding: 0 9px;
+                border: 0;
+                border-left: 1px solid #303135;
+                background: transparent;
+                color: #b66;
+                font: 9px Verdana, Geneva, Arial, Helvetica, sans-serif;
+                cursor: pointer;
+            }
+
+            .ncore-tools-seen-delete:hover,
+            .ncore-tools-seen-delete:focus-visible {
+                background: #3a2426;
+                color: #f0a0a0;
+                outline: none;
+            }
+
+            .ncore-tools-seen-title {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                font-size: 10px;
+            }
+
+            .ncore-tools-seen-imdb {
+                flex: 0 0 auto;
+                color: #777b80;
+                font-size: 9px;
+            }
+
+            #ncore-tools-seen-empty {
+                padding: 18px 10px;
+                color: #777b80;
+                text-align: center;
+                line-height: 14px;
+            }
+
             #ncore-tools-settings-footer {
                 display: flex;
                 align-items: center;
@@ -937,6 +1021,10 @@
                     role="tab" aria-selected="true" aria-controls="ncore-tools-panel-general" data-tab="general">
                 Általános
             </button>
+            <button type="button" class="ncore-tools-settings-tab" id="ncore-tools-tab-seen"
+                    role="tab" aria-selected="false" aria-controls="ncore-tools-panel-seen" data-tab="seen">
+                Látott filmek
+            </button>
             <button type="button" class="ncore-tools-settings-tab" id="ncore-tools-tab-sync"
                     role="tab" aria-selected="false" aria-controls="ncore-tools-panel-sync" data-tab="sync">
                 Szinkronizáció
@@ -971,6 +1059,71 @@
             label.append(checkbox, text);
             generalPanel.appendChild(label);
         }
+
+        const seenPanel = document.createElement('div');
+        seenPanel.id = 'ncore-tools-panel-seen';
+        seenPanel.className = 'ncore-tools-settings-tab-panel';
+        seenPanel.setAttribute('role', 'tabpanel');
+        seenPanel.setAttribute('aria-labelledby', 'ncore-tools-tab-seen');
+        seenPanel.hidden = true;
+
+        function renderSeenMovies() {
+            const movies = seenSync.getSeenMovies();
+            seenPanel.replaceChildren();
+
+            if (!movies.length) {
+                const empty = document.createElement('div');
+                empty.id = 'ncore-tools-seen-empty';
+                empty.textContent = 'Még nincs látottnak jelölt film.';
+                seenPanel.appendChild(empty);
+                return;
+            }
+
+            const list = document.createElement('div');
+            list.id = 'ncore-tools-seen-list';
+
+            for (const movie of movies) {
+                const row = document.createElement('div');
+                row.className = 'ncore-tools-seen-row';
+
+                const link = document.createElement('a');
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.className = 'ncore-tools-seen-item';
+                link.href = `/torrents.php?mire=${encodeURIComponent(movie.imdbId)}&miben=imdb&tipus=all_own&submit.x=0&submit.y=0&tags=`;
+                link.title = `${movie.title || `IMDb tt${movie.imdbId}`} keresése az nCore-on`;
+
+                const title = document.createElement('span');
+                title.className = 'ncore-tools-seen-title';
+                title.textContent = movie.title || `IMDb tt${movie.imdbId}`;
+
+                const imdb = document.createElement('span');
+                imdb.className = 'ncore-tools-seen-imdb';
+                imdb.textContent = `tt${movie.imdbId}`;
+
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'ncore-tools-seen-delete';
+                remove.textContent = 'Törlés';
+                remove.title = 'Látott jelölés törlése';
+                remove.addEventListener('click', () => {
+                    const displayTitle = movie.title || `IMDb tt${movie.imdbId}`;
+                    if (!window.confirm(`Biztosan törlöd a látott filmek közül: ${displayTitle}?`)) return;
+
+                    seenSync.setSeen(movie.imdbId, false, movie.title || '');
+                    renderSeenMovies();
+                    showToast('Film törölve a látottak közül.');
+                });
+
+                link.append(title, imdb);
+                row.append(link, remove);
+                list.appendChild(row);
+            }
+
+            seenPanel.appendChild(list);
+        }
+
+        renderSeenMovies();
 
         const syncPanel = document.createElement('div');
         syncPanel.id = 'ncore-tools-panel-sync';
@@ -1021,15 +1174,20 @@
             }
         });
 
-        form.append(generalPanel, syncPanel);
+        form.append(generalPanel, seenPanel, syncPanel);
         panel.appendChild(form);
 
         function selectTab(tabName) {
-            const general = tabName === 'general';
-            generalPanel.hidden = !general;
-            syncPanel.hidden = general;
-            tabs.querySelector('#ncore-tools-tab-general').setAttribute('aria-selected', general ? 'true' : 'false');
-            tabs.querySelector('#ncore-tools-tab-sync').setAttribute('aria-selected', general ? 'false' : 'true');
+            const panels = { general: generalPanel, seen: seenPanel, sync: syncPanel };
+            for (const [name, panelEl] of Object.entries(panels)) {
+                panelEl.hidden = name !== tabName;
+            }
+
+            tabs.querySelectorAll('.ncore-tools-settings-tab').forEach(tab => {
+                tab.setAttribute('aria-selected', tab.dataset.tab === tabName ? 'true' : 'false');
+            });
+
+            if (tabName === 'seen') renderSeenMovies();
         }
 
         tabs.querySelectorAll('.ncore-tools-settings-tab').forEach(tab => {
