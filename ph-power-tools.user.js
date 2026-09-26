@@ -117,6 +117,7 @@
         giveawayAnswerChecker: true,
         stickySidebar: true,
         mobileScrollNav: true,
+        sortThreadListsByNewPosts: true,
 
         colorizePalette: DEFAULT_COLORIZE_PALETTE,
     };
@@ -124,8 +125,8 @@
     const settingGroups = {
         appearance: {
             label: 'Megjelenés',
-            keys: ['colorize', 'markNewPosts', 'wideView', 'threadView',
-                'stickySidebar'],
+            keys: ['colorize', 'sortThreadListsByNewPosts', 'markNewPosts',
+                'wideView', 'threadView', 'stickySidebar'],
             defaultOpen: true,
         },
         filtering: {
@@ -154,6 +155,7 @@
         stickySidebar: 'A bal és jobb oldalsáv a képernyőn marad.',
         mobileScrollNav: 'Lebegő panel a hozzászólások közti lépkedéshez.',
         giveawayAnswerChecker: 'A játék lezárása után ellenőrzi a válaszaidat, ✅/❌ jelöli őket, és kiemeli a neved a nyerteslistában.',
+        sortThreadListsByNewPosts: 'A „Kedvenc fórumtémáim” és „Itt szóltam hozzá” listákat az új hozzászólások száma szerint rendezi, csökkenő sorrendben.',
     };
 
     function prettyName(key) {
@@ -172,6 +174,7 @@
             giveawayAnswerChecker: 'Nyereményjáték válasz ellenőrző',
             stickySidebar: 'Fix oldalsávok',
             mobileScrollNav: 'Mobil navigációs panel',
+            sortThreadListsByNewPosts: 'Témalisták rendezése',
         }[key] || key;
     }
 
@@ -924,7 +927,7 @@
                             <label class="ph-field">
                                 <span class="ph-field-label">GitHub Gist Token</span>
                                 <input id="ph-secret-gist-token" type="text" class="form-control form-control-sm ph-field-input"
-                                       placeholder="ghp_0123456789abcdef...">
+                                       placeholder="github_pat_...">
                             </label>
 
                             <label class="ph-field">
@@ -2240,7 +2243,12 @@
         const isTema = isOnPage("tema");
         const isPrivat = isOnPage("privat");
         const isNyeremenyjatek = isOnPage("nyeremenyjatek");
-        if (!isTema && !isPrivat && !isNyeremenyjatek) return;
+
+        const hasThreadLists = !!document.querySelector(
+            '.user-thread-list-lms, .user-thread-list-fav'
+        );
+
+        if (!isTema && !isPrivat && !isNyeremenyjatek && !hasThreadLists) return;
 
         const modules = [
             { name: "messageScroller", when: () => isTema, fn: messageScroller },
@@ -2258,6 +2266,7 @@
             { name: "giveawayAnswerChecker", when: () => isNyeremenyjatek && savedSettings.giveawayAnswerChecker, fn: giveawayAnswerChecker },
             { name: "stickySidebar", when: () => savedSettings.stickySidebar, fn: stickySidebar },
             { name: "mobileScrollNav", when: () => isTema && savedSettings.mobileScrollNav, fn: mobileScrollNav },
+            { name: "sortThreadListsByNewPosts", when: () => hasThreadLists && savedSettings.sortThreadListsByNewPosts, fn: sortThreadListsByNewPosts },
         ];
 
         for (const m of modules) {
@@ -6650,5 +6659,92 @@
         }
 
         init();
+    }
+
+    function sortThreadListsByNewPosts() {
+        const LIST_SELECTOR = [
+            '.user-thread-list-lms > .card > ul.list-group',
+            '.user-thread-list-fav > .card > ul.list-group'
+        ].join(', ');
+
+        let scheduled = false;
+
+        function getNewPostCount(li) {
+            const el = li.querySelector('a.new-msgs');
+            if (!el) return 0;
+
+            const match = el.textContent.match(/\d+/);
+            if (!match) return 0;
+
+            const count = parseInt(match[0], 10);
+            return Number.isFinite(count) ? count : 0;
+        }
+
+        function sortList(ul) {
+            const items = Array.from(ul.children)
+                .filter(el => el.matches('li.list-group-item'));
+
+            if (items.length < 2) return;
+
+            const originalIndex = new Map(
+                items.map((item, index) => [item, index])
+            );
+
+            const sorted = [...items].sort((a, b) => {
+                const countDiff = getNewPostCount(b) - getNewPostCount(a);
+                if (countDiff !== 0) return countDiff;
+
+                return originalIndex.get(a) - originalIndex.get(b);
+            });
+
+            const alreadySorted = sorted.every(
+                (item, index) => item === items[index]
+            );
+
+            if (alreadySorted) return;
+
+            const fragment = document.createDocumentFragment();
+            sorted.forEach(item => fragment.appendChild(item));
+            ul.appendChild(fragment);
+        }
+
+        function sortAllLists() {
+            document.querySelectorAll(LIST_SELECTOR).forEach(sortList);
+        }
+
+        function scheduleSort() {
+            if (scheduled) return;
+            scheduled = true;
+
+            requestAnimationFrame(() => {
+                scheduled = false;
+                sortAllLists();
+            });
+        }
+
+        sortAllLists();
+
+        const observer = new MutationObserver(mutations => {
+            const relevant = mutations.some(mutation => {
+                if (mutation.type !== 'childList') return false;
+
+                const target = mutation.target;
+                if (!(target instanceof Element)) return false;
+
+                return target.matches(LIST_SELECTOR)
+                    || !!target.closest('.user-thread-list-lms, .user-thread-list-fav');
+            });
+
+            if (relevant) scheduleSort();
+        });
+
+        document.querySelectorAll(
+            '.user-thread-list-lms, .user-thread-list-fav'
+        ).forEach(root => {
+            observer.observe(root, {
+                childList: true,
+                subtree: true
+            });
+        });
     }
 })();
