@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.1.0
+// @version      1.1.1
 // @description  nCore segédek egyben: qBittorrent, de-dereferer, köszönetek elrejtése, látott filmek, 3+ kiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
@@ -19,8 +19,11 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
+//
 // @connect      api.github.com
 // @connect      gist.githubusercontent.com
+// @connect      *
+//
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -36,6 +39,7 @@
     const GM_KEY_SETTINGS = 'tools_settings';
     const GM_KEY_SEEN_SYNC = 'seen_sync_config';
     const LS_SEEN_SYNC_STATE = LS_PREFIX + 'seen_sync_state';
+    const LS_DOWNLOAD_SYNC_STATE = LS_PREFIX + 'download_sync_state';
     const DEFAULT_GIST_FILENAME = 'ncore_seen.json';
 
     const DEFAULT_SETTINGS = {
@@ -203,6 +207,15 @@
             localStorage.setItem(LS_SEEN_SYNC_STATE, JSON.stringify(state || {}));
         }
 
+        function loadDownloadState() {
+            const parsed = safeJsonParse(localStorage.getItem(LS_DOWNLOAD_SYNC_STATE) || '{}', {});
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        }
+
+        function saveDownloadState(state) {
+            localStorage.setItem(LS_DOWNLOAD_SYNC_STATE, JSON.stringify(state || {}));
+        }
+
         function normalizeEntry(entry) {
             if (!entry || typeof entry !== 'object') return null;
             const ts = Number(entry.ts) || 0;
@@ -220,6 +233,26 @@
                 if (!/^\d+$/.test(imdbId)) continue;
                 const normalized = normalizeEntry(entry);
                 if (normalized) out[imdbId] = normalized;
+            }
+            return out;
+        }
+
+        function normalizeDownloadEntry(entry) {
+            if (!entry || typeof entry !== 'object') return null;
+            const ts = Number(entry.ts) || 0;
+            const title = String(entry.title || '').replace(/\s+/g, ' ').trim();
+            return {
+                ts,
+                ...(title ? { title } : {}),
+            };
+        }
+
+        function normalizeDownloads(state) {
+            const out = {};
+            for (const [torrentId, entry] of Object.entries(state || {})) {
+                if (!/^\d+$/.test(torrentId)) continue;
+                const normalized = normalizeDownloadEntry(entry);
+                if (normalized) out[torrentId] = normalized;
             }
             return out;
         }
@@ -267,6 +300,21 @@
             return merged;
         }
 
+        function mergeDownloads(remoteState, localState) {
+            const remote = normalizeDownloads(remoteState);
+            const local = normalizeDownloads(localState);
+            const merged = {};
+
+            for (const id of new Set([...Object.keys(remote), ...Object.keys(local)])) {
+                const r = remote[id];
+                const l = local[id];
+                if (!r) merged[id] = l;
+                else if (!l) merged[id] = r;
+                else merged[id] = (Number(l.ts) || 0) >= (Number(r.ts) || 0) ? l : r;
+            }
+            return merged;
+        }
+
         function applyState(state) {
             const normalized = normalizeState(state);
             saveLocalState(normalized);
@@ -277,8 +325,18 @@
             return normalized;
         }
 
+        function applyDownloads(state) {
+            const normalized = normalizeDownloads(state);
+            saveDownloadState(normalized);
+            return normalized;
+        }
+
         function sameState(a, b) {
             return JSON.stringify(normalizeState(a)) === JSON.stringify(normalizeState(b));
+        }
+
+        function sameDownloads(a, b) {
+            return JSON.stringify(normalizeDownloads(a)) === JSON.stringify(normalizeDownloads(b));
         }
 
         async function getConfig() {
@@ -343,7 +401,7 @@
             const gist = safeJsonParse(response.responseText, null);
             if (!gist || typeof gist !== 'object') throw new Error('Érvénytelen GitHub válasz.');
             const file = gist.files?.[config.gistFilename];
-            if (!file) return {};
+            if (!file) return { movies: {}, downloads: {} };
 
             let content = typeof file.content === 'string' ? file.content : '';
             if ((file.truncated || !content) && file.raw_url) {
@@ -357,44 +415,57 @@
                 }
                 content = raw.responseText || '';
             }
-            if (!content.trim()) return {};
+            if (!content.trim()) return { movies: {}, downloads: {} };
 
             const blob = safeJsonParse(content, null);
             if (!blob || typeof blob !== 'object' || Array.isArray(blob)) {
                 throw new Error(`A Gist fájl nem érvényes JSON: ${config.gistFilename}`);
             }
-            return normalizeState(blob.movies || {});
+            return {
+                movies: normalizeState(blob.movies || {}),
+                downloads: normalizeDownloads(blob.downloads || {}),
+            };
         }
 
-        function serializeGistState(state) {
-            const entries = Object.entries(normalizeState(state))
-                .sort(([, a], [, b]) => (Number(b?.ts) || 0) - (Number(a?.ts) || 0));
-
-            const moviesJson = entries.map(([imdbId, entry]) => {
+        function serializeObjectEntries(entries) {
+            return entries.map(([id, entry]) => {
                 const entryJson = JSON.stringify(entry, null, 2)
                     .split('\n')
                     .map((line, index) => index === 0 ? line : '    ' + line)
                     .join('\n');
-                return `    ${JSON.stringify(imdbId)}: ${entryJson}`;
+                return `    ${JSON.stringify(id)}: ${entryJson}`;
             }).join(',\n');
+        }
+
+        function serializeGistState(moviesState, downloadsState) {
+            const moviesEntries = Object.entries(normalizeState(moviesState))
+                .sort(([, a], [, b]) => (Number(b?.ts) || 0) - (Number(a?.ts) || 0));
+            const downloadEntries = Object.entries(normalizeDownloads(downloadsState))
+                .sort(([, a], [, b]) => (Number(b?.ts) || 0) - (Number(a?.ts) || 0));
+
+            const moviesJson = serializeObjectEntries(moviesEntries);
+            const downloadsJson = serializeObjectEntries(downloadEntries);
 
             return [
                 '{',
                 '  "version": 1,',
                 '  "movies": {',
                 moviesJson,
+                '  },',
+                '  "downloads": {',
+                downloadsJson,
                 '  }',
                 '}',
-            ].filter((line, index) => line || index !== 3).join('\n');
+            ].filter((line, index) => line || (index !== 3 && index !== 6)).join('\n');
         }
 
-        async function pushRemote(config, state) {
+        async function pushRemote(config, moviesState, downloadsState) {
             const body = {
                 files: {
                     [config.gistFilename]: {
                         // Kézzel sorosítjuk, mert a JSON.stringify a csak számjegyekből álló
                         // objektumkulcsokat numerikusan rendezi, függetlenül a beszúrási sorrendtől.
-                        content: serializeGistState(state),
+                        content: serializeGistState(moviesState, downloadsState),
                     },
                 },
             };
@@ -416,25 +487,40 @@
             // Egy időben csak egy hálózati szinkron futhat.
             if (syncing) return syncing;
             syncing = (async () => {
-                const local = migrateLegacySeenKeys();
+                const localMovies = migrateLegacySeenKeys();
+                const localDownloads = normalizeDownloads(loadDownloadState());
                 const remote = await fetchRemote(config);
-                const merged = mergeStates(remote, local);
-                applyState(merged);
+                const mergedMovies = mergeStates(remote.movies, localMovies);
+                const mergedDownloads = mergeDownloads(remote.downloads, localDownloads);
+                applyState(mergedMovies);
+                applyDownloads(mergedDownloads);
 
-                if (!sameState(remote, merged)) {
+                const changed = !sameState(remote.movies, mergedMovies)
+                    || !sameDownloads(remote.downloads, mergedDownloads);
+
+                if (changed) {
                     // Push előtt még egyszer olvasunk, hogy a közben más gépről érkezett változás is bekerüljön.
                     const latestRemote = await fetchRemote(config);
-                    const latestMerged = mergeStates(latestRemote, loadLocalState());
-                    applyState(latestMerged);
-                    if (!sameState(latestRemote, latestMerged) || forcePush) {
-                        await pushRemote(config, latestMerged);
+                    const latestMovies = mergeStates(latestRemote.movies, loadLocalState());
+                    const latestDownloads = mergeDownloads(latestRemote.downloads, loadDownloadState());
+                    applyState(latestMovies);
+                    applyDownloads(latestDownloads);
+
+                    const latestChanged = !sameState(latestRemote.movies, latestMovies)
+                        || !sameDownloads(latestRemote.downloads, latestDownloads);
+                    if (latestChanged || forcePush) {
+                        await pushRemote(config, latestMovies, latestDownloads);
                     }
                 } else if (forcePush) {
                     // A kézi szinkron a tartalmilag változatlan Gistet is újraírja,
-                    // így a korábbi fájl is azonnal ts DESC sorrendbe kerül.
-                    await pushRemote(config, merged);
+                    // így a movies és downloads objektumok is ts DESC sorrendben maradnak.
+                    await pushRemote(config, mergedMovies, mergedDownloads);
                 }
-                return { ok: true, count: Object.values(merged).filter(entry => entry.seen).length };
+                return {
+                    ok: true,
+                    count: Object.values(mergedMovies).filter(entry => entry.seen).length,
+                    downloadCount: Object.keys(mergedDownloads).length,
+                };
             })();
 
             try {
@@ -493,7 +579,28 @@
                 .map(([imdbId, entry]) => ({ imdbId, ...entry }));
         }
 
-        return { init, isSeen, setSeen, syncNow, getSeenMovies };
+        function addDownload(torrentId, title = '') {
+            const id = String(torrentId || '').trim();
+            if (!/^\d+$/.test(id)) return;
+
+            const state = normalizeDownloads(loadDownloadState());
+            const previousTitle = state[id]?.title || '';
+            const normalizedTitle = String(title || previousTitle).replace(/\s+/g, ' ').trim();
+            state[id] = {
+                ts: Date.now(),
+                ...(normalizedTitle ? { title: normalizedTitle } : {}),
+            };
+            applyDownloads(state);
+            scheduleSync();
+        }
+
+        function getDownloads() {
+            return Object.entries(normalizeDownloads(loadDownloadState()))
+                .sort(([, a], [, b]) => (Number(b?.ts) || 0) - (Number(a?.ts) || 0))
+                .map(([torrentId, entry]) => ({ torrentId, ...entry }));
+        }
+
+        return { init, isSeen, setSeen, syncNow, getSeenMovies, addDownload, getDownloads };
     }
 
     const seenSync = createSeenSync();
@@ -534,7 +641,7 @@
         return saved;
     }
 
-    async function sendToQB(dlUrl) {
+    async function sendToQB(dlUrl, downloadInfo = {}) {
         let qb = await getQBUrl();
         if (!qb) {
             showToast('Nincs beállítva qBittorrent URL. Beállítás…', 'error');
@@ -553,8 +660,13 @@
             data: 'urls=' + encodeURIComponent(dlUrl),
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             onload(resp) {
-                if (resp.status === 200) showToast('Torrent elküldve qBittorrentnek!');
-                else showToast('Sikertelen: HTTP ' + resp.status, 'error');
+                if (resp.status === 200) {
+                    const torrentId = String(downloadInfo.torrentId || new URL(dlUrl).searchParams.get('id') || '');
+                    seenSync.addDownload(torrentId, downloadInfo.title || '');
+                    showToast('Torrent elküldve qBittorrentnek!');
+                } else {
+                    showToast('Sikertelen: HTTP ' + resp.status, 'error');
+                }
             },
             onerror() {
                 showToast('Hiba a qBittorrent felé küldés közben.', 'error');
@@ -821,7 +933,8 @@
                 line-height: 13px;
             }
 
-            #ncore-tools-seen-list {
+            #ncore-tools-seen-list,
+            #ncore-tools-download-list {
                 max-height: min(52vh, 430px);
                 overflow-y: auto;
                 border: 1px solid #303135;
@@ -829,15 +942,18 @@
                 background: #1e1f22;
             }
 
-            .ncore-tools-seen-row {
+            .ncore-tools-seen-row,
+            .ncore-tools-download-row {
                 display: flex;
                 align-items: stretch;
                 border-top: 1px solid #303135;
             }
 
-            .ncore-tools-seen-row:first-child { border-top: 0; }
+            .ncore-tools-seen-row:first-child,
+            .ncore-tools-download-row:first-child { border-top: 0; }
 
-            .ncore-tools-seen-item {
+            .ncore-tools-seen-item,
+            .ncore-tools-download-item {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
@@ -852,7 +968,9 @@
             }
 
             .ncore-tools-seen-item:hover,
-            .ncore-tools-seen-item:focus-visible {
+            .ncore-tools-seen-item:focus-visible,
+            .ncore-tools-download-item:hover,
+            .ncore-tools-download-item:focus-visible {
                 background: #2a2b2f;
                 color: #cbCDD0;
                 outline: none;
@@ -877,7 +995,8 @@
                 outline: none;
             }
 
-            .ncore-tools-seen-title {
+            .ncore-tools-seen-title,
+            .ncore-tools-download-title {
                 min-width: 0;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -891,7 +1010,19 @@
                 font-size: 9px;
             }
 
-            #ncore-tools-seen-empty {
+            .ncore-tools-download-meta {
+                display: flex;
+                flex: 0 0 auto;
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 2px;
+                color: #777b80;
+                font-size: 9px;
+                white-space: nowrap;
+            }
+
+            #ncore-tools-seen-empty,
+            #ncore-tools-download-empty {
                 padding: 18px 10px;
                 color: #777b80;
                 text-align: center;
@@ -1025,6 +1156,10 @@
                     role="tab" aria-selected="false" aria-controls="ncore-tools-panel-seen" data-tab="seen">
                 Látott filmek
             </button>
+            <button type="button" class="ncore-tools-settings-tab" id="ncore-tools-tab-downloads"
+                    role="tab" aria-selected="false" aria-controls="ncore-tools-panel-downloads" data-tab="downloads">
+                Letöltések
+            </button>
             <button type="button" class="ncore-tools-settings-tab" id="ncore-tools-tab-sync"
                     role="tab" aria-selected="false" aria-controls="ncore-tools-panel-sync" data-tab="sync">
                 Szinkronizáció
@@ -1125,6 +1260,63 @@
 
         renderSeenMovies();
 
+        const downloadsPanel = document.createElement('div');
+        downloadsPanel.id = 'ncore-tools-panel-downloads';
+        downloadsPanel.className = 'ncore-tools-settings-tab-panel';
+        downloadsPanel.setAttribute('role', 'tabpanel');
+        downloadsPanel.setAttribute('aria-labelledby', 'ncore-tools-tab-downloads');
+        downloadsPanel.hidden = true;
+
+        function renderDownloads() {
+            const downloads = seenSync.getDownloads();
+            downloadsPanel.replaceChildren();
+
+            if (!downloads.length) {
+                const empty = document.createElement('div');
+                empty.id = 'ncore-tools-download-empty';
+                empty.textContent = 'Még nincs qBittorrenttel hozzáadott torrent.';
+                downloadsPanel.appendChild(empty);
+                return;
+            }
+
+            const list = document.createElement('div');
+            list.id = 'ncore-tools-download-list';
+
+            for (const download of downloads) {
+                const row = document.createElement('div');
+                row.className = 'ncore-tools-download-row';
+
+                const link = document.createElement('a');
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.className = 'ncore-tools-download-item';
+                link.href = `/torrents.php?action=details&id=${encodeURIComponent(download.torrentId)}`;
+                link.title = `${download.title || `Torrent #${download.torrentId}`} megnyitása`;
+
+                const title = document.createElement('span');
+                title.className = 'ncore-tools-download-title';
+                title.textContent = download.title || `Torrent #${download.torrentId}`;
+
+                const meta = document.createElement('span');
+                meta.className = 'ncore-tools-download-meta';
+
+                const id = document.createElement('span');
+                id.textContent = `#${download.torrentId}`;
+
+                const date = document.createElement('span');
+                date.textContent = download.ts ? new Date(download.ts).toLocaleString('hu-HU') : '';
+
+                meta.append(id, date);
+                link.append(title, meta);
+                row.appendChild(link);
+                list.appendChild(row);
+            }
+
+            downloadsPanel.appendChild(list);
+        }
+
+        renderDownloads();
+
         const syncPanel = document.createElement('div');
         syncPanel.id = 'ncore-tools-panel-sync';
         syncPanel.className = 'ncore-tools-settings-tab-panel';
@@ -1148,7 +1340,7 @@
                 <input id="ncore-tools-gist-filename" type="text" autocomplete="off" placeholder="${DEFAULT_GIST_FILENAME}">
             </label>
             <div id="ncore-tools-sync-actions">
-                <span id="ncore-tools-sync-status">A szinkronizáció a kitöltött Gist adatokkal automatikusan aktív. A Gist a filmek IMDb-azonosítóját, címét és a jelölés állapotát tárolja.</span>
+                <span id="ncore-tools-sync-status">A szinkronizáció a kitöltött Gist adatokkal automatikusan aktív. A Gist a látott filmeket és a qBittorrenttel hozzáadott torrenteket is tárolja.</span>
                 <button type="button" class="ncore-tools-settings-button" id="ncore-tools-sync-now">Szinkronizálás most</button>
             </div>
         `;
@@ -1168,17 +1360,22 @@
                 if (status) status.textContent = 'Szinkronizálás…';
                 const result = await seenSync.syncNow();
                 if (result.disabled) throw new Error('Hiányzó Gist beállítás.');
-                if (status) status.textContent = `Kész: ${result.count} látott film.`;
+                if (status) status.textContent = `Kész: ${result.count} látott film, ${result.downloadCount} letöltés.`;
             } catch (error) {
                 if (status) status.textContent = 'Hiba: ' + (error?.message || error);
             }
         });
 
-        form.append(generalPanel, seenPanel, syncPanel);
+        form.append(generalPanel, seenPanel, downloadsPanel, syncPanel);
         panel.appendChild(form);
 
         function selectTab(tabName) {
-            const panels = { general: generalPanel, seen: seenPanel, sync: syncPanel };
+            const panels = {
+                general: generalPanel,
+                seen: seenPanel,
+                downloads: downloadsPanel,
+                sync: syncPanel,
+            };
             for (const [name, panelEl] of Object.entries(panels)) {
                 panelEl.hidden = name !== tabName;
             }
@@ -1188,6 +1385,7 @@
             });
 
             if (tabName === 'seen') renderSeenMovies();
+            if (tabName === 'downloads') renderDownloads();
         }
 
         tabs.querySelectorAll('.ncore-tools-settings-tab').forEach(tab => {
@@ -1628,6 +1826,38 @@
     function initQBittorrent() {
         if (!location.pathname.endsWith('/torrents.php')) return;
 
+        function normalizeTorrentTitle(value) {
+            return String(value || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function findTorrentDetailsLink(torrentId, root = document) {
+            const id = String(torrentId || '').trim();
+            if (!id) return null;
+
+            const links = root.querySelectorAll?.(
+                '.torrent_txt > a[href*="action=details"], ' +
+                '.torrent_txt2 > a[href*="action=details"]'
+            ) || [];
+
+            for (const link of links) {
+                try {
+                    const url = new URL(link.getAttribute('href'), window.location.origin);
+                    if (url.searchParams.get('action') === 'details' && url.searchParams.get('id') === id) {
+                        return link;
+                    }
+                } catch (_) {}
+            }
+
+            return null;
+        }
+
+        function getTorrentTitle(torrentId, downloadLink = null) {
+            const localRow = downloadLink?.closest('.box_torrent');
+            const localLink = localRow ? findTorrentDetailsLink(torrentId, localRow) : null;
+            const torrentLink = localLink || findTorrentDetailsLink(torrentId);
+            return normalizeTorrentTitle(torrentLink?.getAttribute('title') || torrentLink?.textContent);
+        }
+
         function injectQBLink(rootEl) {
             if (!rootEl) return;
 
@@ -1642,6 +1872,8 @@
                 if (!parent) continue;
 
                 const dlUrl = new URL(dlA.getAttribute('href'), window.location.origin).href;
+                const torrentId = new URL(dlUrl).searchParams.get('id') || '';
+                const torrentTitle = getTorrentTitle(torrentId, dlA);
                 const alreadyInjected = Array.from(parent.querySelectorAll?.('.qb-inline-link') || [])
                     .some(link => link.dataset.downloadUrl === dlUrl);
 
@@ -1656,7 +1888,10 @@
                 qbA.textContent = 'qBittorrent';
                 qbA.className = 'qb-inline-link';
                 qbA.dataset.downloadUrl = dlUrl;
-                qbA.addEventListener('click', () => sendToQB(dlUrl));
+                qbA.addEventListener('click', () => sendToQB(dlUrl, {
+                    torrentId,
+                    title: torrentTitle,
+                }));
 
                 dlA.parentNode.insertBefore(sep, dlA.nextSibling);
                 dlA.parentNode.insertBefore(qbA, sep.nextSibling);
@@ -1684,7 +1919,10 @@
                 qbLink.className = 'qbittorrent-add-btn';
                 qbLink.title = 'Küldés qBittorrentbe';
                 qbLink.textContent = '[qBittorrent]';
-                qbLink.addEventListener('click', () => sendToQB(dlUrl));
+                qbLink.addEventListener('click', () => sendToQB(dlUrl, {
+                    torrentId,
+                    title: normalizeTorrentTitle(document.querySelector('.torrent_reszletek_cim')?.textContent),
+                }));
                 container.appendChild(qbLink);
             }
         }
@@ -1706,7 +1944,7 @@
     // Init
     // -------------------------------------------------------------------------
 
-    if (settings.seen) await seenSync.init();
+    if (settings.seen || settings.qbittorrent) await seenSync.init();
 
     if (settings.dedereferer) initDedereferer();
     if (settings.noThanks) initNoThanks();
