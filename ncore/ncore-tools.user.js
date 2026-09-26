@@ -1761,7 +1761,7 @@
             if (!imdbId) return;
 
             seenSync.setSeen(imdbId, !seenSync.isSeen(imdbId), getMovieTitle(row));
-            updateRow(row);
+            document.querySelectorAll(TORRENT_SELECTOR).forEach(updateRow);
         }
 
         function bindRow(row) {
