@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.0.0
+// @version      1.1.0
 // @description  nCore segédek egyben: qBittorrent, de-dereferer, köszönetek elrejtése, látott filmek, 3+ kiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
@@ -19,6 +19,8 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
+// @connect      api.github.com
+// @connect      gist.githubusercontent.com
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -32,6 +34,9 @@
     const LS_PREFIX = 'ncore_';
     const GM_KEY_QB_URL = 'qb_url';
     const GM_KEY_SETTINGS = 'tools_settings';
+    const GM_KEY_SEEN_SYNC = 'seen_sync_config';
+    const LS_SEEN_SYNC_STATE = LS_PREFIX + 'seen_sync_state';
+    const DEFAULT_GIST_FILENAME = 'ncore_seen.json';
 
     const DEFAULT_SETTINGS = {
         qbittorrent: true,
@@ -93,6 +98,30 @@
         await gmSet(GM_KEY_SETTINGS, JSON.stringify(settings));
     }
 
+    async function loadSeenSyncConfig() {
+        const raw = await gmGet(GM_KEY_SEEN_SYNC, '');
+        if (!raw) return { gistToken: '', gistId: '', gistFilename: DEFAULT_GIST_FILENAME };
+
+        try {
+            const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            return {
+                gistToken: String(parsed?.gistToken || ''),
+                gistId: String(parsed?.gistId || ''),
+                gistFilename: String(parsed?.gistFilename || DEFAULT_GIST_FILENAME),
+            };
+        } catch (_) {
+            return { gistToken: '', gistId: '', gistFilename: DEFAULT_GIST_FILENAME };
+        }
+    }
+
+    async function saveSeenSyncConfig(config) {
+        await gmSet(GM_KEY_SEEN_SYNC, JSON.stringify({
+            gistToken: String(config?.gistToken || '').trim(),
+            gistId: String(config?.gistId || '').trim(),
+            gistFilename: String(config?.gistFilename || DEFAULT_GIST_FILENAME).trim() || DEFAULT_GIST_FILENAME,
+        }));
+    }
+
     const settings = await loadSettings();
     const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -152,6 +181,285 @@
             setTimeout(() => toast.remove(), 300);
         }, duration);
     }
+
+    // -------------------------------------------------------------------------
+    // „Láttam már” Gist szinkron
+    // -------------------------------------------------------------------------
+
+    function createSeenSync() {
+        let pushTimer = null;
+        let syncing = null;
+
+        function safeJsonParse(raw, fallback) {
+            try { return JSON.parse(raw); } catch (_) { return fallback; }
+        }
+
+        function loadLocalState() {
+            const parsed = safeJsonParse(localStorage.getItem(LS_SEEN_SYNC_STATE) || '{}', {});
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        }
+
+        function saveLocalState(state) {
+            localStorage.setItem(LS_SEEN_SYNC_STATE, JSON.stringify(state || {}));
+        }
+
+        function normalizeEntry(entry) {
+            if (!entry || typeof entry !== 'object') return null;
+            const ts = Number(entry.ts) || 0;
+            const title = String(entry.title || '').replace(/\s+/g, ' ').trim();
+            return {
+                seen: Boolean(entry.seen),
+                ts,
+                ...(title ? { title } : {}),
+            };
+        }
+
+        function normalizeState(state) {
+            const out = {};
+            for (const [imdbId, entry] of Object.entries(state || {})) {
+                if (!/^\d+$/.test(imdbId)) continue;
+                const normalized = normalizeEntry(entry);
+                if (normalized) out[imdbId] = normalized;
+            }
+            return out;
+        }
+
+        function migrateLegacySeenKeys() {
+            const state = normalizeState(loadLocalState());
+            let changed = false;
+
+            // A régi verzió az IMDb számszerű azonosítóját közvetlenül localStorage kulcsként használta.
+            // Csak IMDb-re jellemző 7–9 számjegyes kulcsokat veszünk át, hogy más helyi adatot ne érintsünk.
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (!/^\d{7,9}$/.test(key || '') || localStorage.getItem(key) === null) continue;
+                if (!state[key]) {
+                    state[key] = { seen: true, ts: 1 };
+                    changed = true;
+                }
+            }
+
+            if (changed) saveLocalState(state);
+            return state;
+        }
+
+        function compareEntries(a, b) {
+            const aa = normalizeEntry(a) || { seen: false, ts: 0 };
+            const bb = normalizeEntry(b) || { seen: false, ts: 0 };
+            if (aa.ts !== bb.ts) return aa.ts - bb.ts;
+            if (aa.seen === bb.seen) return 0;
+            // Azonos timestampnél a törlés nyerjen, így nem támad fel egy visszavont jelölés.
+            return aa.seen ? -1 : 1;
+        }
+
+        function mergeStates(remoteState, localState) {
+            const remote = normalizeState(remoteState);
+            const local = normalizeState(localState);
+            const merged = {};
+
+            for (const id of new Set([...Object.keys(remote), ...Object.keys(local)])) {
+                const r = remote[id];
+                const l = local[id];
+                if (!r) merged[id] = l;
+                else if (!l) merged[id] = r;
+                else merged[id] = compareEntries(l, r) >= 0 ? l : r;
+            }
+            return merged;
+        }
+
+        function applyState(state) {
+            const normalized = normalizeState(state);
+            saveLocalState(normalized);
+            for (const [imdbId, entry] of Object.entries(normalized)) {
+                if (entry.seen) localStorage.setItem(imdbId, '1');
+                else localStorage.removeItem(imdbId);
+            }
+            return normalized;
+        }
+
+        function sameState(a, b) {
+            return JSON.stringify(normalizeState(a)) === JSON.stringify(normalizeState(b));
+        }
+
+        async function getConfig() {
+            const config = await loadSeenSyncConfig();
+            return {
+                gistToken: config.gistToken.trim(),
+                gistId: config.gistId.trim(),
+                gistFilename: (config.gistFilename || DEFAULT_GIST_FILENAME).trim() || DEFAULT_GIST_FILENAME,
+            };
+        }
+
+        async function getEnabledConfig() {
+            const config = await getConfig();
+            if (!config.gistToken || !config.gistId || !config.gistFilename) return null;
+            return config;
+        }
+
+        function httpRequest({ method = 'GET', url, headers = {}, body = null }) {
+            if (typeof GM_xmlhttpRequest === 'function') {
+                return new Promise((resolve, reject) => {
+                    GM_xmlhttpRequest({
+                        method,
+                        url,
+                        headers,
+                        data: body,
+                        responseType: 'text',
+                        timeout: 20000,
+                        onload: resolve,
+                        onerror: () => reject(new Error(`Network error: ${method} ${url}`)),
+                        ontimeout: () => reject(new Error(`Request timeout: ${method} ${url}`)),
+                        onabort: () => reject(new Error(`Request aborted: ${method} ${url}`)),
+                    });
+                });
+            }
+
+            return fetch(url, { method, headers, body }).then(async response => ({
+                status: response.status,
+                statusText: response.statusText,
+                responseText: await response.text(),
+            }));
+        }
+
+        function githubHeaders(config, jsonBody = false) {
+            return {
+                Accept: 'application/vnd.github+json',
+                Authorization: `Bearer ${config.gistToken}`,
+                'X-GitHub-Api-Version': '2022-11-28',
+                ...(jsonBody ? { 'Content-Type': 'application/json' } : {}),
+            };
+        }
+
+        async function fetchRemote(config) {
+            const response = await httpRequest({
+                method: 'GET',
+                url: `https://api.github.com/gists/${encodeURIComponent(config.gistId)}`,
+                headers: githubHeaders(config),
+            });
+            if (response.status < 200 || response.status >= 300) {
+                throw new Error(`Gist lekérés sikertelen: HTTP ${response.status}`);
+            }
+
+            const gist = safeJsonParse(response.responseText, null);
+            if (!gist || typeof gist !== 'object') throw new Error('Érvénytelen GitHub válasz.');
+            const file = gist.files?.[config.gistFilename];
+            if (!file) return {};
+
+            let content = typeof file.content === 'string' ? file.content : '';
+            if ((file.truncated || !content) && file.raw_url) {
+                const raw = await httpRequest({
+                    method: 'GET',
+                    url: file.raw_url,
+                    headers: { Authorization: `Bearer ${config.gistToken}` },
+                });
+                if (raw.status < 200 || raw.status >= 300) {
+                    throw new Error(`Gist raw lekérés sikertelen: HTTP ${raw.status}`);
+                }
+                content = raw.responseText || '';
+            }
+            if (!content.trim()) return {};
+
+            const blob = safeJsonParse(content, null);
+            if (!blob || typeof blob !== 'object' || Array.isArray(blob)) {
+                throw new Error(`A Gist fájl nem érvényes JSON: ${config.gistFilename}`);
+            }
+            return normalizeState(blob.movies || {});
+        }
+
+        async function pushRemote(config, state) {
+            const body = {
+                files: {
+                    [config.gistFilename]: {
+                        content: JSON.stringify({ version: 1, movies: normalizeState(state) }, null, 2),
+                    },
+                },
+            };
+            const response = await httpRequest({
+                method: 'PATCH',
+                url: `https://api.github.com/gists/${encodeURIComponent(config.gistId)}`,
+                headers: githubHeaders(config, true),
+                body: JSON.stringify(body),
+            });
+            if (response.status < 200 || response.status >= 300) {
+                throw new Error(`Gist frissítés sikertelen: HTTP ${response.status}`);
+            }
+        }
+
+        async function doSync() {
+            const config = await getEnabledConfig();
+            if (!config) return { ok: false, disabled: true };
+
+            // Egy időben csak egy hálózati szinkron futhat.
+            if (syncing) return syncing;
+            syncing = (async () => {
+                const local = migrateLegacySeenKeys();
+                const remote = await fetchRemote(config);
+                const merged = mergeStates(remote, local);
+                applyState(merged);
+
+                if (!sameState(remote, merged)) {
+                    // Push előtt még egyszer olvasunk, hogy a közben más gépről érkezett változás is bekerüljön.
+                    const latestRemote = await fetchRemote(config);
+                    const latestMerged = mergeStates(latestRemote, loadLocalState());
+                    applyState(latestMerged);
+                    if (!sameState(latestRemote, latestMerged)) await pushRemote(config, latestMerged);
+                }
+                return { ok: true, count: Object.values(merged).filter(entry => entry.seen).length };
+            })();
+
+            try {
+                return await syncing;
+            } finally {
+                syncing = null;
+            }
+        }
+
+        function scheduleSync() {
+            if (pushTimer) clearTimeout(pushTimer);
+            pushTimer = setTimeout(() => {
+                pushTimer = null;
+                doSync().catch(error => console.warn('[nCore Tools] Seen Gist sync failed:', error));
+            }, 1500);
+        }
+
+        async function init() {
+            migrateLegacySeenKeys();
+            try {
+                await doSync();
+            } catch (error) {
+                console.warn('[nCore Tools] Seen Gist sync init failed:', error);
+            }
+        }
+
+        function setSeen(imdbId, seen, title = '') {
+            const state = normalizeState(loadLocalState());
+            const previousTitle = state[imdbId]?.title || '';
+            const normalizedTitle = String(title || previousTitle).replace(/\s+/g, ' ').trim();
+            state[imdbId] = {
+                seen: Boolean(seen),
+                ts: Date.now(),
+                ...(normalizedTitle ? { title: normalizedTitle } : {}),
+            };
+            applyState(state);
+            scheduleSync();
+        }
+
+        function isSeen(imdbId) {
+            return localStorage.getItem(imdbId) !== null;
+        }
+
+        async function syncNow() {
+            if (pushTimer) {
+                clearTimeout(pushTimer);
+                pushTimer = null;
+            }
+            return doSync();
+        }
+
+        return { init, isSeen, setSeen, syncNow };
+    }
+
+    const seenSync = createSeenSync();
 
     // -------------------------------------------------------------------------
     // qBittorrent URL
@@ -272,7 +580,7 @@
 
             #ncore-tools-settings-header {
                 position: relative;
-                padding: 12px 14px 11px;
+                padding: 12px 14px 0;
                 background: #2e2f33;
                 border-bottom: 1px solid #333437;
             }
@@ -314,10 +622,53 @@
                 color: #cbCDD0;
             }
 
+            #ncore-tools-settings-tabs {
+                display: flex;
+                gap: 2px;
+                margin: 10px -14px 0;
+                padding: 0 10px;
+                border-top: 1px solid #38393d;
+                background: #292a2e;
+            }
+
+            .ncore-tools-settings-tab {
+                position: relative;
+                min-height: 31px;
+                padding: 6px 10px;
+                border: 0;
+                background: transparent;
+                color: #777b80;
+                font: bold 10px Verdana, Geneva, Arial, Helvetica, sans-serif;
+                cursor: pointer;
+            }
+
+            .ncore-tools-settings-tab:hover,
+            .ncore-tools-settings-tab:focus-visible {
+                color: #cbCDD0;
+                outline: none;
+            }
+
+            .ncore-tools-settings-tab[aria-selected="true"] {
+                color: #cbCDD0;
+                background: #222326;
+            }
+
+            .ncore-tools-settings-tab[aria-selected="true"]::after {
+                content: '';
+                position: absolute;
+                left: 8px;
+                right: 8px;
+                bottom: 0;
+                height: 2px;
+                background: #84bd00;
+            }
+
             #ncore-tools-settings-form {
                 padding: 8px 10px;
                 background: #222326;
             }
+
+            .ncore-tools-settings-tab-panel[hidden] { display: none; }
 
             .ncore-tools-setting-row {
                 display: flex;
@@ -332,9 +683,7 @@
                 box-sizing: border-box;
             }
 
-            .ncore-tools-setting-row:first-child {
-                border-top: 0;
-            }
+            .ncore-tools-setting-row:first-child { border-top: 0; }
 
             .ncore-tools-setting-row:hover {
                 background: #2a2b2f;
@@ -365,7 +714,7 @@
                 content: '';
                 position: absolute;
                 left: 3px;
-                top: 0px;
+                top: 0;
                 width: 4px;
                 height: 8px;
                 border: solid #1d1e21;
@@ -378,8 +727,61 @@
                 outline-offset: 2px;
             }
 
-            .ncore-tools-setting-label {
-                line-height: 16px;
+            .ncore-tools-setting-label { line-height: 16px; }
+
+            #ncore-tools-sync-config {
+                margin: 8px 0 0;
+                padding: 9px;
+                border: 1px solid #303135;
+                border-radius: 3px;
+                background: #1e1f22;
+            }
+
+            #ncore-tools-sync-config[hidden] { display: none; }
+
+            .ncore-tools-sync-field {
+                display: grid;
+                grid-template-columns: 112px minmax(0, 1fr);
+                align-items: center;
+                gap: 8px;
+                margin-top: 6px;
+            }
+
+            .ncore-tools-sync-field:first-child { margin-top: 0; }
+
+            .ncore-tools-sync-field span {
+                color: #777b80;
+                font-size: 9px;
+            }
+
+            .ncore-tools-sync-field input {
+                min-width: 0;
+                height: 25px;
+                padding: 3px 6px;
+                box-sizing: border-box;
+                border: 1px solid #3b3d42;
+                border-radius: 3px;
+                outline: none;
+                background: #292a2e;
+                color: #cbCDD0;
+                font: 10px Verdana, Geneva, Arial, Helvetica, sans-serif;
+            }
+
+            .ncore-tools-sync-field input:focus { border-color: #84bd00; }
+
+            #ncore-tools-sync-actions {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                margin-top: 8px;
+            }
+
+            #ncore-tools-sync-status {
+                min-width: 0;
+                color: #777b80;
+                font-size: 9px;
+                line-height: 13px;
             }
 
             #ncore-tools-settings-footer {
@@ -438,29 +840,35 @@
             }
 
             @media (max-width: 560px) {
-                #ncore-tools-settings-overlay {
-                    padding: 10px;
+                #ncore-tools-settings-overlay { padding: 10px; }
+
+                .ncore-tools-sync-field {
+                    grid-template-columns: 1fr;
+                    gap: 3px;
                 }
+
+                #ncore-tools-sync-actions {
+                    align-items: stretch;
+                    flex-direction: column;
+                }
+
+                #ncore-tools-sync-now { align-self: flex-end; }
 
                 #ncore-tools-settings-footer {
                     align-items: stretch;
                     flex-direction: column;
                 }
 
-                #ncore-tools-settings-note {
-                    max-width: none;
-                }
-
-                #ncore-tools-settings-buttons {
-                    justify-content: flex-end;
-                }
+                #ncore-tools-settings-note { max-width: none; }
+                #ncore-tools-settings-buttons { justify-content: flex-end; }
             }
         `;
         document.head.appendChild(style);
     }
 
-    function openSettingsModal() {
+    async function openSettingsModal() {
         closeSettingsModal();
+        const syncConfig = await loadSeenSyncConfig();
         ensureSettingsModalStyle();
 
         const overlay = document.createElement('div');
@@ -481,7 +889,7 @@
 
         const subtitle = document.createElement('div');
         subtitle.id = 'ncore-tools-settings-subtitle';
-        subtitle.textContent = 'A userscript funkcióinak be- és kikapcsolása';
+        subtitle.textContent = 'Funkciók és szinkronizáció beállítása';
 
         const close = document.createElement('button');
         close.id = 'ncore-tools-settings-close';
@@ -491,11 +899,31 @@
         close.textContent = '×';
         close.addEventListener('click', closeSettingsModal);
 
-        header.append(title, subtitle, close);
+        const tabs = document.createElement('div');
+        tabs.id = 'ncore-tools-settings-tabs';
+        tabs.setAttribute('role', 'tablist');
+        tabs.innerHTML = `
+            <button type="button" class="ncore-tools-settings-tab" id="ncore-tools-tab-general"
+                    role="tab" aria-selected="true" aria-controls="ncore-tools-panel-general" data-tab="general">
+                Általános
+            </button>
+            <button type="button" class="ncore-tools-settings-tab" id="ncore-tools-tab-sync"
+                    role="tab" aria-selected="false" aria-controls="ncore-tools-panel-sync" data-tab="sync">
+                Szinkronizáció
+            </button>
+        `;
+
+        header.append(title, subtitle, close, tabs);
         panel.appendChild(header);
 
         const form = document.createElement('div');
         form.id = 'ncore-tools-settings-form';
+
+        const generalPanel = document.createElement('div');
+        generalPanel.id = 'ncore-tools-panel-general';
+        generalPanel.className = 'ncore-tools-settings-tab-panel';
+        generalPanel.setAttribute('role', 'tabpanel');
+        generalPanel.setAttribute('aria-labelledby', 'ncore-tools-tab-general');
 
         for (const [key, labelText] of Object.entries(SETTING_LABELS)) {
             const label = document.createElement('label');
@@ -511,10 +939,72 @@
             text.textContent = labelText;
 
             label.append(checkbox, text);
-            form.appendChild(label);
+            generalPanel.appendChild(label);
         }
 
+        const syncPanel = document.createElement('div');
+        syncPanel.id = 'ncore-tools-panel-sync';
+        syncPanel.className = 'ncore-tools-settings-tab-panel';
+        syncPanel.setAttribute('role', 'tabpanel');
+        syncPanel.setAttribute('aria-labelledby', 'ncore-tools-tab-sync');
+        syncPanel.hidden = true;
+
+        const syncBox = document.createElement('div');
+        syncBox.id = 'ncore-tools-sync-config';
+        syncBox.innerHTML = `
+            <label class="ncore-tools-sync-field">
+                <span>GitHub Gist Token</span>
+                <input id="ncore-tools-gist-token" type="text" autocomplete="off" placeholder="github_pat_...">
+            </label>
+            <label class="ncore-tools-sync-field">
+                <span>Gist ID</span>
+                <input id="ncore-tools-gist-id" type="text" autocomplete="off" placeholder="0123456789abcdef...">
+            </label>
+            <label class="ncore-tools-sync-field">
+                <span>Gist fájlnév</span>
+                <input id="ncore-tools-gist-filename" type="text" autocomplete="off" placeholder="${DEFAULT_GIST_FILENAME}">
+            </label>
+            <div id="ncore-tools-sync-actions">
+                <span id="ncore-tools-sync-status">A szinkronizáció a kitöltött Gist adatokkal automatikusan aktív. A Gist a filmek IMDb-azonosítóját, címét és a jelölés állapotát tárolja.</span>
+                <button type="button" class="ncore-tools-settings-button" id="ncore-tools-sync-now">Szinkronizálás most</button>
+            </div>
+        `;
+        syncBox.querySelector('#ncore-tools-gist-token').value = syncConfig.gistToken || '';
+        syncBox.querySelector('#ncore-tools-gist-id').value = syncConfig.gistId || '';
+        syncBox.querySelector('#ncore-tools-gist-filename').value = syncConfig.gistFilename || DEFAULT_GIST_FILENAME;
+        syncPanel.appendChild(syncBox);
+
+        syncBox.querySelector('#ncore-tools-sync-now')?.addEventListener('click', async () => {
+            const status = syncBox.querySelector('#ncore-tools-sync-status');
+            try {
+                await saveSeenSyncConfig({
+                    gistToken: syncBox.querySelector('#ncore-tools-gist-token').value,
+                    gistId: syncBox.querySelector('#ncore-tools-gist-id').value,
+                    gistFilename: syncBox.querySelector('#ncore-tools-gist-filename').value,
+                });
+                if (status) status.textContent = 'Szinkronizálás…';
+                const result = await seenSync.syncNow();
+                if (result.disabled) throw new Error('Hiányzó Gist beállítás.');
+                if (status) status.textContent = `Kész: ${result.count} látott film.`;
+            } catch (error) {
+                if (status) status.textContent = 'Hiba: ' + (error?.message || error);
+            }
+        });
+
+        form.append(generalPanel, syncPanel);
         panel.appendChild(form);
+
+        function selectTab(tabName) {
+            const general = tabName === 'general';
+            generalPanel.hidden = !general;
+            syncPanel.hidden = general;
+            tabs.querySelector('#ncore-tools-tab-general').setAttribute('aria-selected', general ? 'true' : 'false');
+            tabs.querySelector('#ncore-tools-tab-sync').setAttribute('aria-selected', general ? 'false' : 'true');
+        }
+
+        tabs.querySelectorAll('.ncore-tools-settings-tab').forEach(tab => {
+            tab.addEventListener('click', () => selectTab(tab.dataset.tab));
+        });
 
         const footer = document.createElement('div');
         footer.id = 'ncore-tools-settings-footer';
@@ -540,6 +1030,11 @@
             const next = { ...settings };
             form.querySelectorAll('input[data-setting-key]').forEach(input => {
                 next[input.dataset.settingKey] = input.checked;
+            });
+            await saveSeenSyncConfig({
+                gistToken: syncBox.querySelector('#ncore-tools-gist-token').value,
+                gistId: syncBox.querySelector('#ncore-tools-gist-id').value,
+                gistFilename: syncBox.querySelector('#ncore-tools-gist-filename').value,
             });
             await saveSettings(next);
             location.reload();
@@ -756,6 +1251,19 @@
             return match ? match[1] : null;
         }
 
+        function getMovieTitle(row) {
+            const titleSpan = row.querySelector('.torrent_txt .siterank span[title]');
+            const movieTitle = String(titleSpan?.getAttribute('title') || titleSpan?.textContent || '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (movieTitle) return movieTitle;
+
+            const torrentLink = row.querySelector('.torrent_txt > a[href*="action=details"]');
+            return String(torrentLink?.getAttribute('title') || torrentLink?.textContent || '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
         function isSeries(row) {
             const categ = row.querySelector('.categ_link');
             return Boolean(categ && /sorozat/i.test(categ.title));
@@ -764,16 +1272,14 @@
         function updateRow(row) {
             const imdbId = getImdbId(row);
             if (!imdbId) return;
-            row.classList.toggle(SEEN_CLASS, localStorage.getItem(imdbId) !== null);
+            row.classList.toggle(SEEN_CLASS, seenSync.isSeen(imdbId));
         }
 
         function toggleSeen(row) {
             const imdbId = getImdbId(row);
             if (!imdbId) return;
 
-            if (localStorage.getItem(imdbId) !== null) localStorage.removeItem(imdbId);
-            else localStorage.setItem(imdbId, '1');
-
+            seenSync.setSeen(imdbId, !seenSync.isSeen(imdbId), getMovieTitle(row));
             updateRow(row);
         }
 
@@ -927,6 +1433,8 @@
     // -------------------------------------------------------------------------
     // Init
     // -------------------------------------------------------------------------
+
+    if (settings.seen) await seenSync.init();
 
     if (settings.dedereferer) initDedereferer();
     if (settings.noThanks) initNoThanks();
