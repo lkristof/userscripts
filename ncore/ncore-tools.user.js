@@ -1356,14 +1356,32 @@
 
     function initDedereferer() {
         const DEREFERERS = [
-            'https://dereferer.me/?',
-            'https://dereferer.link/?',
+            { prefix: 'https://dereferer.me/?' },
+            { prefix: 'https://dereferer.link/?' },
+            { host: 'none.st', param: 'q' },
         ];
 
         function cleanHref(href) {
-            for (const prefix of DEREFERERS) {
-                if (href.startsWith(prefix)) return href.slice(prefix.length);
+            for (const dereferer of DEREFERERS) {
+                if (dereferer.prefix && href.startsWith(dereferer.prefix)) {
+                    return href.slice(dereferer.prefix.length);
+                }
+
+                if (dereferer.host) {
+                    try {
+                        const url = new URL(href);
+
+                        if (url.hostname === dereferer.host) {
+                            const target = url.searchParams.get(dereferer.param);
+
+                            if (target && /^https?:\/\//i.test(target)) {
+                                return target;
+                            }
+                        }
+                    } catch (_) {}
+                }
             }
+
             return href;
         }
 
