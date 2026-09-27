@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.2.1
+// @version      1.2.2
 // @description  nCore segédscript: qBittorrent integráció, lista/poszter torrentnézet, linktisztítás, reklám- és köszönetrejtés, képbeágyazás, látott filmek és torrentkiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
@@ -2172,14 +2172,18 @@
             }
 
             .ncore-torrent-view-button {
+                display: flex;
                 width: 76px;
                 height: 34px;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
                 padding: 0;
                 border: 1px solid transparent;
                 border-radius: 3px;
                 background: transparent;
                 color: #8b8e92;
-                font: bold 10px/32px Verdana, Geneva, Arial, Helvetica, sans-serif;
+                font: bold 10px/1 Verdana, Geneva, Arial, Helvetica, sans-serif;
                 text-align: center;
                 cursor: pointer;
                 transition: background .15s ease, border-color .15s ease, color .15s ease;
@@ -2198,6 +2202,17 @@
                 background: #84bd00;
                 color: #1d1e21;
             }
+
+            .ncore-torrent-view-button .ncore-lucide-icon {
+                display: block;
+                width: 15px;
+                height: 15px;
+                flex: 0 0 15px;
+                pointer-events: none;
+                stroke: currentColor;
+            }
+
+            .ncore-torrent-view-label { pointer-events: none; }
 
             .ncore-poster-card { display: none; }
 
@@ -2623,24 +2638,36 @@
         }
 
         // Lucide ikonok inline SVG-ként, külső runtime nélkül.
-        // Forrás: https://lucide.dev/icons/download, /bookmark, /check
-        const LUCIDE_ICON_PATHS = {
+        // Forrás: https://lucide.dev/icons/download, /bookmark, /check,
+        //         /layout-grid, /text-align-justify
+        const LUCIDE_ICONS = {
             download: [
-                'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4',
-                'm7 10 5 5 5-5',
-                'M12 15V3',
+                ['path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }],
+                ['path', { d: 'm7 10 5 5 5-5' }],
+                ['path', { d: 'M12 15V3' }],
             ],
             bookmark: [
-                'm19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z',
+                ['path', { d: 'm19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z' }],
             ],
             check: [
-                'M20 6 9 17l-5-5',
+                ['path', { d: 'M20 6 9 17l-5-5' }],
+            ],
+            'layout-grid': [
+                ['rect', { width: '7', height: '7', x: '3', y: '3', rx: '1' }],
+                ['rect', { width: '7', height: '7', x: '14', y: '3', rx: '1' }],
+                ['rect', { width: '7', height: '7', x: '14', y: '14', rx: '1' }],
+                ['rect', { width: '7', height: '7', x: '3', y: '14', rx: '1' }],
+            ],
+            'text-align-justify': [
+                ['path', { d: 'M3 6h18' }],
+                ['path', { d: 'M3 12h18' }],
+                ['path', { d: 'M3 18h18' }],
             ],
         };
 
         function createLucideIcon(name) {
-            const paths = LUCIDE_ICON_PATHS[name];
-            if (!paths) return document.createTextNode('');
+            const nodes = LUCIDE_ICONS[name];
+            if (!nodes?.length) return document.createTextNode('');
 
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svg.classList.add('ncore-lucide-icon');
@@ -2655,10 +2682,12 @@
             svg.setAttribute('aria-hidden', 'true');
             svg.setAttribute('focusable', 'false');
 
-            for (const d of paths) {
-                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                path.setAttribute('d', d);
-                svg.appendChild(path);
+            for (const [tagName, attributes] of nodes) {
+                const node = document.createElementNS('http://www.w3.org/2000/svg', tagName);
+                for (const [attribute, value] of Object.entries(attributes)) {
+                    node.setAttribute(attribute, value);
+                }
+                svg.appendChild(node);
             }
             return svg;
         }
@@ -2942,17 +2971,23 @@
         listButton.type = 'button';
         listButton.className = 'ncore-torrent-view-button';
         listButton.dataset.view = VIEW_LIST;
-        listButton.textContent = '☰ Lista';
         listButton.title = 'Lista nézet';
         listButton.setAttribute('aria-label', 'Lista nézet');
+        const listLabel = document.createElement('span');
+        listLabel.className = 'ncore-torrent-view-label';
+        listLabel.textContent = 'Lista';
+        listButton.append(createLucideIcon('text-align-justify'), listLabel);
 
         const posterButton = document.createElement('button');
         posterButton.type = 'button';
         posterButton.className = 'ncore-torrent-view-button';
         posterButton.dataset.view = VIEW_POSTER;
-        posterButton.textContent = '▦ Poszter';
         posterButton.title = 'Poszter nézet';
         posterButton.setAttribute('aria-label', 'Poszter nézet');
+        const posterLabel = document.createElement('span');
+        posterLabel.className = 'ncore-torrent-view-label';
+        posterLabel.textContent = 'Poszter';
+        posterButton.append(createLucideIcon('layout-grid'), posterLabel);
 
         switcher.append(listButton, posterButton);
         document.body.appendChild(switcher);
