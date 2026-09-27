@@ -1124,30 +1124,6 @@
                 background: #95cf0a;
                 color: #111214;
             }
-
-            @media (max-width: 560px) {
-                #ncore-tools-settings-overlay { padding: 10px; }
-
-                .ncore-tools-sync-field {
-                    grid-template-columns: 1fr;
-                    gap: 3px;
-                }
-
-                #ncore-tools-sync-actions {
-                    align-items: stretch;
-                    flex-direction: column;
-                }
-
-                #ncore-tools-sync-now { align-self: flex-end; }
-
-                #ncore-tools-settings-footer {
-                    align-items: stretch;
-                    flex-direction: column;
-                }
-
-                #ncore-tools-settings-note { max-width: none; }
-                #ncore-tools-settings-buttons { justify-content: flex-end; }
-            }
         `;
         document.head.appendChild(style);
     }
