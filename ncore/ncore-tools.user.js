@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.2.0
-// @description  nCore segédscript: qBittorrent integráció, linktisztítás, reklám- és köszönetrejtés, képbeágyazás, látott filmek és torrentkiemelés.
+// @version      1.2.1
+// @description  nCore segédscript: qBittorrent integráció, lista/poszter torrentnézet, linktisztítás, reklám- és köszönetrejtés, képbeágyazás, látott filmek és torrentkiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
 // @match        https://ncore.pro/*
@@ -39,6 +39,7 @@
     const GM_KEY_QB_URL = 'qb_url';
     const GM_KEY_SETTINGS = 'tools_settings';
     const GM_KEY_SEEN_SYNC = 'seen_sync_config';
+    const GM_KEY_TORRENT_VIEW = 'torrent_view';
     const LS_SEEN_SYNC_STATE = LS_PREFIX + 'seen_sync_state';
     const LS_DOWNLOAD_SYNC_STATE = LS_PREFIX + 'download_sync_state';
     const DEFAULT_GIST_FILENAME = 'ncore_seen.json';
@@ -2083,7 +2084,18 @@
         function updateRow(row) {
             const imdbId = getImdbId(row);
             if (!imdbId) return;
-            row.classList.toggle(SEEN_CLASS, seenSync.isSeen(imdbId));
+
+            const seen = seenSync.isSeen(imdbId);
+            row.classList.toggle(SEEN_CLASS, seen);
+
+            // Ha a poszterkártya már felépült, a rajta lévő jelölőgombot is
+            // azonnal szinkronban tartjuk a lista nézet dupla kattintásával.
+            const posterButton = row.querySelector(':scope > .ncore-poster-card .ncore-poster-action[data-seen-button="1"]');
+            if (posterButton) {
+                posterButton.classList.toggle('active', seen);
+                posterButton.title = seen ? 'Látott jelölés visszavonása' : 'Megjelölés látott filmként';
+                posterButton.setAttribute('aria-label', posterButton.title);
+            }
         }
 
         function toggleSeen(row) {
@@ -2121,7 +2133,865 @@
     }
 
     // -------------------------------------------------------------------------
-    // 6) 3+ pluszos torrentek kiemelése
+    // 6) Torrentlista nezetvalto: lista / poszter
+    // -------------------------------------------------------------------------
+
+    async function initTorrentViewSwitcher() {
+        if (!location.pathname.endsWith('/torrents.php')) return;
+
+        const params = new URLSearchParams(location.search);
+        if (params.get('action')) return;
+
+        const torrentContainer = document.querySelector('.box_torrent_all');
+        if (!torrentContainer) return;
+
+        const VIEW_LIST = 'list';
+        const VIEW_POSTER = 'poster';
+        const VALID_VIEWS = new Set([VIEW_LIST, VIEW_POSTER]);
+        let currentView = String(await gmGet(GM_KEY_TORRENT_VIEW, VIEW_LIST) || VIEW_LIST);
+        if (!VALID_VIEWS.has(currentView)) currentView = VIEW_LIST;
+
+        const style = document.createElement('style');
+        style.id = 'ncore-tools-torrent-view-style';
+        style.textContent = `
+            #ncore-torrent-view-switcher {
+                position: fixed;
+                top: 50%;
+                right: 12px;
+                z-index: 99998;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                padding: 5px;
+                transform: translateY(-50%);
+                border: 1px solid #35363a;
+                border-radius: 5px;
+                background: rgba(34, 35, 38, .96);
+                box-shadow: 0 4px 18px rgba(0, 0, 0, .45);
+                font-family: Verdana, Geneva, Arial, Helvetica, sans-serif;
+            }
+
+            .ncore-torrent-view-button {
+                width: 76px;
+                height: 34px;
+                padding: 0;
+                border: 1px solid transparent;
+                border-radius: 3px;
+                background: transparent;
+                color: #8b8e92;
+                font: bold 10px/32px Verdana, Geneva, Arial, Helvetica, sans-serif;
+                text-align: center;
+                cursor: pointer;
+                transition: background .15s ease, border-color .15s ease, color .15s ease;
+            }
+
+            .ncore-torrent-view-button:hover,
+            .ncore-torrent-view-button:focus-visible {
+                border-color: #43454c;
+                background: #303236;
+                color: #d4d6d8;
+                outline: none;
+            }
+
+            .ncore-torrent-view-button[aria-pressed="true"] {
+                border-color: #658f08;
+                background: #84bd00;
+                color: #1d1e21;
+            }
+
+            .ncore-poster-card { display: none; }
+
+            body.ncore-poster-view .box_alcimek_all { display: none !important; }
+
+            body.ncore-poster-view .box_torrent_all {
+                display: grid !important;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: 12px;
+                align-items: stretch;
+                width: 902px !important;
+                max-width: 100%;
+                height: auto !important;
+                margin: 0 auto;
+                padding: 12px;
+                overflow: visible !important;
+                box-sizing: border-box;
+            }
+
+            /*
+             * A lista DOM-jában minden torrent után clear + lenyíló elemek vannak.
+             * Grid módban ezek külön cellákat foglalnának, ezért csak a valódi
+             * .box_torrent sorokat hagyjuk a rácsban.
+             */
+            body.ncore-poster-view .box_torrent_all > :not(.box_torrent) {
+                display: none !important;
+            }
+
+            body.ncore-poster-view .box_torrent {
+                position: relative !important;
+                display: block !important;
+                float: none !important;
+                width: auto !important;
+                min-width: 0 !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+                opacity: 1;
+                border: 0 !important;
+                background: transparent !important;
+                box-sizing: border-box;
+            }
+
+            body.ncore-poster-view .box_torrent > :not(.ncore-poster-card) {
+                display: none !important;
+            }
+
+            body.ncore-poster-view .box_torrent.ncore-seen .ncore-poster-card {
+                opacity: .48;
+            }
+
+            body.ncore-poster-view .ncore-poster-card {
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+                min-height: 330px;
+                overflow: hidden;
+                border: 1px solid #34363a;
+                border-radius: 5px;
+                background: #222326;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, .28);
+                color: #adafb2;
+                box-sizing: border-box;
+                transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+            }
+
+            body.ncore-poster-view .ncore-poster-card:hover {
+                z-index: 2;
+                transform: translateY(-2px);
+                border-color: #51545a;
+                box-shadow: 0 8px 22px rgba(0, 0, 0, .42);
+            }
+
+            body.ncore-poster-view .ncore-poster-card.ncore-poster-plus {
+                border-color: #6f2020;
+                box-shadow: inset 0 0 0 1px rgba(138, 21, 21, .28), 0 4px 14px rgba(0, 0, 0, .28);
+            }
+
+            .ncore-poster-media {
+                position: relative;
+                display: block;
+                aspect-ratio: 2 / 3;
+                overflow: hidden;
+                background: #17181a;
+            }
+
+            .ncore-poster-image-link {
+                position: absolute;
+                inset: 0;
+                display: block;
+                overflow: hidden;
+                background: #17181a;
+                text-decoration: none !important;
+            }
+
+            .ncore-poster-image {
+                display: block;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                border: 0;
+                transition: transform .2s ease, filter .2s ease;
+            }
+
+            .ncore-poster-card:hover .ncore-poster-image {
+                transform: scale(1.025);
+            }
+
+            .ncore-poster-placeholder {
+                display: flex;
+                width: 100%;
+                height: 100%;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+                box-sizing: border-box;
+                color: #5f6267;
+                font: 11px/16px Verdana, Geneva, Arial, Helvetica, sans-serif;
+                text-align: center;
+            }
+
+            .ncore-poster-category-badge {
+                position: absolute;
+                left: 8px;
+                bottom: 8px;
+                z-index: 3;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 42px;
+                min-height: 28px;
+                padding: 2px 4px;
+                overflow: hidden;
+                border: 1px solid rgba(255, 255, 255, .16);
+                border-radius: 4px;
+                background: rgba(17, 18, 20, .9);
+                box-shadow: 0 2px 7px rgba(0, 0, 0, .55);
+                text-decoration: none !important;
+                box-sizing: border-box;
+                transition: border-color .15s ease, background .15s ease, transform .15s ease;
+            }
+
+            .ncore-poster-category-badge:hover,
+            .ncore-poster-category-badge:focus-visible {
+                border-color: #84bd00;
+                background: rgba(28, 30, 32, .98);
+                transform: translateY(-1px);
+                outline: none;
+            }
+
+            .ncore-poster-category-image {
+                display: block;
+                width: auto;
+                max-width: 51px;
+                height: 28px;
+                object-fit: contain;
+                border: 0;
+            }
+
+            .ncore-poster-body {
+                display: flex;
+                flex: 1 1 auto;
+                flex-direction: column;
+                gap: 6px;
+                min-width: 0;
+                padding: 9px 10px 10px;
+            }
+
+            .ncore-poster-title {
+                display: -webkit-box;
+                overflow: hidden;
+                color: #d2d4d6 !important;
+                font: bold 11px/15px Verdana, Geneva, Arial, Helvetica, sans-serif;
+                text-decoration: none !important;
+                overflow-wrap: anywhere;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 3;
+            }
+
+            .ncore-poster-title:hover,
+            .ncore-poster-title:focus-visible {
+                color: #84bd00 !important;
+                outline: none;
+            }
+
+            .ncore-poster-movie-title {
+                min-height: 13px;
+                overflow: hidden;
+                color: #aeb1b5;
+                font: 10px/13px Verdana, Geneva, Arial, Helvetica, sans-serif;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .ncore-poster-meta {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px 8px;
+                margin-top: auto;
+                color: #8a8d91;
+                font: 9px/13px Verdana, Geneva, Arial, Helvetica, sans-serif;
+            }
+
+            .ncore-poster-meta span { white-space: nowrap; }
+            .ncore-poster-meta .seed { color: #84bd00; }
+            .ncore-poster-meta .leech { color: #d17b70; }
+            .ncore-poster-meta .imdb {
+                color: #d6b85a;
+                text-decoration: none;
+            }
+
+            .ncore-poster-meta a.imdb:hover,
+            .ncore-poster-meta a.imdb:focus-visible {
+                color: #f0d46f;
+                text-decoration: underline;
+                outline: none;
+            }
+
+            .ncore-poster-actions {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(32px, 1fr));
+                gap: 5px;
+                margin-top: 2px;
+                padding-top: 8px;
+                border-top: 1px solid #303236;
+            }
+
+            .ncore-poster-action {
+                display: flex !important;
+                width: 100%;
+                min-width: 0;
+                height: 29px;
+                margin: 0 !important;
+                align-items: center;
+                justify-content: center;
+                padding: 0 7px;
+                border: 1px solid #3a3c40;
+                border-radius: 4px;
+                background: #292b2f;
+                color: #c5c7ca !important;
+                font: bold 10px/1 Verdana, Geneva, Arial, Helvetica, sans-serif;
+                vertical-align: middle;
+                text-align: center;
+                text-decoration: none !important;
+                cursor: pointer;
+                box-sizing: border-box;
+                appearance: none;
+                -webkit-appearance: none;
+                transition: border-color .15s ease, background .15s ease, color .15s ease;
+            }
+
+            .ncore-poster-action:hover,
+            .ncore-poster-action:focus-visible {
+                border-color: #84bd00;
+                background: #303236;
+                color: #84bd00 !important;
+                outline: none;
+            }
+
+            .ncore-poster-action.active {
+                border-color: #658f08;
+                background: #84bd00;
+                color: #1d1e21 !important;
+            }
+
+            .ncore-poster-action.qb {
+                letter-spacing: -.2px;
+            }
+
+            .ncore-poster-action .ncore-lucide-icon {
+                display: block;
+                width: 16px;
+                height: 16px;
+                flex: 0 0 16px;
+                pointer-events: none;
+                stroke: currentColor;
+            }
+
+            .ncore-poster-action.seen {
+                padding-inline: 7px;
+            }
+
+            @media (max-width: 820px) {
+                #ncore-torrent-view-switcher {
+                    top: auto;
+                    right: 10px;
+                    bottom: 10px;
+                    flex-direction: row;
+                    transform: none;
+                }
+
+                body.ncore-poster-view .box_torrent_all {
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                    gap: 10px;
+                    padding: 10px;
+                }
+
+                body.ncore-poster-view .ncore-poster-card { min-height: 285px; }
+            }
+
+            @media (max-width: 560px) {
+                body.ncore-poster-view .box_torrent_all {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 8px;
+                    padding: 8px;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+
+        function normalizeText(value) {
+            return String(value || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function getDetailsLink(row) {
+            return row.querySelector(
+                '.torrent_txt > a[href*="action=details"], ' +
+                '.torrent_txt2 > a[href*="action=details"]'
+            );
+        }
+
+        function getPosterUrl(row) {
+            const info = row.querySelector('img.infobar_ico');
+            const handler = info?.getAttribute('onmouseover') || '';
+            const match = handler.match(/mutat\(\s*['"]([^'"]+)['"]/i);
+
+            if (match?.[1]) {
+                try {
+                    const url = new URL(match[1], window.location.href);
+                    if (/^https?:$/.test(url.protocol)) return url.href;
+                } catch (_) {}
+            }
+
+            const existing = row.querySelector(
+                'img.ncore-poster-image, img[src*="cover" i], img[src*="borito" i]'
+            );
+            if (existing?.src && /^https?:/i.test(existing.src)) return existing.src;
+            return '';
+        }
+
+        function getImdbId(row) {
+            const link = row.querySelector('.infolink[href*="imdb.com/title/tt"]');
+            const match = link?.href?.match(/tt(\d+)/);
+            return match ? match[1] : '';
+        }
+
+        function getImdbRating(row) {
+            const link = row.querySelector('.infolink[href*="imdb.com/title/tt"]');
+            const text = normalizeText(link?.textContent);
+            const match = text.match(/imdb\s*:\s*(\d+(?:[.,]\d+)?)/i);
+            return match ? match[1].replace(',', '.') : '';
+        }
+
+        function getImdbUrl(row) {
+            const link = row.querySelector('.infolink[href*="imdb.com/title/tt"]');
+            return link?.href || '';
+        }
+
+        function isSeries(row) {
+            const category = row.querySelector('.categ_link');
+            return Boolean(category && /sorozat/i.test(category.title || category.textContent || ''));
+        }
+
+        function getCellText(row, selectors) {
+            for (const selector of selectors) {
+                const value = normalizeText(row.querySelector(selector)?.textContent);
+                if (value) return value;
+            }
+            return '';
+        }
+
+        function getMovieTitle(row) {
+            const titleSpan = row.querySelector(
+                '.torrent_txt .siterank span[title], ' +
+                '.torrent_txt2 .siterank span[title]'
+            );
+            return normalizeText(titleSpan?.getAttribute('title') || titleSpan?.textContent);
+        }
+
+        // Ugyanaz a címválasztás, mint a lista nézet „Láttam már” funkciójában:
+        // ha az nCore megad külön filmcímet a siterank sorban, azt mentjük;
+        // egyébként visszaesünk a torrent nevére.
+        function getSeenMovieTitle(row) {
+            const movieTitle = getMovieTitle(row);
+            if (movieTitle) return movieTitle;
+
+            const torrentLink = getDetailsLink(row);
+            return normalizeText(torrentLink?.getAttribute('title') || torrentLink?.textContent);
+        }
+
+        function getTorrentId(detailsUrl) {
+            try {
+                return new URL(detailsUrl, window.location.href).searchParams.get('id') || '';
+            } catch (_) {
+                return '';
+            }
+        }
+
+        function getDownloadKey() {
+            const alternate = document.querySelector('link[rel="alternate"][href*="key="]');
+            if (!alternate) return '';
+            try {
+                return new URL(alternate.href, window.location.href).searchParams.get('key') || '';
+            } catch (_) {
+                return '';
+            }
+        }
+
+        function getTorrentDownloadUrl(row, torrentId) {
+            const existingLink = row?.querySelector?.('a[href*="torrents.php?action=download"]');
+            if (existingLink) {
+                try {
+                    return new URL(existingLink.getAttribute('href'), window.location.href).href;
+                } catch (_) {}
+            }
+
+            const key = getDownloadKey();
+            if (!torrentId || !key) return '';
+            return `${window.location.origin}/torrents.php?action=download&id=${encodeURIComponent(torrentId)}&key=${encodeURIComponent(key)}`;
+        }
+
+        // Lucide ikonok inline SVG-ként, külső runtime nélkül.
+        // Forrás: https://lucide.dev/icons/download, /bookmark, /check
+        const LUCIDE_ICON_PATHS = {
+            download: [
+                'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4',
+                'm7 10 5 5 5-5',
+                'M12 15V3',
+            ],
+            bookmark: [
+                'm19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z',
+            ],
+            check: [
+                'M20 6 9 17l-5-5',
+            ],
+        };
+
+        function createLucideIcon(name) {
+            const paths = LUCIDE_ICON_PATHS[name];
+            if (!paths) return document.createTextNode('');
+
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.classList.add('ncore-lucide-icon');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('width', '16');
+            svg.setAttribute('height', '16');
+            svg.setAttribute('fill', 'none');
+            svg.setAttribute('stroke', 'currentColor');
+            svg.setAttribute('stroke-width', '2');
+            svg.setAttribute('stroke-linecap', 'round');
+            svg.setAttribute('stroke-linejoin', 'round');
+            svg.setAttribute('aria-hidden', 'true');
+            svg.setAttribute('focusable', 'false');
+
+            for (const d of paths) {
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', d);
+                svg.appendChild(path);
+            }
+            return svg;
+        }
+
+        function setupPosterBookmarkButton(button) {
+            if (!button) return;
+            button.classList.remove('active');
+            button.replaceChildren(createLucideIcon('bookmark'));
+            button.title = 'Könyvjelzőhöz adás';
+            button.setAttribute('aria-label', button.title);
+        }
+
+        function createMetaSpan(className, text, title = '') {
+            if (!text) return null;
+            const span = document.createElement('span');
+            if (className) span.className = className;
+            span.textContent = text;
+            if (title) span.title = title;
+            return span;
+        }
+
+        function createMetaLink(className, text, href, title = '') {
+            if (!text || !href) return null;
+            const link = document.createElement('a');
+            if (className) link.className = className;
+            link.textContent = text;
+            link.href = href;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            if (title) link.title = title;
+            link.addEventListener('click', event => event.stopPropagation());
+            return link;
+        }
+
+        function updatePosterSeenState(row, button, imdbId) {
+            if (!button || !imdbId) return;
+            const seen = seenSync.isSeen(imdbId);
+            button.classList.toggle('active', seen);
+            if (!button.querySelector('.ncore-lucide-icon')) {
+                button.replaceChildren(createLucideIcon('check'));
+            }
+            button.title = seen ? 'Látott jelölés visszavonása' : 'Megjelölés látott filmként';
+            button.setAttribute('aria-label', button.title);
+            row.classList.toggle('ncore-seen', seen);
+        }
+
+        function buildPosterCard(row) {
+            if (!(row instanceof HTMLElement) || row.querySelector(':scope > .ncore-poster-card')) return;
+
+            const detailsLink = getDetailsLink(row);
+            if (!detailsLink) return;
+
+            let detailsUrl = detailsLink.getAttribute('href') || detailsLink.href || '#';
+            try { detailsUrl = new URL(detailsUrl, window.location.href).href; } catch (_) {}
+
+            const titleText = normalizeText(detailsLink.getAttribute('title') || detailsLink.textContent) || 'Torrent';
+            const movieTitle = getMovieTitle(row);
+            const categoryImageSource = row.querySelector('.box_alap_img img.categ_link, img.categ_link');
+            const categoryAnchorSource = categoryImageSource?.closest('a[href]');
+            const categoryTitle = normalizeText(
+                categoryImageSource?.getAttribute('title') ||
+                categoryImageSource?.getAttribute('alt') ||
+                ''
+            );
+            const posterUrl = getPosterUrl(row);
+            const imdbId = getImdbId(row);
+            const torrentId = getTorrentId(detailsUrl);
+            const originalBookmark = row.querySelector('.torrent_konyvjelzo, .torrent_konyvjelzo2');
+            const plusCount = (row.querySelector('.box_d2')?.textContent.match(/\+/g) || []).length;
+
+            const uploaded = getCellText(row, ['.box_feltoltve2', '.box_feltoltve']);
+            const size = getCellText(row, ['.box_meret2', '.box_meret']);
+            const seed = getCellText(row, ['.box_s2', '.box_s']);
+            const leech = getCellText(row, ['.box_l2', '.box_l']);
+            const imdbRating = getImdbRating(row);
+            const imdbUrl = getImdbUrl(row);
+
+            const card = document.createElement('article');
+            card.className = 'ncore-poster-card';
+            if (plusCount >= 3) card.classList.add('ncore-poster-plus');
+
+            const media = document.createElement('div');
+            media.className = 'ncore-poster-media';
+
+            const imageLink = document.createElement('a');
+            imageLink.className = 'ncore-poster-image-link';
+            imageLink.href = detailsUrl;
+            imageLink.title = `${movieTitle || titleText} – részletek`;
+
+            if (posterUrl) {
+                const image = document.createElement('img');
+                image.className = 'ncore-poster-image';
+                image.src = posterUrl;
+                image.alt = movieTitle || titleText;
+                image.loading = 'lazy';
+                image.decoding = 'async';
+                image.addEventListener('error', () => {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'ncore-poster-placeholder';
+                    placeholder.textContent = 'Borítókép nem elérhető';
+                    image.replaceWith(placeholder);
+                }, { once: true });
+                imageLink.appendChild(image);
+            } else {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'ncore-poster-placeholder';
+                placeholder.textContent = 'Nincs borítókép';
+                imageLink.appendChild(placeholder);
+            }
+            media.appendChild(imageLink);
+
+            if (categoryImageSource && categoryAnchorSource) {
+                const categoryBadge = document.createElement('a');
+                categoryBadge.className = 'ncore-poster-category-badge';
+                categoryBadge.href = categoryAnchorSource.getAttribute('href') || categoryAnchorSource.href || '#';
+                categoryBadge.title = categoryTitle || 'Kategória megnyitása';
+                categoryBadge.setAttribute('aria-label', categoryBadge.title);
+
+                const categoryImage = document.createElement('img');
+                categoryImage.className = 'ncore-poster-category-image';
+                categoryImage.src = categoryImageSource.src;
+                categoryImage.alt = categoryImageSource.getAttribute('alt') || 'Kategória';
+                categoryBadge.appendChild(categoryImage);
+                media.appendChild(categoryBadge);
+            }
+
+            const body = document.createElement('div');
+            body.className = 'ncore-poster-body';
+
+            const title = document.createElement('a');
+            title.className = 'ncore-poster-title';
+            title.href = detailsUrl;
+            title.textContent = titleText;
+            title.title = titleText;
+            body.appendChild(title);
+
+            if (movieTitle) {
+                const movieTitleElement = document.createElement('div');
+                movieTitleElement.className = 'ncore-poster-movie-title';
+                movieTitleElement.textContent = movieTitle;
+                movieTitleElement.title = movieTitle;
+                body.appendChild(movieTitleElement);
+            }
+
+            const meta = document.createElement('div');
+            meta.className = 'ncore-poster-meta';
+            const metaItems = [
+                createMetaSpan('', size, size ? 'Méret' : ''),
+                createMetaSpan('seed', seed ? `S: ${seed}` : '', 'Seed'),
+                createMetaSpan('leech', leech ? `L: ${leech}` : '', 'Leech'),
+                createMetaLink(
+                    'imdb',
+                    imdbRating ? `IMDb: ${imdbRating}` : '',
+                    imdbUrl,
+                    'Megnyitás az IMDb-n'
+                ),
+                createMetaSpan('', uploaded, uploaded ? 'Feltöltve' : ''),
+            ].filter(Boolean);
+            meta.append(...metaItems);
+            if (metaItems.length) body.appendChild(meta);
+
+            const actions = document.createElement('div');
+            actions.className = 'ncore-poster-actions';
+
+            if (torrentId) {
+                const downloadUrl = getTorrentDownloadUrl(row, torrentId);
+                if (downloadUrl) {
+                    const downloadButton = document.createElement('button');
+                    downloadButton.type = 'button';
+                    downloadButton.className = 'ncore-poster-action';
+                    downloadButton.appendChild(createLucideIcon('download'));
+                    downloadButton.title = 'Torrent fájl letöltése';
+                    downloadButton.setAttribute('aria-label', downloadButton.title);
+                    downloadButton.addEventListener('click', event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        window.location.href = downloadUrl;
+                    });
+                    actions.appendChild(downloadButton);
+                }
+            }
+
+            if (originalBookmark) {
+                const bookmarkButton = document.createElement('button');
+                bookmarkButton.type = 'button';
+                bookmarkButton.className = 'ncore-poster-action';
+                setupPosterBookmarkButton(bookmarkButton);
+                bookmarkButton.addEventListener('click', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    try {
+                        originalBookmark.click();
+                    } catch (_) {
+                        const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+                        if (typeof pageWindow.konyvjelzo === 'function' && torrentId) {
+                            pageWindow.konyvjelzo(torrentId);
+                        }
+                    }
+                });
+                actions.appendChild(bookmarkButton);
+            }
+
+            if (settings.qbittorrent && torrentId) {
+                const qbButton = document.createElement('button');
+                qbButton.type = 'button';
+                qbButton.className = 'ncore-poster-action qb';
+                qbButton.textContent = 'qB';
+                qbButton.title = 'Küldés qBittorrentbe';
+                qbButton.setAttribute('aria-label', qbButton.title);
+                qbButton.addEventListener('click', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const dlUrl = getTorrentDownloadUrl(row, torrentId);
+                    if (!dlUrl) {
+                        showToast('Nem található a torrent letöltési linkje.', 'error');
+                        return;
+                    }
+
+                    sendToQB(dlUrl, {
+                        torrentId,
+                        title: titleText,
+                    });
+                });
+                actions.appendChild(qbButton);
+            }
+
+            if (settings.seen && imdbId && !isSeries(row)) {
+                const seenButton = document.createElement('button');
+                seenButton.type = 'button';
+                seenButton.className = 'ncore-poster-action seen';
+                seenButton.addEventListener('click', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const nextSeen = !seenSync.isSeen(imdbId);
+                    seenSync.setSeen(imdbId, nextSeen, getSeenMovieTitle(row) || titleText);
+                    document.querySelectorAll('.box_torrent').forEach(otherRow => {
+                        const otherImdb = getImdbId(otherRow);
+                        if (otherImdb === imdbId) {
+                            otherRow.classList.toggle('ncore-seen', nextSeen);
+                            const otherButton = otherRow.querySelector(':scope > .ncore-poster-card .ncore-poster-action[data-seen-button="1"]');
+                            if (otherButton) updatePosterSeenState(otherRow, otherButton, imdbId);
+                        }
+                    });
+                    showToast(nextSeen ? 'Film megjelölve látottként.' : 'Látott jelölés visszavonva.');
+                });
+                seenButton.dataset.seenButton = '1';
+                updatePosterSeenState(row, seenButton, imdbId);
+                actions.appendChild(seenButton);
+            }
+
+            body.appendChild(actions);
+            card.append(media, body);
+            row.appendChild(card);
+        }
+
+        function buildAllPosterCards(root = document) {
+            if (root instanceof HTMLElement && root.matches('.box_torrent')) buildPosterCard(root);
+            root.querySelectorAll?.('.box_torrent').forEach(buildPosterCard);
+        }
+
+        function refreshPosterSeenStates(root = document) {
+            const rows = [];
+            if (root instanceof HTMLElement && root.matches('.box_torrent')) rows.push(root);
+            root.querySelectorAll?.('.box_torrent').forEach(row => rows.push(row));
+
+            for (const row of rows) {
+                const imdbId = getImdbId(row);
+                const button = row.querySelector(':scope > .ncore-poster-card .ncore-poster-action[data-seen-button="1"]');
+                if (button && imdbId) updatePosterSeenState(row, button, imdbId);
+            }
+        }
+
+        const switcher = document.createElement('div');
+        switcher.id = 'ncore-torrent-view-switcher';
+        switcher.setAttribute('role', 'group');
+        switcher.setAttribute('aria-label', 'Torrentlista nézet');
+
+        const listButton = document.createElement('button');
+        listButton.type = 'button';
+        listButton.className = 'ncore-torrent-view-button';
+        listButton.dataset.view = VIEW_LIST;
+        listButton.textContent = '☰ Lista';
+        listButton.title = 'Lista nézet';
+        listButton.setAttribute('aria-label', 'Lista nézet');
+
+        const posterButton = document.createElement('button');
+        posterButton.type = 'button';
+        posterButton.className = 'ncore-torrent-view-button';
+        posterButton.dataset.view = VIEW_POSTER;
+        posterButton.textContent = '▦ Poszter';
+        posterButton.title = 'Poszter nézet';
+        posterButton.setAttribute('aria-label', 'Poszter nézet');
+
+        switcher.append(listButton, posterButton);
+        document.body.appendChild(switcher);
+
+        async function setView(view, persist = true) {
+            if (!VALID_VIEWS.has(view)) view = VIEW_LIST;
+            currentView = view;
+
+            if (view === VIEW_POSTER) {
+                buildAllPosterCards(torrentContainer);
+                refreshPosterSeenStates(torrentContainer);
+            }
+            document.body.classList.toggle('ncore-poster-view', view === VIEW_POSTER);
+
+            switcher.querySelectorAll('.ncore-torrent-view-button').forEach(button => {
+                button.setAttribute('aria-pressed', button.dataset.view === view ? 'true' : 'false');
+            });
+
+            if (persist) await gmSet(GM_KEY_TORRENT_VIEW, view);
+        }
+
+        listButton.addEventListener('click', () => setView(VIEW_LIST));
+        posterButton.addEventListener('click', () => setView(VIEW_POSTER));
+
+        buildAllPosterCards(torrentContainer);
+        await setView(currentView, false);
+
+        new MutationObserver(mutations => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (!(node instanceof HTMLElement)) continue;
+                    buildAllPosterCards(node);
+                }
+            }
+        }).observe(torrentContainer, { childList: true, subtree: true });
+    }
+
+    // -------------------------------------------------------------------------
+    // 7) 3+ pluszos torrentek kiemelése
     // -------------------------------------------------------------------------
 
     function initHighlight() {
@@ -2161,7 +3031,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // 7) qBittorrent integráció
+    // 8) qBittorrent integráció
     // -------------------------------------------------------------------------
 
     function initQBittorrent() {
@@ -2288,6 +3158,7 @@
     if (settings.seen || settings.qbittorrent) await seenSync.init();
 
     if (settings.qbittorrent) initQBittorrent();
+    await initTorrentViewSwitcher();
     if (settings.highlight) initHighlight();
     if (settings.seen) initSeen();
     if (settings.embedImages) initEmbedImages();
