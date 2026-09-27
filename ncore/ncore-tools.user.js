@@ -2267,14 +2267,19 @@
 
             body.ncore-poster-view .ncore-poster-card:hover {
                 z-index: 2;
-                transform: translateY(-2px);
                 border-color: #51545a;
                 box-shadow: 0 8px 22px rgba(0, 0, 0, .42);
             }
 
             body.ncore-poster-view .ncore-poster-card.ncore-poster-plus {
                 border-color: #6f2020;
+                background: #600A0A;
                 box-shadow: inset 0 0 0 1px rgba(138, 21, 21, .28), 0 4px 14px rgba(0, 0, 0, .28);
+            }
+
+            body.ncore-poster-view .ncore-poster-card.ncore-poster-plus:hover {
+                border-color: #8A1515;
+                box-shadow: 0 8px 22px rgba(0, 0, 0, .42);
             }
 
             .ncore-poster-media {
