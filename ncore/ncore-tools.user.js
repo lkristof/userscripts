@@ -2564,24 +2564,6 @@
             .ncore-poster-action.seen {
                 padding-inline: 7px;
             }
-
-            @media (max-width: 820px) {
-                body.ncore-poster-view .box_torrent_all {
-                    grid-template-columns: repeat(3, minmax(0, 1fr));
-                    gap: 10px;
-                    padding: 10px;
-                }
-
-                body.ncore-poster-view .ncore-poster-card { min-height: 285px; }
-            }
-
-            @media (max-width: 560px) {
-                body.ncore-poster-view .box_torrent_all {
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
-                    gap: 8px;
-                    padding: 8px;
-                }
-            }
         `;
         document.head.appendChild(style);
 
