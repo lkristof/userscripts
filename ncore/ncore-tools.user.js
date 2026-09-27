@@ -2145,6 +2145,9 @@
         const torrentContainer = document.querySelector('.box_torrent_all');
         if (!torrentContainer) return;
 
+        const listaAll = torrentContainer.closest('.lista_all');
+        if (!listaAll) return;
+
         const VIEW_LIST = 'list';
         const VIEW_POSTER = 'poster';
         const VALID_VIEWS = new Set([VIEW_LIST, VIEW_POSTER]);
@@ -2154,16 +2157,23 @@
         const style = document.createElement('style');
         style.id = 'ncore-tools-torrent-view-style';
         style.textContent = `
+            .lista_all.ncore-torrent-view-host {
+                position: relative;
+            }
+
             #ncore-torrent-view-switcher {
-                position: fixed;
-                top: 50%;
-                right: 12px;
-                z-index: 99998;
+                position: absolute;
+                top: 0;
+                left: 100%;
+                right: auto;
+                bottom: auto;
+                z-index: 50;
                 display: flex;
                 flex-direction: column;
                 gap: 4px;
+                margin-left: 8px;
                 padding: 5px;
-                transform: translateY(-50%);
+                transform: none;
                 border: 1px solid #35363a;
                 border-radius: 5px;
                 background: rgba(34, 35, 38, .96);
@@ -2499,14 +2509,6 @@
             }
 
             @media (max-width: 820px) {
-                #ncore-torrent-view-switcher {
-                    top: auto;
-                    right: 10px;
-                    bottom: 10px;
-                    flex-direction: row;
-                    transform: none;
-                }
-
                 body.ncore-poster-view .box_torrent_all {
                     grid-template-columns: repeat(3, minmax(0, 1fr));
                     gap: 10px;
@@ -2990,7 +2992,8 @@
         posterButton.append(createLucideIcon('layout-grid'), posterLabel);
 
         switcher.append(listButton, posterButton);
-        document.body.appendChild(switcher);
+        listaAll.classList.add('ncore-torrent-view-host');
+        listaAll.appendChild(switcher);
 
         async function setView(view, persist = true) {
             if (!VALID_VIEWS.has(view)) view = VIEW_LIST;
