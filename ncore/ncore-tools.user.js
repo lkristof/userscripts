@@ -2143,10 +2143,8 @@
         if (params.get('action')) return;
 
         const torrentContainer = document.querySelector('.box_torrent_all');
-        if (!torrentContainer) return;
-
-        const listaAll = torrentContainer.closest('.lista_all');
-        if (!listaAll) return;
+        const listaAll = torrentContainer?.closest('.lista_all') || document.querySelector('.lista_all');
+        if (!torrentContainer || !listaAll) return;
 
         const VIEW_LIST = 'list';
         const VIEW_POSTER = 'poster';
@@ -2157,23 +2155,22 @@
         const style = document.createElement('style');
         style.id = 'ncore-tools-torrent-view-style';
         style.textContent = `
-            .lista_all.ncore-torrent-view-host {
+            .ncore-torrent-view-switcher-host {
                 position: relative;
+                height: 0;
+                margin: 0 auto;
+                overflow: visible;
             }
 
             #ncore-torrent-view-switcher {
                 position: absolute;
                 top: 0;
-                left: 100%;
-                right: auto;
-                bottom: auto;
-                z-index: 50;
+                left: calc(100% + 8px);
+                z-index: 99998;
                 display: flex;
                 flex-direction: column;
                 gap: 4px;
-                margin-left: 8px;
                 padding: 5px;
-                transform: none;
                 border: 1px solid #35363a;
                 border-radius: 5px;
                 background: rgba(34, 35, 38, .96);
@@ -3087,8 +3084,12 @@
         posterButton.append(createLucideIcon('layout-grid'), posterLabel);
 
         switcher.append(listButton, posterButton);
-        listaAll.classList.add('ncore-torrent-view-host');
-        listaAll.appendChild(switcher);
+
+        const switcherHost = document.createElement('div');
+        switcherHost.className = 'ncore-torrent-view-switcher-host';
+        switcherHost.style.width = `${listaAll.offsetWidth}px`;
+        listaAll.parentNode.insertBefore(switcherHost, listaAll);
+        switcherHost.appendChild(switcher);
 
         async function setView(view, persist = true) {
             if (!VALID_VIEWS.has(view)) view = VIEW_LIST;
