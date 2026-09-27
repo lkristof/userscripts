@@ -2361,12 +2361,12 @@
 
             .ncore-poster-category-badge {
                 display: inline-flex;
-                flex: 0 0 auto;
+                flex: 0 0 51px;
+                width: 51px;
+                height: 28px;
                 align-items: center;
                 justify-content: center;
-                min-width: 42px;
-                min-height: 28px;
-                padding: 2px 4px;
+                padding: 0;
                 overflow: hidden;
                 border: 1px solid rgba(255, 255, 255, .16);
                 border-radius: 4px;
@@ -2375,23 +2375,25 @@
                 text-decoration: none !important;
                 box-sizing: border-box;
                 pointer-events: auto;
-                transition: border-color .15s ease, background .15s ease, transform .15s ease;
+                transition: border-color .15s ease, background .15s ease;
             }
 
             .ncore-poster-category-badge:hover,
             .ncore-poster-category-badge:focus-visible {
                 border-color: #84bd00;
                 background: rgba(28, 30, 32, .98);
-                transform: translateY(-1px);
                 outline: none;
             }
 
             .ncore-poster-category-image {
                 display: block;
+                flex: 0 0 auto;
                 width: auto;
-                max-width: 51px;
-                height: 28px;
-                object-fit: contain;
+                height: auto;
+                max-width: none;
+                max-height: none;
+                object-fit: none;
+                object-position: center;
                 border: 0;
             }
 
@@ -2432,7 +2434,7 @@
                 text-decoration: none !important;
                 box-sizing: border-box;
                 pointer-events: auto;
-                transition: border-color .15s ease, background .15s ease, color .15s ease, transform .15s ease;
+                transition: border-color .15s ease, background .15s ease, color .15s ease;
             }
 
             .ncore-poster-imdb-badge:hover,
@@ -2440,7 +2442,6 @@
                 border-color: #f0d46f;
                 background: rgba(28, 30, 32, .98);
                 color: #f0d46f !important;
-                transform: translateY(-1px);
                 outline: none;
             }
 
