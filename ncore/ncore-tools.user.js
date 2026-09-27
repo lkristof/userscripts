@@ -2347,12 +2347,21 @@
                 text-align: center;
             }
 
-            .ncore-poster-category-badge {
+            .ncore-poster-badges {
                 position: absolute;
                 left: 8px;
                 bottom: 8px;
                 z-index: 3;
+                display: flex;
+                max-width: calc(100% - 16px);
+                align-items: center;
+                gap: 6px;
+                pointer-events: none;
+            }
+
+            .ncore-poster-category-badge {
                 display: inline-flex;
+                flex: 0 0 auto;
                 align-items: center;
                 justify-content: center;
                 min-width: 42px;
@@ -2365,6 +2374,7 @@
                 box-shadow: 0 2px 7px rgba(0, 0, 0, .55);
                 text-decoration: none !important;
                 box-sizing: border-box;
+                pointer-events: auto;
                 transition: border-color .15s ease, background .15s ease, transform .15s ease;
             }
 
@@ -2383,6 +2393,55 @@
                 height: 28px;
                 object-fit: contain;
                 border: 0;
+            }
+
+            .ncore-poster-quality-badge {
+                display: inline-flex;
+                flex: 0 0 auto;
+                min-height: 28px;
+                align-items: center;
+                justify-content: center;
+                padding: 0 8px;
+                border: 1px solid rgba(132, 189, 0, .62);
+                border-radius: 4px;
+                background: rgba(17, 18, 20, .9);
+                box-shadow: 0 2px 7px rgba(0, 0, 0, .55);
+                color: #b9df5c;
+                font: bold 10px/1 Verdana, Geneva, Arial, Helvetica, sans-serif;
+                letter-spacing: .1px;
+                white-space: nowrap;
+                box-sizing: border-box;
+                pointer-events: none;
+            }
+
+            .ncore-poster-imdb-badge {
+                display: inline-flex;
+                flex: 0 0 auto;
+                min-height: 28px;
+                align-items: center;
+                justify-content: center;
+                padding: 0 8px;
+                border: 1px solid rgba(214, 184, 90, .65);
+                border-radius: 4px;
+                background: rgba(17, 18, 20, .9);
+                box-shadow: 0 2px 7px rgba(0, 0, 0, .55);
+                color: #e4c966 !important;
+                font: bold 10px/1 Verdana, Geneva, Arial, Helvetica, sans-serif;
+                letter-spacing: .1px;
+                white-space: nowrap;
+                text-decoration: none !important;
+                box-sizing: border-box;
+                pointer-events: auto;
+                transition: border-color .15s ease, background .15s ease, color .15s ease, transform .15s ease;
+            }
+
+            .ncore-poster-imdb-badge:hover,
+            .ncore-poster-imdb-badge:focus-visible {
+                border-color: #f0d46f;
+                background: rgba(28, 30, 32, .98);
+                color: #f0d46f !important;
+                transform: translateY(-1px);
+                outline: none;
             }
 
             .ncore-poster-body {
@@ -2530,6 +2589,31 @@
 
         function normalizeText(value) {
             return String(value || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function getTorrentQualityLabel(title) {
+            const text = normalizeText(title);
+            if (!text) return '';
+
+            const qualityPatterns = [
+                [/\b2160p\b/i, '2160p'],
+                [/\b(?:4k|uhd)\b/i, '4K'],
+                [/\b1080p\b/i, '1080p'],
+                [/\b1080i\b/i, '1080i'],
+                [/\b720p\b/i, '720p'],
+                [/\b576p\b/i, '576p'],
+                [/\b480p\b/i, '480p'],
+                [/\bxvid\b/i, 'XviD'],
+                [/\bdvdrip\b/i, 'DVDRip'],
+                [/\bdvd(?:5|9)\b/i, match => match[0].toUpperCase()],
+            ];
+
+            for (const [pattern, label] of qualityPatterns) {
+                const match = text.match(pattern);
+                if (!match) continue;
+                return typeof label === 'function' ? label(match) : label;
+            }
+            return '';
         }
 
         function getDetailsLink(row) {
@@ -2711,19 +2795,6 @@
             return span;
         }
 
-        function createMetaLink(className, text, href, title = '') {
-            if (!text || !href) return null;
-            const link = document.createElement('a');
-            if (className) link.className = className;
-            link.textContent = text;
-            link.href = href;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            if (title) link.title = title;
-            link.addEventListener('click', event => event.stopPropagation());
-            return link;
-        }
-
         function updatePosterSeenState(row, button, imdbId) {
             if (!button || !imdbId) return;
             const seen = seenSync.isSeen(imdbId);
@@ -2746,6 +2817,7 @@
             try { detailsUrl = new URL(detailsUrl, window.location.href).href; } catch (_) {}
 
             const titleText = normalizeText(detailsLink.getAttribute('title') || detailsLink.textContent) || 'Torrent';
+            const qualityLabel = getTorrentQualityLabel(titleText);
             const movieTitle = getMovieTitle(row);
             const categoryImageSource = row.querySelector('.box_alap_img img.categ_link, img.categ_link');
             const categoryAnchorSource = categoryImageSource?.closest('a[href]');
@@ -2801,19 +2873,47 @@
             }
             media.appendChild(imageLink);
 
-            if (categoryImageSource && categoryAnchorSource) {
-                const categoryBadge = document.createElement('a');
-                categoryBadge.className = 'ncore-poster-category-badge';
-                categoryBadge.href = categoryAnchorSource.getAttribute('href') || categoryAnchorSource.href || '#';
-                categoryBadge.title = categoryTitle || 'Kategória megnyitása';
-                categoryBadge.setAttribute('aria-label', categoryBadge.title);
+            if ((categoryImageSource && categoryAnchorSource) || qualityLabel || (imdbRating && imdbUrl)) {
+                const badges = document.createElement('div');
+                badges.className = 'ncore-poster-badges';
 
-                const categoryImage = document.createElement('img');
-                categoryImage.className = 'ncore-poster-category-image';
-                categoryImage.src = categoryImageSource.src;
-                categoryImage.alt = categoryImageSource.getAttribute('alt') || 'Kategória';
-                categoryBadge.appendChild(categoryImage);
-                media.appendChild(categoryBadge);
+                if (categoryImageSource && categoryAnchorSource) {
+                    const categoryBadge = document.createElement('a');
+                    categoryBadge.className = 'ncore-poster-category-badge';
+                    categoryBadge.href = categoryAnchorSource.getAttribute('href') || categoryAnchorSource.href || '#';
+                    categoryBadge.title = categoryTitle || 'Kategória megnyitása';
+                    categoryBadge.setAttribute('aria-label', categoryBadge.title);
+
+                    const categoryImage = document.createElement('img');
+                    categoryImage.className = 'ncore-poster-category-image';
+                    categoryImage.src = categoryImageSource.src;
+                    categoryImage.alt = categoryImageSource.getAttribute('alt') || 'Kategória';
+                    categoryBadge.appendChild(categoryImage);
+                    badges.appendChild(categoryBadge);
+                }
+
+                if (qualityLabel) {
+                    const qualityBadge = document.createElement('span');
+                    qualityBadge.className = 'ncore-poster-quality-badge';
+                    qualityBadge.textContent = qualityLabel;
+                    qualityBadge.title = `Minőség / formátum: ${qualityLabel}`;
+                    badges.appendChild(qualityBadge);
+                }
+
+                if (imdbRating && imdbUrl) {
+                    const imdbBadge = document.createElement('a');
+                    imdbBadge.className = 'ncore-poster-imdb-badge';
+                    imdbBadge.href = imdbUrl;
+                    imdbBadge.target = '_blank';
+                    imdbBadge.rel = 'noopener noreferrer';
+                    imdbBadge.textContent = `IMDb ${imdbRating}`;
+                    imdbBadge.title = 'Megnyitás az IMDb-n';
+                    imdbBadge.setAttribute('aria-label', `IMDb értékelés: ${imdbRating}`);
+                    imdbBadge.addEventListener('click', event => event.stopPropagation());
+                    badges.appendChild(imdbBadge);
+                }
+
+                media.appendChild(badges);
             }
 
             const body = document.createElement('div');
@@ -2840,12 +2940,6 @@
                 createMetaSpan('', size, size ? 'Méret' : ''),
                 createMetaSpan('seed', seed ? `S: ${seed}` : '', 'Seed'),
                 createMetaSpan('leech', leech ? `L: ${leech}` : '', 'Leech'),
-                createMetaLink(
-                    'imdb',
-                    imdbRating ? `IMDb: ${imdbRating}` : '',
-                    imdbUrl,
-                    'Megnyitás az IMDb-n'
-                ),
                 createMetaSpan('', uploaded, uploaded ? 'Feltöltve' : ''),
             ].filter(Boolean);
             meta.append(...metaItems);
