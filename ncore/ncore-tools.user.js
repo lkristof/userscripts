@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.2.2
+// @version      1.2.3
 // @description  nCore segédscript: qBittorrent integráció, lista/poszter torrentnézet, linktisztítás, reklám- és köszönetrejtés, képbeágyazás, látott filmek és torrentkiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
@@ -2280,7 +2280,8 @@
 
         const torrentContainer = document.querySelector('.box_torrent_all');
         const listaAll = torrentContainer?.closest('.lista_all') || document.querySelector('.lista_all');
-        if (!torrentContainer || !listaAll) return;
+        const listaHeader = listaAll?.querySelector(':scope > .lista_fej') || listaAll?.querySelector('.lista_fej');
+        if (!torrentContainer || !listaAll || !listaHeader) return;
 
         const VIEW_LIST = 'list';
         const VIEW_POSTER = 'poster';
@@ -2296,39 +2297,43 @@
                 height: 0;
                 margin: 0 auto;
                 overflow: visible;
+                pointer-events: none;
             }
 
             #ncore-torrent-view-switcher {
                 position: absolute;
-                top: 0;
-                left: calc(100% + 8px);
-                z-index: 99998;
+                right: 10px;
+                z-index: 3;
                 display: flex;
-                flex-direction: column;
-                gap: 4px;
-                padding: 5px;
+                flex-direction: row;
+                gap: 2px;
+                padding: 2px;
                 border: 1px solid #35363a;
-                border-radius: 5px;
-                background: rgba(34, 35, 38, .96);
-                box-shadow: 0 4px 18px rgba(0, 0, 0, .45);
+                border-radius: 3px;
+                background: rgba(34, 35, 38, .94);
+                box-shadow: 0 1px 5px rgba(0, 0, 0, .35);
                 font-family: Verdana, Geneva, Arial, Helvetica, sans-serif;
+                line-height: normal;
+                transform: translateY(-50%);
+                pointer-events: auto;
             }
 
             .ncore-torrent-view-button {
                 display: flex;
-                width: 76px;
-                height: 34px;
+                width: 68px;
+                height: 22px;
                 align-items: center;
                 justify-content: center;
-                gap: 6px;
-                padding: 0;
+                gap: 5px;
+                padding: 0 6px;
                 border: 1px solid transparent;
-                border-radius: 3px;
+                border-radius: 2px;
                 background: transparent;
                 color: #8b8e92;
-                font: bold 10px/1 Verdana, Geneva, Arial, Helvetica, sans-serif;
+                font: bold 9px/1 Verdana, Geneva, Arial, Helvetica, sans-serif;
                 text-align: center;
                 cursor: pointer;
+                box-sizing: border-box;
                 transition: background .15s ease, border-color .15s ease, color .15s ease;
             }
 
@@ -2348,9 +2353,9 @@
 
             .ncore-torrent-view-button .ncore-lucide-icon {
                 display: block;
-                width: 15px;
-                height: 15px;
-                flex: 0 0 15px;
+                width: 13px;
+                height: 13px;
+                flex: 0 0 13px;
                 pointer-events: none;
                 stroke: currentColor;
             }
@@ -3217,9 +3222,20 @@
 
         const switcherHost = document.createElement('div');
         switcherHost.className = 'ncore-torrent-view-switcher-host';
-        switcherHost.style.width = `${listaAll.offsetWidth}px`;
         listaAll.parentNode.insertBefore(switcherHost, listaAll);
         switcherHost.appendChild(switcher);
+
+        function positionViewSwitcher() {
+            switcherHost.style.width = `${listaAll.offsetWidth}px`;
+
+            const hostRect = switcherHost.getBoundingClientRect();
+            const headerRect = listaHeader.getBoundingClientRect();
+            const headerCenter = headerRect.top - hostRect.top + (headerRect.height / 2);
+            switcher.style.top = `${headerCenter}px`;
+        }
+
+        positionViewSwitcher();
+        window.addEventListener('resize', positionViewSwitcher);
 
         async function setView(view, persist = true) {
             if (!VALID_VIEWS.has(view)) view = VIEW_LIST;
