@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.2.3
+// @version      1.2.4
 // @description  nCore segédscript: qBittorrent integráció, lista/poszter torrentnézet, linktisztítás, reklám- és köszönetrejtés, képbeágyazás, látott filmek és torrentkiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
@@ -1846,37 +1846,13 @@
         if (isMainPage) {
             AD_SELECTORS.push('.hessteg-ad-block', '.news_block_right iframe');
         }
-        if (isTorrentPage) AD_SELECTORS.push('.banner');
-        if (!AD_SELECTORS.length) return;
+        if (isTorrentPage) AD_SELECTORS.push('.banner', '#hessteg');
+        if (!AD_SELECTORS.length || document.getElementById('ncore-tools-remove-ads-style')) return;
 
         const style = document.createElement('style');
         style.id = 'ncore-tools-remove-ads-style';
         style.textContent = `${AD_SELECTORS.join(',\n')} { display: none !important; }`;
         document.head.appendChild(style);
-
-        function hideAds(root = document) {
-            if (root instanceof Element) {
-                for (const selector of AD_SELECTORS) {
-                    if (root.matches(selector)) root.style.setProperty('display', 'none', 'important');
-                }
-            }
-
-            for (const selector of AD_SELECTORS) {
-                root.querySelectorAll?.(selector).forEach(element => {
-                    element.style.setProperty('display', 'none', 'important');
-                });
-            }
-        }
-
-        hideAds();
-
-        new MutationObserver(mutations => {
-            for (const mutation of mutations) {
-                for (const node of mutation.addedNodes) {
-                    if (node instanceof Element) hideAds(node);
-                }
-            }
-        }).observe(document.body, { childList: true, subtree: true });
     }
 
     // -------------------------------------------------------------------------
