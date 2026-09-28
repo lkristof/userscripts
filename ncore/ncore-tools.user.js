@@ -158,8 +158,9 @@
                 right: '20px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '10px',
+                gap: '8px',
                 zIndex: '100001',
+                fontFamily: 'Verdana, Geneva, Arial, Helvetica, sans-serif',
             });
             document.body.appendChild(toastContainer);
         }
@@ -169,34 +170,71 @@
     function showToast(message, type = 'success', duration = 3000) {
         const container = getToastContainer();
         const toast = document.createElement('div');
+        const accent = type === 'success' ? '#84bd00' : '#b94a48';
 
         Object.assign(toast.style, {
-            padding: '12px 18px',
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            color: '#fff',
-            minWidth: '220px',
+            position: 'relative',
+            minWidth: '240px',
+            maxWidth: '360px',
+            overflow: 'hidden',
+            padding: '10px 12px 12px 14px',
+            boxSizing: 'border-box',
+            border: '1px solid #35363a',
+            borderLeft: `3px solid ${accent}`,
+            borderRadius: '4px',
+            background: '#222326',
+            boxShadow: '0 5px 18px rgba(0, 0, 0, .48)',
+            color: '#cbCDD0',
+            fontSize: '10px',
+            fontWeight: 'normal',
+            lineHeight: '15px',
             opacity: '0',
-            transform: 'translateX(20px)',
-            transition: 'all 0.3s ease',
-            backgroundColor: type === 'success' ? '#2ecc71' : '#e74c3c',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+            transform: 'translateX(14px)',
+            transition: 'opacity .18s ease, transform .18s ease',
         });
 
-        toast.textContent = message;
+        const text = document.createElement('div');
+        text.textContent = message;
+
+        const progressTrack = document.createElement('div');
+        Object.assign(progressTrack.style, {
+            position: 'absolute',
+            left: '0',
+            right: '0',
+            bottom: '0',
+            height: '3px',
+            background: '#2e2f33',
+        });
+
+        const progress = document.createElement('div');
+        Object.assign(progress.style, {
+            width: '100%',
+            height: '100%',
+            background: accent,
+            transformOrigin: 'left center',
+            transform: 'scaleX(1)',
+        });
+
+        progressTrack.appendChild(progress);
+        toast.append(text, progressTrack);
         container.appendChild(toast);
+
         requestAnimationFrame(() => {
             toast.style.opacity = '1';
             toast.style.transform = 'translateX(0)';
+
+            requestAnimationFrame(() => {
+                progress.style.transition = `transform ${Math.max(0, duration)}ms linear`;
+                progress.style.transform = 'scaleX(0)';
+            });
         });
 
         if (container.children.length > 5) container.removeChild(container.firstChild);
 
         setTimeout(() => {
             toast.style.opacity = '0';
-            toast.style.transform = 'translateX(20px)';
-            setTimeout(() => toast.remove(), 300);
+            toast.style.transform = 'translateX(14px)';
+            setTimeout(() => toast.remove(), 180);
         }, duration);
     }
 
