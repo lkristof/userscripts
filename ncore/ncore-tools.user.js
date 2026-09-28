@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.2.1
+// @version      1.2.2
 // @description  nCore segédscript: qBittorrent integráció, lista/poszter torrentnézet, linktisztítás, reklám- és köszönetrejtés, képbeágyazás, látott filmek és torrentkiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
@@ -47,12 +47,22 @@
     const DEFAULT_SETTINGS = {
         qbittorrent: true,
         highlight: true,
+        highlightMinPlus: 3,
         seen: true,
         embedImages: true,
         removeAds: true,
         noThanks: true,
         dedereferer: true,
     };
+
+    function normalizeHighlightMinPlus(value) {
+        const parsed = Number.parseInt(value, 10);
+        return Number.isFinite(parsed) && parsed >= 1 ? parsed : DEFAULT_SETTINGS.highlightMinPlus;
+    }
+
+    function getHighlightMinPlus() {
+        return normalizeHighlightMinPlus(settings?.highlightMinPlus);
+    }
 
     async function gmGet(key, def = '') {
         try {
@@ -148,8 +158,9 @@
                 right: '20px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '10px',
+                gap: '8px',
                 zIndex: '100001',
+                fontFamily: 'Verdana, Geneva, Arial, Helvetica, sans-serif',
             });
             document.body.appendChild(toastContainer);
         }
@@ -159,34 +170,71 @@
     function showToast(message, type = 'success', duration = 3000) {
         const container = getToastContainer();
         const toast = document.createElement('div');
+        const accent = type === 'success' ? '#84bd00' : '#b94a48';
 
         Object.assign(toast.style, {
-            padding: '12px 18px',
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            color: '#fff',
-            minWidth: '220px',
+            position: 'relative',
+            minWidth: '240px',
+            maxWidth: '360px',
+            overflow: 'hidden',
+            padding: '10px 12px 12px 14px',
+            boxSizing: 'border-box',
+            border: '1px solid #35363a',
+            borderLeft: `3px solid ${accent}`,
+            borderRadius: '4px',
+            background: '#222326',
+            boxShadow: '0 5px 18px rgba(0, 0, 0, .48)',
+            color: '#cbCDD0',
+            fontSize: '10px',
+            fontWeight: 'normal',
+            lineHeight: '15px',
             opacity: '0',
-            transform: 'translateX(20px)',
-            transition: 'all 0.3s ease',
-            backgroundColor: type === 'success' ? '#2ecc71' : '#e74c3c',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+            transform: 'translateX(14px)',
+            transition: 'opacity .18s ease, transform .18s ease',
         });
 
-        toast.textContent = message;
+        const text = document.createElement('div');
+        text.textContent = message;
+
+        const progressTrack = document.createElement('div');
+        Object.assign(progressTrack.style, {
+            position: 'absolute',
+            left: '0',
+            right: '0',
+            bottom: '0',
+            height: '3px',
+            background: '#2e2f33',
+        });
+
+        const progress = document.createElement('div');
+        Object.assign(progress.style, {
+            width: '100%',
+            height: '100%',
+            background: accent,
+            transformOrigin: 'left center',
+            transform: 'scaleX(1)',
+        });
+
+        progressTrack.appendChild(progress);
+        toast.append(text, progressTrack);
         container.appendChild(toast);
+
         requestAnimationFrame(() => {
             toast.style.opacity = '1';
             toast.style.transform = 'translateX(0)';
+
+            requestAnimationFrame(() => {
+                progress.style.transition = `transform ${Math.max(0, duration)}ms linear`;
+                progress.style.transform = 'scaleX(0)';
+            });
         });
 
         if (container.children.length > 5) container.removeChild(container.firstChild);
 
         setTimeout(() => {
             toast.style.opacity = '0';
-            toast.style.transform = 'translateX(20px)';
-            setTimeout(() => toast.remove(), 300);
+            toast.style.transform = 'translateX(14px)';
+            setTimeout(() => toast.remove(), 180);
         }, duration);
     }
 
@@ -692,7 +740,7 @@
         {
             title: 'Torrentlista',
             settings: [
-                ['highlight', '3+ pluszos torrentek kiemelése'],
+                ['highlight', 'Népszerű torrentek kiemelése'],
                 ['seen', '„Láttam már” jelölés dupla kattintással'],
                 ['embedImages', 'Képek beágyazása a torrentlistán'],
             ],
@@ -919,6 +967,54 @@
 
             .ncore-tools-setting-label { line-height: 16px; }
 
+            .ncore-tools-setting-number-row {
+                gap: 7px;
+                max-height: 40px;
+                overflow: hidden;
+                padding-left: 31px;
+                opacity: 1;
+                cursor: default;
+                transition: max-height .18s ease, padding .18s ease, opacity .14s ease, border-color .18s ease;
+            }
+
+            .ncore-tools-setting-number-row.is-collapsed {
+                min-height: 0;
+                max-height: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+                opacity: 0;
+                border-top-color: transparent;
+                pointer-events: none;
+            }
+
+            .ncore-tools-setting-number-row .ncore-tools-setting-label {
+                flex: 1 1 auto;
+            }
+
+            .ncore-tools-setting-number-input {
+                width: 54px;
+                height: 23px;
+                padding: 2px 5px;
+                box-sizing: border-box;
+                border: 1px solid #3b3d42;
+                border-radius: 3px;
+                outline: none;
+                background: #292a2e;
+                color: #cbCDD0;
+                font: 10px Verdana, Geneva, Arial, Helvetica, sans-serif;
+                text-align: center;
+            }
+
+            .ncore-tools-setting-number-input:focus { border-color: #84bd00; }
+            .ncore-tools-setting-number-input:disabled { opacity: .45; cursor: not-allowed; }
+
+            .ncore-tools-setting-number-suffix {
+                min-width: 10px;
+                color: #777b80;
+                font-size: 9px;
+                text-align: left;
+            }
+
             #ncore-tools-sync-config {
                 margin: 8px 0 0;
                 padding: 9px;
@@ -1124,30 +1220,6 @@
                 background: #95cf0a;
                 color: #111214;
             }
-
-            @media (max-width: 560px) {
-                #ncore-tools-settings-overlay { padding: 10px; }
-
-                .ncore-tools-sync-field {
-                    grid-template-columns: 1fr;
-                    gap: 3px;
-                }
-
-                #ncore-tools-sync-actions {
-                    align-items: stretch;
-                    flex-direction: column;
-                }
-
-                #ncore-tools-sync-now { align-self: flex-end; }
-
-                #ncore-tools-settings-footer {
-                    align-items: stretch;
-                    flex-direction: column;
-                }
-
-                #ncore-tools-settings-note { max-width: none; }
-                #ncore-tools-settings-buttons { justify-content: flex-end; }
-            }
         `;
         document.head.appendChild(style);
     }
@@ -1245,6 +1317,39 @@
 
                 label.append(checkbox, text);
                 group.appendChild(label);
+
+                if (key === 'highlight') {
+                    const thresholdRow = document.createElement('label');
+                    thresholdRow.className = 'ncore-tools-setting-row ncore-tools-setting-number-row';
+
+                    const thresholdLabel = document.createElement('span');
+                    thresholdLabel.className = 'ncore-tools-setting-label';
+                    thresholdLabel.textContent = 'Kiemelési küszöb (+)';
+
+                    const thresholdInput = document.createElement('input');
+                    thresholdInput.type = 'number';
+                    thresholdInput.className = 'ncore-tools-setting-number-input';
+                    thresholdInput.dataset.settingNumberKey = 'highlightMinPlus';
+                    thresholdInput.min = '1';
+                    thresholdInput.step = '1';
+                    thresholdInput.value = String(getHighlightMinPlus());
+                    thresholdInput.title = 'Legalább ennyi + jelölés szükséges a kiemeléshez';
+                    thresholdInput.setAttribute('aria-label', 'Kiemelési küszöb, pluszjelek száma');
+
+                    function setThresholdExpanded(expanded) {
+                        thresholdRow.classList.toggle('is-collapsed', !expanded);
+                        thresholdRow.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+                        thresholdInput.disabled = !expanded;
+                    }
+
+                    checkbox.addEventListener('change', () => {
+                        setThresholdExpanded(checkbox.checked);
+                    });
+
+                    thresholdRow.append(thresholdLabel, thresholdInput);
+                    setThresholdExpanded(checkbox.checked);
+                    group.appendChild(thresholdRow);
+                }
             }
 
             generalPanel.appendChild(group);
@@ -1472,6 +1577,11 @@
             form.querySelectorAll('input[data-setting-key]').forEach(input => {
                 next[input.dataset.settingKey] = input.checked;
             });
+            form.querySelectorAll('input[data-setting-number-key]').forEach(input => {
+                if (input.dataset.settingNumberKey === 'highlightMinPlus') {
+                    next.highlightMinPlus = normalizeHighlightMinPlus(input.value);
+                }
+            });
             await saveSeenSyncConfig({
                 gistToken: syncBox.querySelector('#ncore-tools-gist-token').value,
                 gistId: syncBox.querySelector('#ncore-tools-gist-id').value,
@@ -1682,17 +1792,43 @@
     // -------------------------------------------------------------------------
 
     function initNoThanks() {
-        function removeThanks(root = document) {
-            const direct = root.id === 'ncoreKoszonetAjax' ? root : null;
-            direct?.remove();
-            root.querySelector?.('#ncoreKoszonetAjax')?.remove();
+        const THANKS_LABEL = 'Akik eddig megköszönték:';
+
+        function updateThanksCount(container) {
+            if (!(container instanceof HTMLElement)) return;
+
+            const count = container.querySelectorAll('a[href*="profile.php?id="]').length;
+            const description = container.closest('.torrent_leiras');
+            if (!description) return;
+
+            for (const node of description.childNodes) {
+                if (node === container) break;
+                if (node.nodeType !== Node.TEXT_NODE || !node.nodeValue?.includes(THANKS_LABEL)) continue;
+
+                node.nodeValue = node.nodeValue.replace(
+                    /Akik eddig megköszönték:\s*(?:\d+)?/,
+                    `${THANKS_LABEL} ${count}`
+                );
+                break;
+            }
         }
 
-        removeThanks();
+        function hideThanks(root = document) {
+            const containers = [];
+            if (root instanceof HTMLElement && root.id === 'ncoreKoszonetAjax') containers.push(root);
+            root.querySelectorAll?.('#ncoreKoszonetAjax').forEach(container => containers.push(container));
+
+            for (const container of containers) {
+                updateThanksCount(container);
+                container.remove();
+            }
+        }
+
+        hideThanks();
         new MutationObserver(mutations => {
             for (const mutation of mutations) {
                 mutation.addedNodes.forEach(node => {
-                    if (node instanceof HTMLElement) removeThanks(node);
+                    if (node instanceof HTMLElement) hideThanks(node);
                 });
             }
         }).observe(document.body, { childList: true, subtree: true });
@@ -2143,7 +2279,8 @@
         if (params.get('action')) return;
 
         const torrentContainer = document.querySelector('.box_torrent_all');
-        if (!torrentContainer) return;
+        const listaAll = torrentContainer?.closest('.lista_all') || document.querySelector('.lista_all');
+        if (!torrentContainer || !listaAll) return;
 
         const VIEW_LIST = 'list';
         const VIEW_POSTER = 'poster';
@@ -2154,16 +2291,22 @@
         const style = document.createElement('style');
         style.id = 'ncore-tools-torrent-view-style';
         style.textContent = `
+            .ncore-torrent-view-switcher-host {
+                position: relative;
+                height: 0;
+                margin: 0 auto;
+                overflow: visible;
+            }
+
             #ncore-torrent-view-switcher {
-                position: fixed;
-                top: 50%;
-                right: 12px;
+                position: absolute;
+                top: 0;
+                left: calc(100% + 8px);
                 z-index: 99998;
                 display: flex;
                 flex-direction: column;
                 gap: 4px;
                 padding: 5px;
-                transform: translateY(-50%);
                 border: 1px solid #35363a;
                 border-radius: 5px;
                 background: rgba(34, 35, 38, .96);
@@ -2172,14 +2315,18 @@
             }
 
             .ncore-torrent-view-button {
+                display: flex;
                 width: 76px;
                 height: 34px;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
                 padding: 0;
                 border: 1px solid transparent;
                 border-radius: 3px;
                 background: transparent;
                 color: #8b8e92;
-                font: bold 10px/32px Verdana, Geneva, Arial, Helvetica, sans-serif;
+                font: bold 10px/1 Verdana, Geneva, Arial, Helvetica, sans-serif;
                 text-align: center;
                 cursor: pointer;
                 transition: background .15s ease, border-color .15s ease, color .15s ease;
@@ -2198,6 +2345,17 @@
                 background: #84bd00;
                 color: #1d1e21;
             }
+
+            .ncore-torrent-view-button .ncore-lucide-icon {
+                display: block;
+                width: 15px;
+                height: 15px;
+                flex: 0 0 15px;
+                pointer-events: none;
+                stroke: currentColor;
+            }
+
+            .ncore-torrent-view-label { pointer-events: none; }
 
             .ncore-poster-card { display: none; }
 
@@ -2269,14 +2427,19 @@
 
             body.ncore-poster-view .ncore-poster-card:hover {
                 z-index: 2;
-                transform: translateY(-2px);
                 border-color: #51545a;
                 box-shadow: 0 8px 22px rgba(0, 0, 0, .42);
             }
 
             body.ncore-poster-view .ncore-poster-card.ncore-poster-plus {
                 border-color: #6f2020;
+                background: #600A0A;
                 box-shadow: inset 0 0 0 1px rgba(138, 21, 21, .28), 0 4px 14px rgba(0, 0, 0, .28);
+            }
+
+            body.ncore-poster-view .ncore-poster-card.ncore-poster-plus:hover {
+                border-color: #8A1515;
+                box-shadow: 0 8px 22px rgba(0, 0, 0, .42);
             }
 
             .ncore-poster-media {
@@ -2322,17 +2485,26 @@
                 text-align: center;
             }
 
-            .ncore-poster-category-badge {
+            .ncore-poster-badges {
                 position: absolute;
                 left: 8px;
                 bottom: 8px;
                 z-index: 3;
+                display: flex;
+                max-width: calc(100% - 16px);
+                align-items: center;
+                gap: 6px;
+                pointer-events: none;
+            }
+
+            .ncore-poster-category-badge {
                 display: inline-flex;
+                flex: 0 0 51px;
+                width: 51px;
+                height: 28px;
                 align-items: center;
                 justify-content: center;
-                min-width: 42px;
-                min-height: 28px;
-                padding: 2px 4px;
+                padding: 0;
                 overflow: hidden;
                 border: 1px solid rgba(255, 255, 255, .16);
                 border-radius: 4px;
@@ -2340,24 +2512,75 @@
                 box-shadow: 0 2px 7px rgba(0, 0, 0, .55);
                 text-decoration: none !important;
                 box-sizing: border-box;
-                transition: border-color .15s ease, background .15s ease, transform .15s ease;
+                pointer-events: auto;
+                transition: border-color .15s ease, background .15s ease;
             }
 
             .ncore-poster-category-badge:hover,
             .ncore-poster-category-badge:focus-visible {
                 border-color: #84bd00;
                 background: rgba(28, 30, 32, .98);
-                transform: translateY(-1px);
                 outline: none;
             }
 
             .ncore-poster-category-image {
                 display: block;
+                flex: 0 0 auto;
                 width: auto;
-                max-width: 51px;
-                height: 28px;
-                object-fit: contain;
+                height: auto;
+                max-width: none;
+                max-height: none;
+                object-fit: none;
+                object-position: center;
                 border: 0;
+            }
+
+            .ncore-poster-quality-badge {
+                display: inline-flex;
+                flex: 0 0 auto;
+                min-height: 28px;
+                align-items: center;
+                justify-content: center;
+                padding: 0 8px;
+                border: 1px solid rgba(132, 189, 0, .62);
+                border-radius: 4px;
+                background: rgba(17, 18, 20, .9);
+                box-shadow: 0 2px 7px rgba(0, 0, 0, .55);
+                color: #b9df5c;
+                font: bold 10px/1 Verdana, Geneva, Arial, Helvetica, sans-serif;
+                letter-spacing: .1px;
+                white-space: nowrap;
+                box-sizing: border-box;
+                pointer-events: none;
+            }
+
+            .ncore-poster-imdb-badge {
+                display: inline-flex;
+                flex: 0 0 auto;
+                min-height: 28px;
+                align-items: center;
+                justify-content: center;
+                padding: 0 8px;
+                border: 1px solid rgba(214, 184, 90, .65);
+                border-radius: 4px;
+                background: rgba(17, 18, 20, .9);
+                box-shadow: 0 2px 7px rgba(0, 0, 0, .55);
+                color: #e4c966 !important;
+                font: bold 10px/1 Verdana, Geneva, Arial, Helvetica, sans-serif;
+                letter-spacing: .1px;
+                white-space: nowrap;
+                text-decoration: none !important;
+                box-sizing: border-box;
+                pointer-events: auto;
+                transition: border-color .15s ease, background .15s ease, color .15s ease;
+            }
+
+            .ncore-poster-imdb-badge:hover,
+            .ncore-poster-imdb-badge:focus-visible {
+                border-color: #f0d46f;
+                background: rgba(28, 30, 32, .98);
+                color: #f0d46f !important;
+                outline: none;
             }
 
             .ncore-poster-body {
@@ -2482,37 +2705,36 @@
             .ncore-poster-action.seen {
                 padding-inline: 7px;
             }
-
-            @media (max-width: 820px) {
-                #ncore-torrent-view-switcher {
-                    top: auto;
-                    right: 10px;
-                    bottom: 10px;
-                    flex-direction: row;
-                    transform: none;
-                }
-
-                body.ncore-poster-view .box_torrent_all {
-                    grid-template-columns: repeat(3, minmax(0, 1fr));
-                    gap: 10px;
-                    padding: 10px;
-                }
-
-                body.ncore-poster-view .ncore-poster-card { min-height: 285px; }
-            }
-
-            @media (max-width: 560px) {
-                body.ncore-poster-view .box_torrent_all {
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
-                    gap: 8px;
-                    padding: 8px;
-                }
-            }
         `;
         document.head.appendChild(style);
 
         function normalizeText(value) {
             return String(value || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function getTorrentQualityLabel(title) {
+            const text = normalizeText(title);
+            if (!text) return '';
+
+            const qualityPatterns = [
+                [/\b2160p\b/i, '2160p'],
+                [/\b(?:4k|uhd)\b/i, '4K'],
+                [/\b1080p\b/i, '1080p'],
+                [/\b1080i\b/i, '1080i'],
+                [/\b720p\b/i, '720p'],
+                [/\b576p\b/i, '576p'],
+                [/\b480p\b/i, '480p'],
+                [/\bxvid\b/i, 'XviD'],
+                [/\bdvdrip\b/i, 'DVDRip'],
+                [/\bdvd(?:5|9)\b/i, match => match[0].toUpperCase()],
+            ];
+
+            for (const [pattern, label] of qualityPatterns) {
+                const match = text.match(pattern);
+                if (!match) continue;
+                return typeof label === 'function' ? label(match) : label;
+            }
+            return '';
         }
 
         function getDetailsLink(row) {
@@ -2572,6 +2794,13 @@
             return '';
         }
 
+        function normalizePosterUploaded(value) {
+            return normalizeText(value).replace(
+                /^(\d{4}-\d{2}-\d{2})(?=\d{2}:\d{2}:\d{2}(?:\b|$))/,
+                '$1 '
+            );
+        }
+
         function getMovieTitle(row) {
             const titleSpan = row.querySelector(
                 '.torrent_txt .siterank span[title], ' +
@@ -2623,24 +2852,36 @@
         }
 
         // Lucide ikonok inline SVG-ként, külső runtime nélkül.
-        // Forrás: https://lucide.dev/icons/download, /bookmark, /check
-        const LUCIDE_ICON_PATHS = {
+        // Forrás: https://lucide.dev/icons/download, /bookmark, /check,
+        //         /layout-grid, /text-align-justify
+        const LUCIDE_ICONS = {
             download: [
-                'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4',
-                'm7 10 5 5 5-5',
-                'M12 15V3',
+                ['path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }],
+                ['path', { d: 'm7 10 5 5 5-5' }],
+                ['path', { d: 'M12 15V3' }],
             ],
             bookmark: [
-                'm19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z',
+                ['path', { d: 'm19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z' }],
             ],
             check: [
-                'M20 6 9 17l-5-5',
+                ['path', { d: 'M20 6 9 17l-5-5' }],
+            ],
+            'layout-grid': [
+                ['rect', { width: '7', height: '7', x: '3', y: '3', rx: '1' }],
+                ['rect', { width: '7', height: '7', x: '14', y: '3', rx: '1' }],
+                ['rect', { width: '7', height: '7', x: '14', y: '14', rx: '1' }],
+                ['rect', { width: '7', height: '7', x: '3', y: '14', rx: '1' }],
+            ],
+            'text-align-justify': [
+                ['path', { d: 'M3 6h18' }],
+                ['path', { d: 'M3 12h18' }],
+                ['path', { d: 'M3 18h18' }],
             ],
         };
 
         function createLucideIcon(name) {
-            const paths = LUCIDE_ICON_PATHS[name];
-            if (!paths) return document.createTextNode('');
+            const nodes = LUCIDE_ICONS[name];
+            if (!nodes?.length) return document.createTextNode('');
 
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svg.classList.add('ncore-lucide-icon');
@@ -2655,10 +2896,12 @@
             svg.setAttribute('aria-hidden', 'true');
             svg.setAttribute('focusable', 'false');
 
-            for (const d of paths) {
-                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                path.setAttribute('d', d);
-                svg.appendChild(path);
+            for (const [tagName, attributes] of nodes) {
+                const node = document.createElementNS('http://www.w3.org/2000/svg', tagName);
+                for (const [attribute, value] of Object.entries(attributes)) {
+                    node.setAttribute(attribute, value);
+                }
+                svg.appendChild(node);
             }
             return svg;
         }
@@ -2678,19 +2921,6 @@
             span.textContent = text;
             if (title) span.title = title;
             return span;
-        }
-
-        function createMetaLink(className, text, href, title = '') {
-            if (!text || !href) return null;
-            const link = document.createElement('a');
-            if (className) link.className = className;
-            link.textContent = text;
-            link.href = href;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            if (title) link.title = title;
-            link.addEventListener('click', event => event.stopPropagation());
-            return link;
         }
 
         function updatePosterSeenState(row, button, imdbId) {
@@ -2715,6 +2945,7 @@
             try { detailsUrl = new URL(detailsUrl, window.location.href).href; } catch (_) {}
 
             const titleText = normalizeText(detailsLink.getAttribute('title') || detailsLink.textContent) || 'Torrent';
+            const qualityLabel = getTorrentQualityLabel(titleText);
             const movieTitle = getMovieTitle(row);
             const categoryImageSource = row.querySelector('.box_alap_img img.categ_link, img.categ_link');
             const categoryAnchorSource = categoryImageSource?.closest('a[href]');
@@ -2729,7 +2960,7 @@
             const originalBookmark = row.querySelector('.torrent_konyvjelzo, .torrent_konyvjelzo2');
             const plusCount = (row.querySelector('.box_d2')?.textContent.match(/\+/g) || []).length;
 
-            const uploaded = getCellText(row, ['.box_feltoltve2', '.box_feltoltve']);
+            const uploaded = normalizePosterUploaded(getCellText(row, ['.box_feltoltve2', '.box_feltoltve']));
             const size = getCellText(row, ['.box_meret2', '.box_meret']);
             const seed = getCellText(row, ['.box_s2', '.box_s']);
             const leech = getCellText(row, ['.box_l2', '.box_l']);
@@ -2738,7 +2969,7 @@
 
             const card = document.createElement('article');
             card.className = 'ncore-poster-card';
-            if (plusCount >= 3) card.classList.add('ncore-poster-plus');
+            if (settings.highlight && plusCount >= getHighlightMinPlus()) card.classList.add('ncore-poster-plus');
 
             const media = document.createElement('div');
             media.className = 'ncore-poster-media';
@@ -2770,19 +3001,47 @@
             }
             media.appendChild(imageLink);
 
-            if (categoryImageSource && categoryAnchorSource) {
-                const categoryBadge = document.createElement('a');
-                categoryBadge.className = 'ncore-poster-category-badge';
-                categoryBadge.href = categoryAnchorSource.getAttribute('href') || categoryAnchorSource.href || '#';
-                categoryBadge.title = categoryTitle || 'Kategória megnyitása';
-                categoryBadge.setAttribute('aria-label', categoryBadge.title);
+            if ((categoryImageSource && categoryAnchorSource) || qualityLabel || (imdbRating && imdbUrl)) {
+                const badges = document.createElement('div');
+                badges.className = 'ncore-poster-badges';
 
-                const categoryImage = document.createElement('img');
-                categoryImage.className = 'ncore-poster-category-image';
-                categoryImage.src = categoryImageSource.src;
-                categoryImage.alt = categoryImageSource.getAttribute('alt') || 'Kategória';
-                categoryBadge.appendChild(categoryImage);
-                media.appendChild(categoryBadge);
+                if (categoryImageSource && categoryAnchorSource) {
+                    const categoryBadge = document.createElement('a');
+                    categoryBadge.className = 'ncore-poster-category-badge';
+                    categoryBadge.href = categoryAnchorSource.getAttribute('href') || categoryAnchorSource.href || '#';
+                    categoryBadge.title = categoryTitle || 'Kategória megnyitása';
+                    categoryBadge.setAttribute('aria-label', categoryBadge.title);
+
+                    const categoryImage = document.createElement('img');
+                    categoryImage.className = 'ncore-poster-category-image';
+                    categoryImage.src = categoryImageSource.src;
+                    categoryImage.alt = categoryImageSource.getAttribute('alt') || 'Kategória';
+                    categoryBadge.appendChild(categoryImage);
+                    badges.appendChild(categoryBadge);
+                }
+
+                if (qualityLabel) {
+                    const qualityBadge = document.createElement('span');
+                    qualityBadge.className = 'ncore-poster-quality-badge';
+                    qualityBadge.textContent = qualityLabel;
+                    qualityBadge.title = `Minőség / formátum: ${qualityLabel}`;
+                    badges.appendChild(qualityBadge);
+                }
+
+                if (imdbRating && imdbUrl) {
+                    const imdbBadge = document.createElement('a');
+                    imdbBadge.className = 'ncore-poster-imdb-badge';
+                    imdbBadge.href = imdbUrl;
+                    imdbBadge.target = '_blank';
+                    imdbBadge.rel = 'noopener noreferrer';
+                    imdbBadge.textContent = `IMDb ${imdbRating}`;
+                    imdbBadge.title = 'Megnyitás az IMDb-n';
+                    imdbBadge.setAttribute('aria-label', `IMDb értékelés: ${imdbRating}`);
+                    imdbBadge.addEventListener('click', event => event.stopPropagation());
+                    badges.appendChild(imdbBadge);
+                }
+
+                media.appendChild(badges);
             }
 
             const body = document.createElement('div');
@@ -2809,12 +3068,6 @@
                 createMetaSpan('', size, size ? 'Méret' : ''),
                 createMetaSpan('seed', seed ? `S: ${seed}` : '', 'Seed'),
                 createMetaSpan('leech', leech ? `L: ${leech}` : '', 'Leech'),
-                createMetaLink(
-                    'imdb',
-                    imdbRating ? `IMDb: ${imdbRating}` : '',
-                    imdbUrl,
-                    'Megnyitás az IMDb-n'
-                ),
                 createMetaSpan('', uploaded, uploaded ? 'Feltöltve' : ''),
             ].filter(Boolean);
             meta.append(...metaItems);
@@ -2942,20 +3195,31 @@
         listButton.type = 'button';
         listButton.className = 'ncore-torrent-view-button';
         listButton.dataset.view = VIEW_LIST;
-        listButton.textContent = '☰ Lista';
         listButton.title = 'Lista nézet';
         listButton.setAttribute('aria-label', 'Lista nézet');
+        const listLabel = document.createElement('span');
+        listLabel.className = 'ncore-torrent-view-label';
+        listLabel.textContent = 'Lista';
+        listButton.append(createLucideIcon('text-align-justify'), listLabel);
 
         const posterButton = document.createElement('button');
         posterButton.type = 'button';
         posterButton.className = 'ncore-torrent-view-button';
         posterButton.dataset.view = VIEW_POSTER;
-        posterButton.textContent = '▦ Poszter';
         posterButton.title = 'Poszter nézet';
         posterButton.setAttribute('aria-label', 'Poszter nézet');
+        const posterLabel = document.createElement('span');
+        posterLabel.className = 'ncore-torrent-view-label';
+        posterLabel.textContent = 'Poszter';
+        posterButton.append(createLucideIcon('layout-grid'), posterLabel);
 
         switcher.append(listButton, posterButton);
-        document.body.appendChild(switcher);
+
+        const switcherHost = document.createElement('div');
+        switcherHost.className = 'ncore-torrent-view-switcher-host';
+        switcherHost.style.width = `${listaAll.offsetWidth}px`;
+        listaAll.parentNode.insertBefore(switcherHost, listaAll);
+        switcherHost.appendChild(switcher);
 
         async function setView(view, persist = true) {
             if (!VALID_VIEWS.has(view)) view = VIEW_LIST;
@@ -2991,7 +3255,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // 7) 3+ pluszos torrentek kiemelése
+    // 7) Népszerű torrentek kiemelése
     // -------------------------------------------------------------------------
 
     function initHighlight() {
@@ -2999,6 +3263,7 @@
 
         const HIGHLIGHT_BG = '#600A0A';
         const HIGHLIGHT_HOVER_BG = '#8A1515';
+        const minPlus = getHighlightMinPlus();
 
         const style = document.createElement('style');
         style.textContent = `
@@ -3015,7 +3280,7 @@
             const main = box.querySelector('.box_nagy, .box_nagy2');
             if (!main) return;
 
-            main.classList.toggle('ncore-plus-highlight', plusCount >= 3);
+            main.classList.toggle('ncore-plus-highlight', plusCount >= minPlus);
         }
 
         document.querySelectorAll('.box_torrent').forEach(highlight);
