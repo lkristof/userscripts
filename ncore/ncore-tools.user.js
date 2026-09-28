@@ -2794,6 +2794,13 @@
             return '';
         }
 
+        function normalizePosterUploaded(value) {
+            return normalizeText(value).replace(
+                /^(\d{4}-\d{2}-\d{2})(?=\d{2}:\d{2}:\d{2}(?:\b|$))/,
+                '$1 '
+            );
+        }
+
         function getMovieTitle(row) {
             const titleSpan = row.querySelector(
                 '.torrent_txt .siterank span[title], ' +
@@ -2953,7 +2960,7 @@
             const originalBookmark = row.querySelector('.torrent_konyvjelzo, .torrent_konyvjelzo2');
             const plusCount = (row.querySelector('.box_d2')?.textContent.match(/\+/g) || []).length;
 
-            const uploaded = getCellText(row, ['.box_feltoltve2', '.box_feltoltve']);
+            const uploaded = normalizePosterUploaded(getCellText(row, ['.box_feltoltve2', '.box_feltoltve']));
             const size = getCellText(row, ['.box_meret2', '.box_meret']);
             const seed = getCellText(row, ['.box_s2', '.box_s']);
             const leech = getCellText(row, ['.box_l2', '.box_l']);
