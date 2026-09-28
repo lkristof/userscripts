@@ -47,12 +47,22 @@
     const DEFAULT_SETTINGS = {
         qbittorrent: true,
         highlight: true,
+        highlightMinPlus: 3,
         seen: true,
         embedImages: true,
         removeAds: true,
         noThanks: true,
         dedereferer: true,
     };
+
+    function normalizeHighlightMinPlus(value) {
+        const parsed = Number.parseInt(value, 10);
+        return Number.isFinite(parsed) && parsed >= 1 ? parsed : DEFAULT_SETTINGS.highlightMinPlus;
+    }
+
+    function getHighlightMinPlus() {
+        return normalizeHighlightMinPlus(settings?.highlightMinPlus);
+    }
 
     async function gmGet(key, def = '') {
         try {
@@ -692,7 +702,7 @@
         {
             title: 'Torrentlista',
             settings: [
-                ['highlight', '3+ pluszos torrentek kiemelése'],
+                ['highlight', 'Népszerű torrentek kiemelése'],
                 ['seen', '„Láttam már” jelölés dupla kattintással'],
                 ['embedImages', 'Képek beágyazása a torrentlistán'],
             ],
@@ -918,6 +928,40 @@
             }
 
             .ncore-tools-setting-label { line-height: 16px; }
+
+            .ncore-tools-setting-number-row {
+                gap: 7px;
+                padding-left: 31px;
+                cursor: default;
+            }
+
+            .ncore-tools-setting-number-row .ncore-tools-setting-label {
+                flex: 1 1 auto;
+            }
+
+            .ncore-tools-setting-number-input {
+                width: 54px;
+                height: 23px;
+                padding: 2px 5px;
+                box-sizing: border-box;
+                border: 1px solid #3b3d42;
+                border-radius: 3px;
+                outline: none;
+                background: #292a2e;
+                color: #cbCDD0;
+                font: 10px Verdana, Geneva, Arial, Helvetica, sans-serif;
+                text-align: center;
+            }
+
+            .ncore-tools-setting-number-input:focus { border-color: #84bd00; }
+            .ncore-tools-setting-number-input:disabled { opacity: .45; cursor: not-allowed; }
+
+            .ncore-tools-setting-number-suffix {
+                min-width: 10px;
+                color: #777b80;
+                font-size: 9px;
+                text-align: left;
+            }
 
             #ncore-tools-sync-config {
                 margin: 8px 0 0;
@@ -1221,6 +1265,33 @@
 
                 label.append(checkbox, text);
                 group.appendChild(label);
+
+                if (key === 'highlight') {
+                    const thresholdRow = document.createElement('label');
+                    thresholdRow.className = 'ncore-tools-setting-row ncore-tools-setting-number-row';
+
+                    const thresholdLabel = document.createElement('span');
+                    thresholdLabel.className = 'ncore-tools-setting-label';
+                    thresholdLabel.textContent = 'Kiemelési küszöb (+)';
+
+                    const thresholdInput = document.createElement('input');
+                    thresholdInput.type = 'number';
+                    thresholdInput.className = 'ncore-tools-setting-number-input';
+                    thresholdInput.dataset.settingNumberKey = 'highlightMinPlus';
+                    thresholdInput.min = '1';
+                    thresholdInput.step = '1';
+                    thresholdInput.value = String(getHighlightMinPlus());
+                    thresholdInput.disabled = !checkbox.checked;
+                    thresholdInput.title = 'Legalább ennyi + jelölés szükséges a kiemeléshez';
+                    thresholdInput.setAttribute('aria-label', 'Kiemelési küszöb, pluszjelek száma');
+
+                    checkbox.addEventListener('change', () => {
+                        thresholdInput.disabled = !checkbox.checked;
+                    });
+
+                    thresholdRow.append(thresholdLabel, thresholdInput);
+                    group.appendChild(thresholdRow);
+                }
             }
 
             generalPanel.appendChild(group);
@@ -1447,6 +1518,11 @@
             const next = { ...settings };
             form.querySelectorAll('input[data-setting-key]').forEach(input => {
                 next[input.dataset.settingKey] = input.checked;
+            });
+            form.querySelectorAll('input[data-setting-number-key]').forEach(input => {
+                if (input.dataset.settingNumberKey === 'highlightMinPlus') {
+                    next.highlightMinPlus = normalizeHighlightMinPlus(input.value);
+                }
             });
             await saveSeenSyncConfig({
                 gistToken: syncBox.querySelector('#ncore-tools-gist-token').value,
@@ -2802,7 +2878,7 @@
 
             const card = document.createElement('article');
             card.className = 'ncore-poster-card';
-            if (plusCount >= 3) card.classList.add('ncore-poster-plus');
+            if (settings.highlight && plusCount >= getHighlightMinPlus()) card.classList.add('ncore-poster-plus');
 
             const media = document.createElement('div');
             media.className = 'ncore-poster-media';
@@ -3088,7 +3164,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // 7) 3+ pluszos torrentek kiemelése
+    // 7) Népszerű torrentek kiemelése
     // -------------------------------------------------------------------------
 
     function initHighlight() {
@@ -3096,6 +3172,7 @@
 
         const HIGHLIGHT_BG = '#600A0A';
         const HIGHLIGHT_HOVER_BG = '#8A1515';
+        const minPlus = getHighlightMinPlus();
 
         const style = document.createElement('style');
         style.textContent = `
@@ -3112,7 +3189,7 @@
             const main = box.querySelector('.box_nagy, .box_nagy2');
             if (!main) return;
 
-            main.classList.toggle('ncore-plus-highlight', plusCount >= 3);
+            main.classList.toggle('ncore-plus-highlight', plusCount >= minPlus);
         }
 
         document.querySelectorAll('.box_torrent').forEach(highlight);
