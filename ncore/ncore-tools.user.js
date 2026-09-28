@@ -1754,17 +1754,43 @@
     // -------------------------------------------------------------------------
 
     function initNoThanks() {
-        function removeThanks(root = document) {
-            const direct = root.id === 'ncoreKoszonetAjax' ? root : null;
-            direct?.remove();
-            root.querySelector?.('#ncoreKoszonetAjax')?.remove();
+        const THANKS_LABEL = 'Akik eddig megköszönték:';
+
+        function updateThanksCount(container) {
+            if (!(container instanceof HTMLElement)) return;
+
+            const count = container.querySelectorAll('a[href*="profile.php?id="]').length;
+            const description = container.closest('.torrent_leiras');
+            if (!description) return;
+
+            for (const node of description.childNodes) {
+                if (node === container) break;
+                if (node.nodeType !== Node.TEXT_NODE || !node.nodeValue?.includes(THANKS_LABEL)) continue;
+
+                node.nodeValue = node.nodeValue.replace(
+                    /Akik eddig megköszönték:\s*(?:\d+)?/,
+                    `${THANKS_LABEL} ${count}`
+                );
+                break;
+            }
         }
 
-        removeThanks();
+        function hideThanks(root = document) {
+            const containers = [];
+            if (root instanceof HTMLElement && root.id === 'ncoreKoszonetAjax') containers.push(root);
+            root.querySelectorAll?.('#ncoreKoszonetAjax').forEach(container => containers.push(container));
+
+            for (const container of containers) {
+                updateThanksCount(container);
+                container.remove();
+            }
+        }
+
+        hideThanks();
         new MutationObserver(mutations => {
             for (const mutation of mutations) {
                 mutation.addedNodes.forEach(node => {
-                    if (node instanceof HTMLElement) removeThanks(node);
+                    if (node instanceof HTMLElement) hideThanks(node);
                 });
             }
         }).observe(document.body, { childList: true, subtree: true });
