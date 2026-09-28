@@ -931,8 +931,22 @@
 
             .ncore-tools-setting-number-row {
                 gap: 7px;
+                max-height: 40px;
+                overflow: hidden;
                 padding-left: 31px;
+                opacity: 1;
                 cursor: default;
+                transition: max-height .18s ease, padding .18s ease, opacity .14s ease, border-color .18s ease;
+            }
+
+            .ncore-tools-setting-number-row.is-collapsed {
+                min-height: 0;
+                max-height: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+                opacity: 0;
+                border-top-color: transparent;
+                pointer-events: none;
             }
 
             .ncore-tools-setting-number-row .ncore-tools-setting-label {
@@ -1281,15 +1295,21 @@
                     thresholdInput.min = '1';
                     thresholdInput.step = '1';
                     thresholdInput.value = String(getHighlightMinPlus());
-                    thresholdInput.disabled = !checkbox.checked;
                     thresholdInput.title = 'Legalább ennyi + jelölés szükséges a kiemeléshez';
                     thresholdInput.setAttribute('aria-label', 'Kiemelési küszöb, pluszjelek száma');
 
+                    function setThresholdExpanded(expanded) {
+                        thresholdRow.classList.toggle('is-collapsed', !expanded);
+                        thresholdRow.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+                        thresholdInput.disabled = !expanded;
+                    }
+
                     checkbox.addEventListener('change', () => {
-                        thresholdInput.disabled = !checkbox.checked;
+                        setThresholdExpanded(checkbox.checked);
                     });
 
                     thresholdRow.append(thresholdLabel, thresholdInput);
+                    setThresholdExpanded(checkbox.checked);
                     group.appendChild(thresholdRow);
                 }
             }
