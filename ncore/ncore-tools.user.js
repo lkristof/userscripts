@@ -2361,8 +2361,47 @@
              * Grid módban ezek külön cellákat foglalnának, ezért csak a valódi
              * .box_torrent sorokat hagyjuk a rácsban.
              */
-            body.ncore-poster-view .box_torrent_all > :not(.box_torrent) {
+            body.ncore-poster-view .box_torrent_all > :not(.box_torrent):not(.ncore-poster-drop) {
                 display: none !important;
+            }
+
+            body.ncore-poster-view .box_torrent_all > .ncore-poster-drop {
+                grid-column: 1 / -1;
+                min-width: 0 !important;
+                width: auto !important;
+                max-width: 100% !important;
+                height: auto !important;
+                margin: 0 !important;
+                float: none !important;
+                clear: both !important;
+                box-sizing: border-box !important;
+                overflow-x: clip;
+            }
+
+            body.ncore-poster-view .ncore-poster-drop > .torrent_lenyilo_lehetoseg,
+            body.ncore-poster-view .ncore-poster-drop > .torrent_lenyilo_tartalom,
+            body.ncore-poster-view .ncore-poster-drop > .torrent_lenyilo_lab {
+                left: auto !important;
+                right: auto !important;
+                width: auto !important;
+                max-width: 100% !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                box-sizing: border-box !important;
+            }
+
+            body.ncore-poster-view .ncore-poster-drop > .torrent_lenyilo_lehetoseg {
+                overflow: hidden !important;
+            }
+
+            body.ncore-poster-view .ncore-poster-drop .torrent_lenyilo_tartalom img,
+            body.ncore-poster-view .ncore-poster-drop .torrent_lenyilo_tartalom iframe,
+            body.ncore-poster-view .ncore-poster-drop .torrent_lenyilo_tartalom table {
+                max-width: 100%;
+            }
+
+            body.ncore-poster-view .box_torrent.ncore-poster-expanded .ncore-poster-card {
+                border-color: #84bd00;
             }
 
             body.ncore-poster-view .box_torrent {
@@ -2413,13 +2452,15 @@
             }
 
             body.ncore-poster-view .ncore-poster-card.ncore-poster-plus {
-                border-color: #6f2020;
                 background: #600A0A;
-                box-shadow: inset 0 0 0 1px rgba(138, 21, 21, .28), 0 4px 14px rgba(0, 0, 0, .28);
             }
 
             body.ncore-poster-view .ncore-poster-card.ncore-poster-plus:hover {
-                border-color: #8A1515;
+                border-color: #51545a;
+            }
+
+            body.ncore-poster-view .box_torrent.ncore-poster-expanded .ncore-poster-card:hover {
+                border-color: #84bd00;
                 box-shadow: 0 8px 22px rgba(0, 0, 0, .42);
             }
 
@@ -2916,6 +2957,185 @@
             row.classList.toggle('ncore-seen', seen);
         }
 
+        const posterDropOrigins = new Map();
+
+        function isPosterDropElement(element) {
+            return Boolean(element) && (
+                element.classList.contains('torrent_lenyilo') ||
+                element.classList.contains('torrent_lenyilo2')
+            );
+        }
+
+        function getPosterDrop(torrentId) {
+            if (!torrentId) return null;
+            const drop = document.getElementById(String(torrentId));
+            return isPosterDropElement(drop) ? drop : null;
+        }
+
+        function rememberPosterDropOrigin(drop) {
+            if (!drop?.parentNode || posterDropOrigins.has(drop)) return;
+
+            const marker = document.createComment(`ncore-poster-drop-origin:${drop.id || ''}`);
+            drop.parentNode.insertBefore(marker, drop);
+            posterDropOrigins.set(drop, marker);
+        }
+
+        function restorePosterDrop(drop) {
+            if (!drop) return;
+
+            const marker = posterDropOrigins.get(drop);
+            if (marker?.parentNode) marker.parentNode.insertBefore(drop, marker.nextSibling);
+            drop.classList.remove('ncore-poster-drop');
+
+            const torrentId = String(drop.id || '');
+            if (torrentId) {
+                for (const row of torrentContainer.querySelectorAll(':scope > .box_torrent')) {
+                    const detailsLink = getDetailsLink(row);
+                    if (detailsLink && getTorrentId(detailsLink.href) === torrentId) {
+                        row.classList.remove('ncore-poster-expanded');
+                        break;
+                    }
+                }
+            }
+        }
+
+        function restoreAllPosterDrops() {
+            for (const drop of posterDropOrigins.keys()) restorePosterDrop(drop);
+        }
+
+        function getPosterRowEnd(row) {
+            const rows = Array.from(torrentContainer.querySelectorAll(':scope > .box_torrent'));
+            const index = rows.indexOf(row);
+            if (index < 0) return null;
+
+            const endIndex = Math.min(rows.length - 1, Math.floor(index / 4) * 4 + 3);
+            return {
+                endRow: rows[endIndex],
+                nextRow: rows[endIndex + 1] || null,
+            };
+        }
+
+        function movePosterDropAfterRow(row, drop) {
+            if (!row || !drop) return;
+            rememberPosterDropOrigin(drop);
+
+            const position = getPosterRowEnd(row);
+            if (!position) return;
+
+            drop.classList.add('ncore-poster-drop');
+            if (position.nextRow) torrentContainer.insertBefore(drop, position.nextRow);
+            else torrentContainer.appendChild(drop);
+            row.classList.add('ncore-poster-expanded');
+        }
+
+        function isPosterDropOpen(drop) {
+            return Boolean(drop) && drop.style.display !== 'none';
+        }
+
+        function invokeNativeTorrentToggle(detailsLink, torrentId) {
+            const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+
+            if (typeof pageWindow.torrent === 'function') {
+                try {
+                    pageWindow.torrent(torrentId);
+                    return;
+                } catch (error) {
+                    console.debug('[nCore Tools] Natív torrent lenyitás közvetlenül nem sikerült:', error);
+                }
+            }
+
+            detailsLink.click();
+        }
+
+        function findPosterRowContext(torrentId) {
+            const id = String(torrentId || '');
+            if (!id) return null;
+
+            for (const row of torrentContainer.querySelectorAll(':scope > .box_torrent')) {
+                const detailsLink = getDetailsLink(row);
+                if (detailsLink && getTorrentId(detailsLink.href) === id) {
+                    return { row, detailsLink };
+                }
+            }
+            return null;
+        }
+
+        function closePosterDrop(drop) {
+            if (!drop) return;
+
+            const torrentId = String(drop.id || '');
+            if (isPosterDropOpen(drop)) {
+                const context = findPosterRowContext(torrentId);
+                if (context) invokeNativeTorrentToggle(context.detailsLink, torrentId);
+
+                if (isPosterDropOpen(drop)) drop.style.display = 'none';
+            }
+
+            restorePosterDrop(drop);
+        }
+
+        function closeOtherPosterDrops(exceptDrop = null) {
+            const drops = new Set([
+                ...posterDropOrigins.keys(),
+                ...torrentContainer.querySelectorAll(':scope > .ncore-poster-drop'),
+            ]);
+
+            for (const drop of drops) {
+                if (drop !== exceptDrop && isPosterDropOpen(drop)) closePosterDrop(drop);
+            }
+        }
+
+        function togglePosterDrop(row, detailsLink, torrentId) {
+            const drop = getPosterDrop(torrentId);
+            if (!drop) {
+                closeOtherPosterDrops();
+                invokeNativeTorrentToggle(detailsLink, torrentId);
+                return;
+            }
+
+            const wasOpen = isPosterDropOpen(drop);
+            if (wasOpen) {
+                closePosterDrop(drop);
+                return;
+            }
+
+            closeOtherPosterDrops(drop);
+            movePosterDropAfterRow(row, drop);
+            invokeNativeTorrentToggle(detailsLink, torrentId);
+
+            requestAnimationFrame(() => {
+                if (isPosterDropOpen(drop)) {
+                    movePosterDropAfterRow(row, drop);
+                } else {
+                    restorePosterDrop(drop);
+                }
+            });
+        }
+
+        function bindPosterDetailsLink(link, row, detailsLink, torrentId) {
+            if (!link || !torrentId) return;
+
+            link.addEventListener('click', event => {
+                if (!document.body.classList.contains('ncore-poster-view')) return;
+                if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+                togglePosterDrop(row, detailsLink, torrentId);
+            });
+        }
+
+        function adoptOpenPosterDrops() {
+            for (const row of torrentContainer.querySelectorAll(':scope > .box_torrent')) {
+                const detailsLink = getDetailsLink(row);
+                if (!detailsLink) continue;
+
+                const torrentId = getTorrentId(detailsLink.href);
+                const drop = getPosterDrop(torrentId);
+                if (drop && isPosterDropOpen(drop)) movePosterDropAfterRow(row, drop);
+            }
+        }
+
         function buildPosterCard(row) {
             if (!(row instanceof HTMLElement) || row.querySelector(':scope > .ncore-poster-card')) return;
 
@@ -2961,6 +3181,7 @@
             imageLink.target = '_blank';
             imageLink.rel = 'noopener noreferrer';
             imageLink.title = `${movieTitle || titleText} – részletek`;
+            bindPosterDetailsLink(imageLink, row, detailsLink, torrentId);
 
             if (posterUrl) {
                 const image = document.createElement('img');
@@ -3037,6 +3258,7 @@
             title.rel = 'noopener noreferrer';
             title.textContent = titleText;
             title.title = titleText;
+            bindPosterDetailsLink(title, row, detailsLink, torrentId);
             body.appendChild(title);
 
             if (movieTitle) {
@@ -3224,8 +3446,12 @@
             if (view === VIEW_POSTER) {
                 buildAllPosterCards(torrentContainer);
                 refreshPosterSeenStates(torrentContainer);
+                document.body.classList.add('ncore-poster-view');
+                adoptOpenPosterDrops();
+            } else {
+                restoreAllPosterDrops();
+                document.body.classList.remove('ncore-poster-view');
             }
-            document.body.classList.toggle('ncore-poster-view', view === VIEW_POSTER);
 
             switcher.querySelectorAll('.ncore-torrent-view-button').forEach(button => {
                 button.setAttribute('aria-pressed', button.dataset.view === view ? 'true' : 'false');
