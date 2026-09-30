@@ -1919,6 +1919,41 @@
             });
         }
 
+        function ensureFancyBoxStyle() {
+            if (document.getElementById('ncore-tools-fancybox-style')) return;
+
+            const style = document.createElement('style');
+            style.id = 'ncore-tools-fancybox-style';
+            style.textContent = `
+                #fancybox-overlay,
+                .fancybox-overlay {
+                    position: fixed !important;
+                    inset: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    z-index: 110000 !important;
+                    opacity: 1 !important;
+                    background: rgba(0, 0, 0, .45) !important;
+                    -webkit-backdrop-filter: blur(4px);
+                    backdrop-filter: blur(4px);
+                }
+
+                #fancybox-wrap,
+                .fancybox-wrap,
+                .fancybox-container {
+                    z-index: 110010 !important;
+                }
+
+                #fancybox-loading,
+                .fancybox-loading {
+                    z-index: 110020 !important;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        ensureFancyBoxStyle();
+
         function initializeFancyBox(root) {
             try {
                 const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -1931,8 +1966,6 @@
 
                 jq(links).fancybox({
                     type: 'image',
-                    overlayColor: '#000',
-                    overlayOpacity: 0.9,
                     ...(typeof pageWindow.disableKeys === 'function' ? { onStart: pageWindow.disableKeys } : {}),
                     ...(typeof pageWindow.enableKeys === 'function' ? { onClosed: pageWindow.enableKeys } : {}),
                 });
@@ -2356,47 +2389,158 @@
                 box-sizing: border-box;
             }
 
-            /*
-             * A lista DOM-jában minden torrent után clear + lenyíló elemek vannak.
-             * Grid módban ezek külön cellákat foglalnának, ezért csak a valódi
-             * .box_torrent sorokat hagyjuk a rácsban.
-             */
-            body.ncore-poster-view .box_torrent_all > :not(.box_torrent):not(.ncore-poster-drop) {
+            body.ncore-poster-view .box_torrent_all > :not(.box_torrent) {
                 display: none !important;
             }
 
-            body.ncore-poster-view .box_torrent_all > .ncore-poster-drop {
-                grid-column: 1 / -1;
+            body.ncore-poster-modal-open {
+                overflow: hidden !important;
+            }
+
+            #ncore-poster-details-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 90000;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                padding: 28px;
+                background: rgba(8, 9, 10, .82);
+                -webkit-backdrop-filter: blur(2px);
+                backdrop-filter: blur(2px);
+                box-sizing: border-box;
+            }
+
+            #ncore-poster-details-overlay.is-open {
+                display: flex;
+            }
+
+            #ncore-poster-details-modal {
+                display: flex;
+                width: min(1080px, calc(100vw - 56px));
+                max-width: 100%;
+                max-height: calc(100vh - 56px);
+                min-height: 0;
+                flex-direction: column;
+                overflow: hidden;
+                border: 1px solid #414348;
+                border-top: 2px solid #84bd00;
+                border-radius: 6px;
+                background: #222326;
+                box-shadow: 0 18px 60px rgba(0, 0, 0, .72);
+                color: #adafb2;
+                box-sizing: border-box;
+                font-family: Verdana, Geneva, Arial, Helvetica, sans-serif;
+            }
+
+            #ncore-poster-details-header {
+                display: flex;
+                flex: 0 0 auto;
+                align-items: center;
+                gap: 12px;
+                min-height: 44px;
+                padding: 8px 10px 8px 14px;
+                border-bottom: 1px solid #383a3e;
+                background: #2a2b2f;
+                box-sizing: border-box;
+            }
+
+            #ncore-poster-details-title {
+                min-width: 0;
+                flex: 1 1 auto;
+                overflow: hidden;
+                color: #d4d6d8;
+                font-size: 11px;
+                font-weight: bold;
+                line-height: 16px;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            #ncore-poster-details-open {
+                flex: 0 0 auto;
+                color: #84bd00 !important;
+                font-size: 9px;
+                text-decoration: none !important;
+                white-space: nowrap;
+            }
+
+            #ncore-poster-details-open:hover,
+            #ncore-poster-details-open:focus-visible {
+                color: #a6da2e !important;
+                text-decoration: underline !important;
+                outline: none;
+            }
+
+            #ncore-poster-details-close {
+                display: flex;
+                width: 28px;
+                height: 28px;
+                flex: 0 0 28px;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                background: transparent;
+                color: #8b8e92;
+                font: normal 20px/1 Arial, sans-serif;
+                cursor: pointer;
+            }
+
+            #ncore-poster-details-close:hover,
+            #ncore-poster-details-close:focus-visible {
+                border-color: #4a4c51;
+                background: #34363a;
+                color: #fff;
+                outline: none;
+            }
+
+            #ncore-poster-details-content {
+                min-height: 0;
+                flex: 1 1 auto;
+                overflow-x: hidden;
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                padding: 12px;
+                box-sizing: border-box;
+            }
+
+            #ncore-poster-details-content > .ncore-poster-drop {
+                position: static !important;
+                display: block !important;
+                float: none !important;
+                clear: both !important;
+                width: 100% !important;
                 min-width: 0 !important;
-                width: auto !important;
                 max-width: 100% !important;
                 height: auto !important;
                 margin: 0 !important;
-                float: none !important;
-                clear: both !important;
+                overflow: visible !important;
                 box-sizing: border-box !important;
-                overflow-x: clip;
             }
 
-            body.ncore-poster-view .ncore-poster-drop > .torrent_lenyilo_lehetoseg,
-            body.ncore-poster-view .ncore-poster-drop > .torrent_lenyilo_tartalom,
-            body.ncore-poster-view .ncore-poster-drop > .torrent_lenyilo_lab {
+            #ncore-poster-details-content .ncore-poster-drop > .torrent_lenyilo_lehetoseg,
+            #ncore-poster-details-content .ncore-poster-drop > .torrent_lenyilo_tartalom,
+            #ncore-poster-details-content .ncore-poster-drop > .torrent_lenyilo_lab {
+                position: static !important;
                 left: auto !important;
                 right: auto !important;
-                width: auto !important;
+                float: none !important;
+                width: 100% !important;
                 max-width: 100% !important;
                 margin-left: 0 !important;
                 margin-right: 0 !important;
                 box-sizing: border-box !important;
             }
 
-            body.ncore-poster-view .ncore-poster-drop > .torrent_lenyilo_lehetoseg {
+            #ncore-poster-details-content .ncore-poster-drop > .torrent_lenyilo_lehetoseg {
                 overflow: hidden !important;
             }
 
-            body.ncore-poster-view .ncore-poster-drop .torrent_lenyilo_tartalom img,
-            body.ncore-poster-view .ncore-poster-drop .torrent_lenyilo_tartalom iframe,
-            body.ncore-poster-view .ncore-poster-drop .torrent_lenyilo_tartalom table {
+            #ncore-poster-details-content .ncore-poster-drop .torrent_lenyilo_tartalom img,
+            #ncore-poster-details-content .ncore-poster-drop .torrent_lenyilo_tartalom iframe,
+            #ncore-poster-details-content .ncore-poster-drop .torrent_lenyilo_tartalom table {
                 max-width: 100%;
             }
 
@@ -2958,6 +3102,9 @@
         }
 
         const posterDropOrigins = new Map();
+        let posterModalElements = null;
+        let posterModalState = null;
+        let posterModalRequestId = 0;
 
         function isPosterDropElement(element) {
             return Boolean(element) && (
@@ -2980,6 +3127,73 @@
             posterDropOrigins.set(drop, marker);
         }
 
+        function findPosterRowContext(torrentId) {
+            const id = String(torrentId || '');
+            if (!id) return null;
+
+            for (const row of torrentContainer.querySelectorAll(':scope > .box_torrent')) {
+                const detailsLink = getDetailsLink(row);
+                if (detailsLink && getTorrentId(detailsLink.href) === id) {
+                    return { row, detailsLink };
+                }
+            }
+            return null;
+        }
+
+        function ensurePosterModal() {
+            if (posterModalElements) return posterModalElements;
+
+            const overlay = document.createElement('div');
+            overlay.id = 'ncore-poster-details-overlay';
+            overlay.setAttribute('aria-hidden', 'true');
+
+            const modal = document.createElement('div');
+            modal.id = 'ncore-poster-details-modal';
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+            modal.setAttribute('aria-labelledby', 'ncore-poster-details-title');
+
+            const header = document.createElement('div');
+            header.id = 'ncore-poster-details-header';
+
+            const title = document.createElement('div');
+            title.id = 'ncore-poster-details-title';
+
+            const openDetails = document.createElement('a');
+            openDetails.id = 'ncore-poster-details-open';
+            openDetails.target = '_blank';
+            openDetails.rel = 'noopener noreferrer';
+            openDetails.textContent = 'Részletek új lapon';
+
+            const close = document.createElement('button');
+            close.id = 'ncore-poster-details-close';
+            close.type = 'button';
+            close.title = 'Bezárás';
+            close.setAttribute('aria-label', 'Bezárás');
+            close.textContent = '×';
+
+            const content = document.createElement('div');
+            content.id = 'ncore-poster-details-content';
+
+            header.append(title, openDetails, close);
+            modal.append(header, content);
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            close.addEventListener('click', () => closeActivePosterModal(true));
+            overlay.addEventListener('click', event => {
+                if (event.target === overlay) closeActivePosterModal(true);
+            });
+            document.addEventListener('keydown', event => {
+                if (event.key !== 'Escape' || !posterModalState) return;
+                if (isFancyBoxActive()) return;
+                closeActivePosterModal(true);
+            }, true);
+
+            posterModalElements = { overlay, modal, title, openDetails, close, content };
+            return posterModalElements;
+        }
+
         function restorePosterDrop(drop) {
             if (!drop) return;
 
@@ -2988,44 +3202,51 @@
             drop.classList.remove('ncore-poster-drop');
 
             const torrentId = String(drop.id || '');
-            if (torrentId) {
-                for (const row of torrentContainer.querySelectorAll(':scope > .box_torrent')) {
-                    const detailsLink = getDetailsLink(row);
-                    if (detailsLink && getTorrentId(detailsLink.href) === torrentId) {
-                        row.classList.remove('ncore-poster-expanded');
-                        break;
-                    }
-                }
-            }
+            const context = findPosterRowContext(torrentId);
+            context?.row?.classList.remove('ncore-poster-expanded');
+        }
+
+        function hidePosterModal() {
+            if (!posterModalElements) return;
+            posterModalElements.overlay.classList.remove('is-open');
+            posterModalElements.overlay.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('ncore-poster-modal-open');
+        }
+
+        function showPosterModal(row, detailsLink, drop) {
+            if (!row || !detailsLink || !drop) return;
+
+            const modal = ensurePosterModal();
+            rememberPosterDropOrigin(drop);
+
+            const torrentTitle = normalizeText(detailsLink.getAttribute('title') || detailsLink.textContent) || 'Torrent részletek';
+            const detailsUrl = detailsLink.getAttribute('href') || detailsLink.href || '#';
+
+            drop.classList.add('ncore-poster-drop');
+            modal.content.replaceChildren(drop);
+            modal.content.scrollTop = 0;
+            modal.title.textContent = torrentTitle;
+            modal.openDetails.href = detailsUrl;
+            modal.overlay.classList.add('is-open');
+            modal.overlay.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('ncore-poster-modal-open');
+            row.classList.add('ncore-poster-expanded');
+
+            posterModalState = {
+                drop,
+                row,
+                detailsLink,
+                torrentId: String(drop.id || ''),
+            };
+
+            modal.close.focus({ preventScroll: true });
         }
 
         function restoreAllPosterDrops() {
+            posterModalRequestId++;
+            hidePosterModal();
+            posterModalState = null;
             for (const drop of posterDropOrigins.keys()) restorePosterDrop(drop);
-        }
-
-        function getPosterRowEnd(row) {
-            const rows = Array.from(torrentContainer.querySelectorAll(':scope > .box_torrent'));
-            const index = rows.indexOf(row);
-            if (index < 0) return null;
-
-            const endIndex = Math.min(rows.length - 1, Math.floor(index / 4) * 4 + 3);
-            return {
-                endRow: rows[endIndex],
-                nextRow: rows[endIndex + 1] || null,
-            };
-        }
-
-        function movePosterDropAfterRow(row, drop) {
-            if (!row || !drop) return;
-            rememberPosterDropOrigin(drop);
-
-            const position = getPosterRowEnd(row);
-            if (!position) return;
-
-            drop.classList.add('ncore-poster-drop');
-            if (position.nextRow) torrentContainer.insertBefore(drop, position.nextRow);
-            else torrentContainer.appendChild(drop);
-            row.classList.add('ncore-poster-expanded');
         }
 
         function isPosterDropOpen(drop) {
@@ -3047,69 +3268,114 @@
             detailsLink.click();
         }
 
-        function findPosterRowContext(torrentId) {
-            const id = String(torrentId || '');
-            if (!id) return null;
-
-            for (const row of torrentContainer.querySelectorAll(':scope > .box_torrent')) {
-                const detailsLink = getDetailsLink(row);
-                if (detailsLink && getTorrentId(detailsLink.href) === id) {
-                    return { row, detailsLink };
-                }
-            }
-            return null;
+        function isFancyBoxActive() {
+            const candidates = document.querySelectorAll('#fancybox-overlay, #fancybox-wrap, .fancybox-container');
+            return Array.from(candidates).some(element => {
+                const computed = getComputedStyle(element);
+                return computed.display !== 'none' &&
+                    computed.visibility !== 'hidden' &&
+                    computed.opacity !== '0';
+            });
         }
 
-        function closePosterDrop(drop) {
+        function closePosterDrop(drop, closeNative = true) {
             if (!drop) return;
 
             const torrentId = String(drop.id || '');
-            if (isPosterDropOpen(drop)) {
-                const context = findPosterRowContext(torrentId);
-                if (context) invokeNativeTorrentToggle(context.detailsLink, torrentId);
+            const context = findPosterRowContext(torrentId);
+            const currentDrop = getPosterDrop(torrentId) || drop;
 
-                if (isPosterDropOpen(drop)) drop.style.display = 'none';
+            if (closeNative && isPosterDropOpen(currentDrop)) {
+                if (context) invokeNativeTorrentToggle(context.detailsLink, torrentId);
+                if (isPosterDropOpen(currentDrop)) currentDrop.style.display = 'none';
             }
 
-            restorePosterDrop(drop);
+            if (posterModalState?.torrentId === torrentId) {
+                hidePosterModal();
+                posterModalState = null;
+            }
+
+            restorePosterDrop(currentDrop);
+            if (currentDrop !== drop) restorePosterDrop(drop);
+        }
+
+        function closeActivePosterModal(closeNative = true) {
+            posterModalRequestId++;
+            const drop = posterModalState?.drop;
+            if (!drop) {
+                hidePosterModal();
+                return;
+            }
+            closePosterDrop(drop, closeNative);
         }
 
         function closeOtherPosterDrops(exceptDrop = null) {
+            const nativeDrops = torrentContainer.querySelectorAll(
+                ':scope > .torrent_lenyilo, :scope > .torrent_lenyilo2'
+            );
             const drops = new Set([
                 ...posterDropOrigins.keys(),
-                ...torrentContainer.querySelectorAll(':scope > .ncore-poster-drop'),
+                ...nativeDrops,
+                ...(posterModalState?.drop ? [posterModalState.drop] : []),
             ]);
 
             for (const drop of drops) {
-                if (drop !== exceptDrop && isPosterDropOpen(drop)) closePosterDrop(drop);
+                if (drop !== exceptDrop && isPosterDropOpen(drop)) closePosterDrop(drop, true);
             }
         }
 
-        function togglePosterDrop(row, detailsLink, torrentId) {
-            const drop = getPosterDrop(torrentId);
-            if (!drop) {
-                closeOtherPosterDrops();
-                invokeNativeTorrentToggle(detailsLink, torrentId);
-                return;
-            }
+        function waitForPosterDropOpen(torrentId, fallbackDrop, requestId, timeout = 5000) {
+            return new Promise(resolve => {
+                const startedAt = performance.now();
 
-            const wasOpen = isPosterDropOpen(drop);
-            if (wasOpen) {
-                closePosterDrop(drop);
-                return;
-            }
+                function check() {
+                    if (requestId !== posterModalRequestId) {
+                        resolve(null);
+                        return;
+                    }
 
-            closeOtherPosterDrops(drop);
-            movePosterDropAfterRow(row, drop);
-            invokeNativeTorrentToggle(detailsLink, torrentId);
+                    const currentDrop = getPosterDrop(torrentId) || fallbackDrop;
+                    if (currentDrop && isPosterDropOpen(currentDrop)) {
+                        resolve(currentDrop);
+                        return;
+                    }
 
-            requestAnimationFrame(() => {
-                if (isPosterDropOpen(drop)) {
-                    movePosterDropAfterRow(row, drop);
-                } else {
-                    restorePosterDrop(drop);
+                    if (performance.now() - startedAt >= timeout) {
+                        resolve(null);
+                        return;
+                    }
+
+                    requestAnimationFrame(check);
                 }
+
+                check();
             });
+        }
+
+        async function togglePosterDrop(row, detailsLink, torrentId) {
+            const id = String(torrentId || '');
+            if (!id) return;
+
+            const existingDrop = getPosterDrop(id);
+            if (posterModalState?.torrentId === id && existingDrop && isPosterDropOpen(existingDrop)) {
+                closeActivePosterModal(true);
+                return;
+            }
+
+            if (posterModalState) closeActivePosterModal(true);
+
+            const requestId = ++posterModalRequestId;
+            let drop = getPosterDrop(id);
+            closeOtherPosterDrops(drop);
+
+            if (!drop || !isPosterDropOpen(drop)) {
+                invokeNativeTorrentToggle(detailsLink, id);
+            }
+
+            drop = await waitForPosterDropOpen(id, drop, requestId);
+            if (requestId !== posterModalRequestId || !drop) return;
+
+            showPosterModal(row, detailsLink, drop);
         }
 
         function bindPosterDetailsLink(link, row, detailsLink, torrentId) {
@@ -3126,13 +3392,23 @@
         }
 
         function adoptOpenPosterDrops() {
+            posterModalRequestId++;
+            let adopted = false;
+
             for (const row of torrentContainer.querySelectorAll(':scope > .box_torrent')) {
                 const detailsLink = getDetailsLink(row);
                 if (!detailsLink) continue;
 
                 const torrentId = getTorrentId(detailsLink.href);
                 const drop = getPosterDrop(torrentId);
-                if (drop && isPosterDropOpen(drop)) movePosterDropAfterRow(row, drop);
+                if (!drop || !isPosterDropOpen(drop)) continue;
+
+                if (!adopted) {
+                    showPosterModal(row, detailsLink, drop);
+                    adopted = true;
+                } else {
+                    closePosterDrop(drop, true);
+                }
             }
         }
 
