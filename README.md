@@ -195,14 +195,16 @@ Ezután a script automatikusan szinkronizálja az adatokat.
 
 ### 🧰 nCore – Tools
 
-**`ncore-tools.user.js`** az eddigi nCore userscripteket **egyetlen scriptbe egyesíti**, közös **beállítási panellel** és külön-külön kapcsolható funkciókkal.
+**`ncore-tools.user.js`** az nCore-hoz készült segédfunkciókat **egyetlen scriptben egyesíti**, közös **beállítási panellel**, poszternézettel, qBittorrent integrációval és opcionális Gist-szinkronizációval.
 
 ### ⚡ Előnyök
 
 - 📦 egyetlen telepítés
 - 🔄 frissítéskor csak **egy** scriptet kell karbantartani
-- ⚙️ a funkciók külön-külön ki-/bekapcsolhatók
+- ⚙️ a fő funkciók külön-külön ki-/bekapcsolhatók
+- 🖼️ váltható **lista / poszter** torrentnézet, megjegyzett nézetbeállítással
 - 🔗 a qBittorrent WebUI címe közvetlenül az nCore infosávjából beállítható
+- ☁️ a látott filmek és a qBittorrenttel hozzáadott torrentek GitHub Gisttel több eszköz között szinkronizálhatók
 
 > 👉 **Telepítés:**  
 > https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-tools.user.js
@@ -212,25 +214,66 @@ Ezután a script automatikusan szinkronizálja az adatokat.
 ### 📦 nCore Tools összetevői
 
 > [!NOTE]
-> Az **nCore – Tools** az alábbi funkciókat egyesíti. A beállítások az nCore infosávjában megjelenő **[Beállítások]** linken érhetők el.
+> Az **nCore – Tools** beállításai az nCore infosávjában megjelenő **[Beállítások]** linken érhetők el.
 
-| Funkció                            | Rövid leírás                                                                                                            |
-|------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| **qBittorrent integráció**         | A torrentek közvetlenül elküldhetők a qBittorrent WebUI-nak. A WebUI címe az infosáv **[qB URL]** linkjén állítható be. |
-| **Dereferer linkek eltávolítása**  | Eltávolítja a támogatott dereferer köztes linkeket, miközben `nofollow` és `noreferrer` attribútumokat használ.         |
-| **Köszönetek elrejtése**           | Elrejti az nCore köszönetek blokkját.                                                                                   |
-| **„Láttam már” jelölés**           | A torrentlistában dupla kattintással elhalványíthatók a már látott filmek; ugyanígy vissza is vonható a jelölés.        |
-| **3+ pluszos torrentek kiemelése** | Kiemeli a legalább három pozitív visszajelzéssel rendelkező torrenteket.                                                |
+| Funkció                              | Rövid leírás                                                                                                                                                                                            |
+|--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **qBittorrent integráció**           | A torrentek közvetlenül elküldhetők a qBittorrent WebUI-nak a torrentlistából, a lenyíló panelből, a részletező oldalról és poszternézetből. A WebUI címe az infosáv **[qB URL]** linkjén állítható be. |
+| **Lista / poszter nézet**            | A torrentlista egy kattintással klasszikus lista- vagy kártyás poszternézetre váltható; a választott nézetet a script megjegyzi.                                                                        |
+| **Poszterkártyák**                   | A kártyákon megjelenhet a borító, kategória, minőség/formátum, IMDb értékelés, méret, seed/leech adatok és feltöltési idő, valamint letöltés-, könyvjelző-, qBittorrent- és „Láttam már” műveletek.     |
+| **Népszerű torrentek kiemelése**     | A pozitív visszajelzések alapján kiemeli a torrenteket. A szükséges `+` jelek minimuma a beállításokban módosítható; alapértelmezés: **3**.                                                             |
+| **„Láttam már” jelölés**             | Filmek jelölhetők a listában dupla kattintással, a részletező oldalon vagy poszternézetben. A jelölt filmek elhalványulnak, a mentett lista pedig külön fülön kezelhető.                                |
+| **Látott filmek Gist-szinkronja**    | A látott filmek IMDb-azonosítóval, címmel és időbélyeggel GitHub Gistbe szinkronizálhatók több böngésző vagy eszköz között.                                                                             |
+| **qBittorrent letöltési előzmények** | A qBittorrentnek elküldött torrenteket a script helyben nyilvántartja, külön **Letöltések** fülön megjeleníti, és Gist használatakor szinkronizálja is.                                                 |
+| **Képek beágyazása**                 | A torrentlista lenyíló leírásában a csatolt és hivatkozott képeket közvetlenül megjeleníti, a támogatott FancyBox működését megtartva.                                                                  |
+| **Reklámok elrejtése**               | A főoldalon és a torrentoldalon ismert reklámelemeket CSS-sel elrejti.                                                                                                                                  |
+| **Köszönetek elrejtése**             | Eltávolítja a köszönetek névlistáját, miközben a megköszönések darabszámát megtartja a leírásban.                                                                                                       |
+| **Dereferer linkek eltávolítása**    | A támogatott dereferer köztes linkeket közvetlen cél-URL-re cseréli, és `nofollow` / `noreferrer` attribútumokat használ.                                                                               |
 
 ### ⚙️ Beállítások
 
-Az infosávban megjelenő **[Beállítások]** menüben minden modul külön kapcsolható. A módosítások mentés után, az oldal újratöltésével lépnek életbe.
+Az infosávban megjelenő **[Beállítások]** menü négy lapra oszlik:
 
-A **qBittorrent integrációhoz** a **[qB URL]** linken add meg a qBittorrent WebUI címét, például:
+- **Általános** – qBittorrent, torrentkiemelés és küszöbértéke, „Láttam már”, képbeágyazás, reklámok, köszönetek és dereferer-kezelés
+- **Látott filmek** – a mentett filmek listája, nCore keresési linkkel és törlési lehetőséggel
+- **Letöltések** – a qBittorrenttel hozzáadott torrentek listája azonosítóval és időponttal
+- **Szinkronizáció** – GitHub Gist token, Gist ID, fájlnév és kézi **Szinkronizálás most** művelet
+
+A kapcsolható modulok módosításai mentés után, az oldal újratöltésével lépnek életbe.
+
+### 🔗 qBittorrent beállítása
+
+A **qBittorrent integrációhoz** az infosáv **[qB URL]** linkjén add meg a qBittorrent WebUI címét, például:
 
 ```text
 http://127.0.0.1:8080
 ```
+
+---
+
+### 🔄 Gist szinkronizáció beállítása
+<details>
+
+<summary>Kattints ide a kibontáshoz</summary>
+
+A Gist-szinkronizáció a **látott filmeket** és a **qBittorrenttel hozzáadott torrentek előzményeit** tartja szinkronban több böngésző vagy eszköz között.
+
+#### 📄 Gist adatok
+
+A **Beállítások → Szinkronizáció** fülön add meg:
+
+- **GitHub Gist Token**
+- **Gist ID**
+- **Gist fájlnév** – alapértelmezés: `ncore_seen.json`
+
+Ha mindhárom adat ki van töltve, a szinkronizáció automatikusan aktív. A **Szinkronizálás most** gombbal kézzel is indítható.
+
+A Gistben a script két adathalmazt kezel:
+
+- `movies` – látott filmek IMDb-azonosítóval, címmel, állapottal és időbélyeggel
+- `downloads` – qBittorrentnek elküldött torrentek azonosítóval, címmel és időbélyeggel
+
+</details>
 
 ---
 
