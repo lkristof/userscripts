@@ -2958,6 +2958,8 @@
             const imageLink = document.createElement('a');
             imageLink.className = 'ncore-poster-image-link';
             imageLink.href = detailsUrl;
+            imageLink.target = '_blank';
+            imageLink.rel = 'noopener noreferrer';
             imageLink.title = `${movieTitle || titleText} – részletek`;
 
             if (posterUrl) {
@@ -3031,6 +3033,8 @@
             const title = document.createElement('a');
             title.className = 'ncore-poster-title';
             title.href = detailsUrl;
+            title.target = '_blank';
+            title.rel = 'noopener noreferrer';
             title.textContent = titleText;
             title.title = titleText;
             body.appendChild(title);
