@@ -3434,27 +3434,6 @@
             });
         }
 
-        function adoptOpenPosterDrops() {
-            posterModalRequestId++;
-            let adopted = false;
-
-            for (const row of torrentContainer.querySelectorAll(':scope > .box_torrent')) {
-                const detailsLink = getDetailsLink(row);
-                if (!detailsLink) continue;
-
-                const torrentId = getTorrentId(detailsLink.href);
-                const drop = getPosterDrop(torrentId);
-                if (!drop || !isPosterDropOpen(drop)) continue;
-
-                if (!adopted) {
-                    showPosterModal(row, detailsLink, drop);
-                    adopted = true;
-                } else {
-                    closePosterDrop(drop, true);
-                }
-            }
-        }
-
         function buildPosterCard(row) {
             if (!(row instanceof HTMLElement) || row.querySelector(':scope > .ncore-poster-card')) return;
 
@@ -3766,7 +3745,6 @@
                 buildAllPosterCards(torrentContainer);
                 refreshPosterSeenStates(torrentContainer);
                 document.body.classList.add('ncore-poster-view');
-                adoptOpenPosterDrops();
             } else {
                 restoreAllPosterDrops();
                 document.body.classList.remove('ncore-poster-view');
