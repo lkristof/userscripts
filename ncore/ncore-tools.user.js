@@ -3813,24 +3813,26 @@
         `;
         document.head.appendChild(style);
 
+        const TORRENT_ROW_SELECTOR = '.box_torrent, .box_torrent_mini2';
+
         function highlight(box) {
             const plusEl = box.querySelector('.box_d2');
             if (!plusEl) return;
 
             const plusCount = (plusEl.textContent.match(/\+/g) || []).length;
-            const main = box.querySelector('.box_nagy, .box_nagy2');
+            const main = box.querySelector('.box_nagy, .box_nagy2, .box_nagy_mini');
             if (!main) return;
 
             main.classList.toggle('ncore-plus-highlight', plusCount >= minPlus);
         }
 
-        document.querySelectorAll('.box_torrent').forEach(highlight);
+        document.querySelectorAll(TORRENT_ROW_SELECTOR).forEach(highlight);
         new MutationObserver(mutations => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
                     if (!(node instanceof HTMLElement)) continue;
-                    if (node.matches('.box_torrent')) highlight(node);
-                    node.querySelectorAll?.('.box_torrent').forEach(highlight);
+                    if (node.matches(TORRENT_ROW_SELECTOR)) highlight(node);
+                    node.querySelectorAll?.(TORRENT_ROW_SELECTOR).forEach(highlight);
                 }
             }
         }).observe(document.body, { childList: true, subtree: true });
