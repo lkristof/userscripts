@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.2.4
+// @version      1.2.5
 // @description  nCore segédscript: qBittorrent integráció, lista/poszter torrentnézet, linktisztítás, reklám- és köszönetrejtés, képbeágyazás, látott filmek és torrentkiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
@@ -2120,6 +2120,49 @@
     }
 
     // -------------------------------------------------------------------------
+    // IMDb-alapú keresés a részletező oldalon
+    // -------------------------------------------------------------------------
+
+    function initDetailsImdbSearch() {
+        if (!location.pathname.endsWith('/torrents.php')) return;
+
+        const params = new URLSearchParams(location.search);
+        if (params.get('action') !== 'details') return;
+
+        const otherVersionsLink = document.querySelector(
+            '.torrent_reszletek .torrent_col2 a[onclick*="other_versions"]'
+        );
+        const container = otherVersionsLink?.parentElement;
+        if (!otherVersionsLink || !container || container.querySelector('.ncore-imdb-search-link')) return;
+
+        let imdbId = '';
+
+        const imdbLink = document.querySelector('.torrent_leiras a[href*="imdb.com/title/tt"]');
+        const imdbMatch = imdbLink?.href?.match(/tt(\d+)/i);
+        if (imdbMatch) imdbId = `tt${imdbMatch[1]}`;
+
+        // Tartalék: a „Más verziók” onclick második paramétere is az IMDb numerikus azonosítója.
+        if (!imdbId) {
+            const handler = otherVersionsLink.getAttribute('onclick') || '';
+            const otherVersionsMatch = handler.match(
+                /other_versions\s*\(\s*['"][^'"]+['"]\s*,\s*['"](?:tt)?(\d+)['"]/i
+            );
+            if (otherVersionsMatch) imdbId = `tt${otherVersionsMatch[1]}`;
+        }
+
+        if (!imdbId) return;
+
+        const searchLink = document.createElement('a');
+        searchLink.className = 'ncore-imdb-search-link';
+        searchLink.href = `/torrents.php?mire=${encodeURIComponent(imdbId)}&miben=imdb&tipus=all_own&submit.x=43&submit.y=4&tags=`;
+        searchLink.textContent = 'Keresés';
+        searchLink.title = `${imdbId} keresése IMDb-azonosító alapján`;
+
+        container.appendChild(document.createTextNode(' | '));
+        container.appendChild(searchLink);
+    }
+
+    // -------------------------------------------------------------------------
     // 5) Láttam már
     // -------------------------------------------------------------------------
 
@@ -3921,6 +3964,7 @@
     if (settings.seen || settings.qbittorrent) await seenSync.init();
 
     if (settings.qbittorrent) initQBittorrent();
+    initDetailsImdbSearch();
     await initTorrentViewSwitcher();
     if (settings.highlight) initHighlight();
     if (settings.seen) initSeen();
