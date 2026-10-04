@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nCore – Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      1.2.4
+// @version      1.2.5
 // @description  nCore segédscript: qBittorrent integráció, lista/poszter torrentnézet, linktisztítás, reklám- és köszönetrejtés, képbeágyazás, látott filmek és torrentkiemelés.
 // @icon         https://static.ncore.pro/styles/ncore.ico
 //
@@ -2120,6 +2120,49 @@
     }
 
     // -------------------------------------------------------------------------
+    // IMDb-alapú keresés a részletező oldalon
+    // -------------------------------------------------------------------------
+
+    function initDetailsImdbSearch() {
+        if (!location.pathname.endsWith('/torrents.php')) return;
+
+        const params = new URLSearchParams(location.search);
+        if (params.get('action') !== 'details') return;
+
+        const otherVersionsLink = document.querySelector(
+            '.torrent_reszletek .torrent_col2 a[onclick*="other_versions"]'
+        );
+        const container = otherVersionsLink?.parentElement;
+        if (!otherVersionsLink || !container || container.querySelector('.ncore-imdb-search-link')) return;
+
+        let imdbId = '';
+
+        const imdbLink = document.querySelector('.torrent_leiras a[href*="imdb.com/title/tt"]');
+        const imdbMatch = imdbLink?.href?.match(/tt(\d+)/i);
+        if (imdbMatch) imdbId = `tt${imdbMatch[1]}`;
+
+        // Tartalék: a „Más verziók” onclick második paramétere is az IMDb numerikus azonosítója.
+        if (!imdbId) {
+            const handler = otherVersionsLink.getAttribute('onclick') || '';
+            const otherVersionsMatch = handler.match(
+                /other_versions\s*\(\s*['"][^'"]+['"]\s*,\s*['"](?:tt)?(\d+)['"]/i
+            );
+            if (otherVersionsMatch) imdbId = `tt${otherVersionsMatch[1]}`;
+        }
+
+        if (!imdbId) return;
+
+        const searchLink = document.createElement('a');
+        searchLink.className = 'ncore-imdb-search-link';
+        searchLink.href = `/torrents.php?mire=${encodeURIComponent(imdbId)}&miben=imdb&tipus=all_own&submit.x=43&submit.y=4&tags=`;
+        searchLink.textContent = 'Keresés';
+        searchLink.title = `${imdbId} keresése IMDb-azonosító alapján`;
+
+        container.appendChild(document.createTextNode(' | '));
+        container.appendChild(searchLink);
+    }
+
+    // -------------------------------------------------------------------------
     // 5) Láttam már
     // -------------------------------------------------------------------------
 
@@ -3391,27 +3434,6 @@
             });
         }
 
-        function adoptOpenPosterDrops() {
-            posterModalRequestId++;
-            let adopted = false;
-
-            for (const row of torrentContainer.querySelectorAll(':scope > .box_torrent')) {
-                const detailsLink = getDetailsLink(row);
-                if (!detailsLink) continue;
-
-                const torrentId = getTorrentId(detailsLink.href);
-                const drop = getPosterDrop(torrentId);
-                if (!drop || !isPosterDropOpen(drop)) continue;
-
-                if (!adopted) {
-                    showPosterModal(row, detailsLink, drop);
-                    adopted = true;
-                } else {
-                    closePosterDrop(drop, true);
-                }
-            }
-        }
-
         function buildPosterCard(row) {
             if (!(row instanceof HTMLElement) || row.querySelector(':scope > .ncore-poster-card')) return;
 
@@ -3723,7 +3745,6 @@
                 buildAllPosterCards(torrentContainer);
                 refreshPosterSeenStates(torrentContainer);
                 document.body.classList.add('ncore-poster-view');
-                adoptOpenPosterDrops();
             } else {
                 restoreAllPosterDrops();
                 document.body.classList.remove('ncore-poster-view');
@@ -3770,24 +3791,26 @@
         `;
         document.head.appendChild(style);
 
+        const TORRENT_ROW_SELECTOR = '.box_torrent, .box_torrent_mini2';
+
         function highlight(box) {
             const plusEl = box.querySelector('.box_d2');
             if (!plusEl) return;
 
             const plusCount = (plusEl.textContent.match(/\+/g) || []).length;
-            const main = box.querySelector('.box_nagy, .box_nagy2');
+            const main = box.querySelector('.box_nagy, .box_nagy2, .box_nagy_mini');
             if (!main) return;
 
             main.classList.toggle('ncore-plus-highlight', plusCount >= minPlus);
         }
 
-        document.querySelectorAll('.box_torrent').forEach(highlight);
+        document.querySelectorAll(TORRENT_ROW_SELECTOR).forEach(highlight);
         new MutationObserver(mutations => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
                     if (!(node instanceof HTMLElement)) continue;
-                    if (node.matches('.box_torrent')) highlight(node);
-                    node.querySelectorAll?.('.box_torrent').forEach(highlight);
+                    if (node.matches(TORRENT_ROW_SELECTOR)) highlight(node);
+                    node.querySelectorAll?.(TORRENT_ROW_SELECTOR).forEach(highlight);
                 }
             }
         }).observe(document.body, { childList: true, subtree: true });
@@ -3921,6 +3944,7 @@
     if (settings.seen || settings.qbittorrent) await seenSync.init();
 
     if (settings.qbittorrent) initQBittorrent();
+    initDetailsImdbSearch();
     await initTorrentViewSwitcher();
     if (settings.highlight) initHighlight();
     if (settings.seen) initSeen();
