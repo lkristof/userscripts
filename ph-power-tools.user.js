@@ -5666,8 +5666,7 @@
         const MAX_ITEMS = 120;
 
         // UI
-        const GALLERY_MAX_HEIGHT_PX = 420;
-        const GRID_THUMB_SIZE_PX = 120;
+        const GALLERY_MAX_HEIGHT_PX = 480;
 
         /* ================= GM REQUEST ================= */
 
@@ -5773,63 +5772,318 @@
 
         function injectCssOnce() {
             injectStyleOnce("ph-pt-kek-sh-uploader-style", `
-                #ph-kek-upload .ph-kek-cell { position: relative; }
-                #ph-kek-upload .ph-kek-overlay { opacity: 0; pointer-events: none; }
-                #ph-kek-upload .ph-kek-cell:hover .ph-kek-overlay {
-                    opacity: 1 !important;
-                    pointer-events: auto !important;
+                #ph-kek-upload {
+                    width: 100%; min-width: 0; margin: 16px 0 4px; overflow: hidden;
+                    box-sizing: border-box; border: 1px solid var(--ph-ui-border, rgba(0,0,0,.12));
+                    border-radius: 12px; color: var(--ph-ui-fg, #202124);
+                    background: var(--ph-ui-bg, #fff);
+                    font: inherit; font-size: 12px;
                 }
-                #ph-kek-upload .ph-kek-overlay button.btn {
-                    padding: 2px 6px;
-                    line-height: 1.1;
-                    font-size: 11px;
+                #ph-kek-upload, #ph-kek-upload * { box-sizing: border-box; }
+                #ph-kek-upload button, #ph-kek-upload input { font: inherit; }
+                #ph-kek-upload button { cursor: pointer; }
+                #ph-kek-upload button:disabled { opacity: .55; cursor: not-allowed; }
+                #ph-kek-upload button:focus-visible,
+                #ph-kek-upload a:focus-visible { outline: 2px solid var(--ph-ui-accent, #4f7fb2); outline-offset: 2px; }
+                #ph-kek-upload [hidden] { display: none !important; }
+
+                #ph-kek-upload .ph-kek-top {
+                    display: flex; align-items: center; gap: 10px; min-width: 0;
+                    padding: 11px 13px; border-bottom: 1px solid var(--ph-ui-border, rgba(0,0,0,.12));
+                    background: color-mix(in srgb, var(--ph-ui-bg, #fff) 94%, var(--ph-ui-fg, #222));
                 }
-                #ph-kek-upload #ph-kek-sync-badge {
-                    font-size: 12px;
-                    padding: 2px 6px;
-                    border-radius: 10px;
-                    background: rgba(0,0,0,0.06);
+                #ph-kek-upload .ph-kek-brand-mark {
+                    flex: 0 0 32px; width: 32px; height: 32px; display: grid; place-items: center;
+                    color: var(--ph-ui-accent, #4f7fb2);
+                    background: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 14%, transparent);
+                    border-radius: 9px; font-size: 15px;
                 }
-                #ph-kek-sync-badge:empty { display: none; }
+                #ph-kek-upload .ph-kek-top-copy { min-width: 0; flex: 1 1 auto; }
+                #ph-kek-upload .ph-kek-title {
+                    display: block; margin: 0; font-size: 13px; line-height: 1.25;
+                    font-weight: 750; color: var(--ph-ui-fg, #202124);
+                }
+                #ph-kek-upload .ph-kek-subtitle {
+                    display: block; margin-top: 3px; color: var(--ph-ui-muted, #6b7280);
+                    font-size: 10.5px; line-height: 1.35;
+                }
+                #ph-kek-upload .ph-kek-section-body { padding: 12px 13px; }
+                #ph-kek-upload .ph-kek-upload-row {
+                    position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+                    align-items: stretch; gap: 9px;
+                }
+                #ph-kek-upload .ph-kek-drop {
+                    position: relative; width: 100%; min-width: 0; min-height: 66px;
+                    margin: 0 !important; padding: 10px;
+                    display: flex; align-items: center; gap: 10px; text-align: left;
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                    border: 1px dashed color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 42%, var(--ph-ui-border, #ddd));
+                    border-radius: 9px; cursor: pointer; touch-action: manipulation;
+                    transition: background 150ms ease, border-color 150ms ease;
+                }
+                #ph-kek-upload .ph-kek-drop:hover,
+                #ph-kek-upload .ph-kek-drop:focus-within,
+                #ph-kek-upload .ph-kek-drop.is-dragover {
+                    background: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 9%, var(--ph-ui-bg, #fff));
+                    border-color: var(--ph-ui-accent, #4f7fb2);
+                }
+                #ph-kek-upload .ph-kek-drop:focus-within { outline: 2px solid var(--ph-ui-accent, #4f7fb2); outline-offset: 2px; }
+                #ph-kek-upload .ph-kek-drop.is-busy { opacity: .65; }
+                /* Valódi, közvetlenül megnyomható fájlválasztó a dropzóna felett.
+                   Nincs showPicker()/programozott click(): Brave-ben is natív kattintás. */
+                #ph-kek-upload .ph-kek-file-input {
+                    position: absolute !important; inset: 0 !important; z-index: 2;
+                    display: block !important; width: 100% !important; height: 100% !important;
+                    padding: 0 !important; margin: 0 !important; border: 0 !important;
+                    opacity: 0 !important; cursor: pointer; pointer-events: auto !important;
+                }
+                #ph-kek-upload .ph-kek-pick-icon {
+                    flex: 0 0 36px; width: 36px; height: 36px; display: grid; place-items: center;
+                    border: 1px solid var(--ph-ui-border, #ddd); border-radius: 9px;
+                    background: var(--ph-ui-bg, #fff); color: var(--ph-ui-accent, #4f7fb2); font-size: 15px;
+                }
+                #ph-kek-upload .ph-kek-file-copy { display: block; min-width: 0; flex: 1 1 auto; }
+                #ph-kek-upload .ph-kek-file-label {
+                    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                    font-size: 12px; font-weight: 700; color: var(--ph-ui-fg, #202124);
+                }
+                #ph-kek-upload .ph-kek-file-hint {
+                    display: block; margin-top: 3px; font-size: 10.5px;
+                    color: var(--ph-ui-muted, #6b7280); line-height: 1.35;
+                }
+                #ph-kek-upload .ph-kek-primary {
+                    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+                    min-height: 40px; min-width: 118px; padding: 9px 12px;
+                    border: 1px solid var(--ph-ui-accent, #4f7fb2); border-radius: 8px;
+                    color: var(--ph-ui-accent-fg, #fff); background: var(--ph-ui-accent, #4f7fb2);
+                    font-size: 11.5px; font-weight: 700; line-height: 1.3;
+                    transition: filter 140ms ease, transform 140ms ease;
+                }
+                #ph-kek-upload .ph-kek-primary:not(:disabled):hover { filter: brightness(1.08); }
+                #ph-kek-upload .ph-kek-primary:not(:disabled):active { transform: scale(.985); }
+                #ph-kek-upload .ph-kek-status {
+                    margin-top: 9px; padding: 8px 10px; border-radius: 8px;
+                    border: 1px solid var(--ph-ui-border, #ddd);
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                    color: var(--ph-ui-muted, #6b7280); font-size: 11px;
+                    line-height: 1.4; overflow-wrap: anywhere;
+                }
+                #ph-kek-upload .ph-kek-status:empty { display: none; }
+                #ph-kek-upload .ph-kek-status[data-tone="success"] {
+                    color: #26865b; background: color-mix(in srgb, #26865b 9%, var(--ph-ui-bg, #fff));
+                    border-color: color-mix(in srgb, #26865b 27%, var(--ph-ui-border, #ddd));
+                }
+                #ph-kek-upload .ph-kek-status[data-tone="error"] {
+                    color: #d34f4f; background: color-mix(in srgb, #d34f4f 9%, var(--ph-ui-bg, #fff));
+                    border-color: color-mix(in srgb, #d34f4f 28%, var(--ph-ui-border, #ddd));
+                }
+                #ph-kek-upload .ph-kek-gallery-section {
+                    border-top: 1px solid var(--ph-ui-border, #ddd);
+                }
+                #ph-kek-upload .ph-kek-gallery-head {
+                    display: flex; flex-wrap: wrap; align-items: center;
+                    justify-content: space-between; gap: 8px; padding: 10px 13px;
+                    border-bottom: 1px solid var(--ph-ui-border, #ddd);
+                    background: color-mix(in srgb, var(--ph-ui-bg, #fff) 96%, var(--ph-ui-fg, #222));
+                }
+                #ph-kek-upload .ph-kek-gallery-heading { display: flex; align-items: center; gap: 7px; min-width: 0; }
+                #ph-kek-upload .ph-kek-gallery-heading strong {
+                    font-size: 12px; color: var(--ph-ui-fg, #202124);
+                }
+                #ph-kek-upload .ph-kek-count {
+                    min-width: 24px; padding: 2px 6px; border-radius: 99px; text-align: center;
+                    color: var(--ph-ui-accent, #4f7fb2);
+                    background: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 13%, transparent);
+                    font-weight: 750; font-size: 10.5px;
+                }
+                #ph-kek-upload .ph-kek-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+                #ph-kek-upload .ph-kek-tabs {
+                    display: flex; align-items: center; gap: 2px; padding: 3px;
+                    border: 1px solid var(--ph-ui-border, #ddd);
+                    border-radius: 8px; background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                }
+                #ph-kek-upload .ph-kek-tab {
+                    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+                    min-height: 29px; padding: 5px 9px; border: 0; border-radius: 6px;
+                    background: transparent; color: var(--ph-ui-muted, #6b7280);
+                    font-size: 11px; font-weight: 650; line-height: 1.2;
+                }
+                #ph-kek-upload .ph-kek-tab[aria-pressed="true"] {
+                    background: var(--ph-ui-accent, #4f7fb2);
+                    color: var(--ph-ui-accent-fg, #fff);
+                }
+                #ph-kek-upload .ph-kek-sync-badge {
+                    display: inline-flex; align-items: center; gap: 5px;
+                    padding: 5px 7px; border: 1px solid var(--ph-ui-border, #ddd);
+                    border-radius: 7px; color: var(--ph-ui-muted, #6b7280);
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                    font-size: 10.5px; white-space: nowrap;
+                }
+                #ph-kek-upload .ph-kek-sync-badge[data-mode="cloud"] { color: var(--ph-ui-accent, #4f7fb2); }
+                #ph-kek-upload .ph-kek-toolbar-btn {
+                    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+                    min-height: 35px; padding: 6px 9px;
+                    border: 1px solid var(--ph-ui-border, #ddd); border-radius: 8px;
+                    color: var(--ph-ui-fg, #202124);
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                    font-size: 11px; font-weight: 650;
+                }
+                #ph-kek-upload .ph-kek-toolbar-btn:hover { color: var(--ph-ui-accent, #4f7fb2); border-color: var(--ph-ui-accent, #4f7fb2); }
+                #ph-kek-upload .ph-kek-toolbar-btn.is-danger:hover { color: #d34f4f; border-color: #d34f4f; }
+                #ph-kek-upload .ph-kek-grid {
+                    display: grid; grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
+                    align-content: start; gap: 9px; max-height: ${GALLERY_MAX_HEIGHT_PX}px;
+                    padding: 12px; overflow-y: auto; overscroll-behavior-y: auto;
+                    scrollbar-width: thin;
+                }
+                #ph-kek-upload .ph-kek-cell {
+                    min-width: 0; overflow: hidden;
+                    border: 1px solid var(--ph-ui-border, #ddd); border-radius: 9px;
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                }
+                #ph-kek-upload .ph-kek-thumb-link {
+                    display: block; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;
+                    background: color-mix(in srgb, var(--ph-ui-muted, #777) 10%, var(--ph-ui-bg, #fff));
+                }
+                #ph-kek-upload .ph-kek-thumb-link img {
+                    display: block; width: 100%; height: 100%; object-fit: cover;
+                    transition: transform 170ms ease;
+                }
+                #ph-kek-upload .ph-kek-cell:hover .ph-kek-thumb-link img { transform: scale(1.035); }
+                #ph-kek-upload .ph-kek-card-name {
+                    display: block; padding: 5px 6px 4px;
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                    color: var(--ph-ui-muted, #6b7280); font-size: 10px;
+                }
+                #ph-kek-upload .ph-kek-actions {
+                    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+                    gap: 3px; padding: 4px; border-top: 1px solid var(--ph-ui-border, #ddd);
+                }
+                #ph-kek-upload .ph-kek-action-btn {
+                    display: inline-flex; align-items: center; justify-content: center;
+                    width: 100%; min-width: 0; height: 32px; padding: 0;
+                    border: 1px solid transparent; border-radius: 6px;
+                    color: var(--ph-ui-muted, #6b7280);
+                    background: var(--ph-ui-bg, #fff); font-size: 12px;
+                }
+                #ph-kek-upload .ph-kek-action-btn:hover,
+                #ph-kek-upload .ph-kek-action-btn:focus-visible {
+                    color: var(--ph-ui-accent, #4f7fb2);
+                    border-color: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 33%, transparent);
+                    background: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 12%, var(--ph-ui-bg, #fff));
+                }
+                #ph-kek-upload .ph-kek-action-btn.is-danger:hover,
+                #ph-kek-upload .ph-kek-action-btn.is-danger:focus-visible {
+                    color: #d34f4f; border-color: color-mix(in srgb, #d34f4f 40%, transparent);
+                    background: color-mix(in srgb, #d34f4f 10%, var(--ph-ui-bg, #fff));
+                }
+                #ph-kek-upload .ph-kek-list {
+                    display: grid; gap: 6px; align-content: start;
+                    max-height: ${GALLERY_MAX_HEIGHT_PX}px; overflow-y: auto;
+                    padding: 10px 12px; overscroll-behavior-y: auto; scrollbar-width: thin;
+                }
+                #ph-kek-upload .ph-kek-list-row {
+                    display: grid; grid-template-columns: 54px minmax(0, 1fr) auto;
+                    align-items: center; gap: 9px; padding: 7px;
+                    border: 1px solid var(--ph-ui-border, #ddd); border-radius: 9px;
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045)); min-width: 0;
+                }
+                #ph-kek-upload .ph-kek-list-thumb { display: block; width: 54px; height: 54px; border-radius: 6px; overflow: hidden; }
+                #ph-kek-upload .ph-kek-list-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
+                #ph-kek-upload .ph-kek-list-meta { min-width: 0; }
+                #ph-kek-upload .ph-kek-list-name {
+                    display: block; font-size: 11.5px; font-weight: 700;
+                    color: var(--ph-ui-fg, #202124);
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                }
+                #ph-kek-upload .ph-kek-list-url,
+                #ph-kek-upload .ph-kek-list-extra {
+                    display: block; margin-top: 3px; font-size: 10.5px;
+                    color: var(--ph-ui-muted, #6b7280);
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                }
+                #ph-kek-upload .ph-kek-list-actions { display: flex; align-items: center; gap: 4px; }
+                #ph-kek-upload .ph-kek-list-actions .ph-kek-action-btn { width: 34px; height: 34px; }
+                #ph-kek-upload .ph-kek-empty {
+                    margin: 12px; padding: 20px 10px; text-align: center;
+                    border: 1px dashed var(--ph-ui-border, #ddd); border-radius: 9px;
+                    color: var(--ph-ui-muted, #6b7280);
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                    font-size: 11px; line-height: 1.55;
+                }
+                #ph-kek-upload .ph-kek-empty .fas {
+                    display: block; margin-bottom: 8px; font-size: 20px;
+                    color: var(--ph-ui-accent, #4f7fb2); opacity: .75;
+                }
+                #ph-kek-upload .ph-kek-empty strong { display: block; color: var(--ph-ui-fg, #202124); font-size: 12px; }
+                #ph-kek-upload .ph-kek-key-guide {
+                    padding: 13px; color: var(--ph-ui-fg, #202124);
+                    font-size: 11.5px; line-height: 1.65;
+                }
+                #ph-kek-upload .ph-kek-key-guide p { margin: 0 0 9px; }
+                #ph-kek-upload .ph-kek-key-guide ol { margin: 0; padding-left: 20px; }
+                #ph-kek-upload .ph-kek-key-guide a { color: var(--ph-ui-accent, #4f7fb2); }
+                #ph-kek-upload .ph-kek-key-guide .ph-kek-guide-tip {
+                    display: block; margin-top: 10px; color: var(--ph-ui-muted, #6b7280);
+                }
+                @media (max-width: 640px) {
+                    #ph-kek-upload .ph-kek-grid {
+                        grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding: 9px;
+                    }
+                    #ph-kek-upload .ph-kek-gallery-head { padding: 9px; }
+                    #ph-kek-upload .ph-kek-section-body { padding: 10px; }
+                    #ph-kek-upload .ph-kek-list { padding: 8px; }
+                }
+                @media (max-width: 520px) {
+                    #ph-kek-upload .ph-kek-upload-row { grid-template-columns: minmax(0, 1fr); }
+                    #ph-kek-upload .ph-kek-primary { width: 100%; min-height: 39px; }
+                    #ph-kek-upload .ph-kek-tools { width: 100%; justify-content: space-between; }
+                    #ph-kek-upload .ph-kek-tab { min-width: 37px; padding-inline: 7px; }
+                    #ph-kek-upload .ph-kek-tab-label,
+                    #ph-kek-upload .ph-kek-toolbar-label { display: none; }
+                    #ph-kek-upload .ph-kek-toolbar-btn { width: 36px; min-width: 36px; padding: 0; }
+                    #ph-kek-upload .ph-kek-sync-badge { margin-left: auto; }
+                    #ph-kek-upload .ph-kek-toolbar-btn { min-height: 35px; }
+                    #ph-kek-upload .ph-kek-list-row { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 6px; padding: 6px; }
+                    #ph-kek-upload .ph-kek-list-thumb { width: 44px; height: 44px; }
+                    #ph-kek-upload .ph-kek-list-actions { gap: 2px; }
+                    #ph-kek-upload .ph-kek-list-actions .ph-kek-action-btn { width: 29px; height: 34px; }
+                }
+                @media (max-width: 360px) {
+                    #ph-kek-upload .ph-kek-grid { gap: 5px; padding: 6px; }
+                    #ph-kek-upload .ph-kek-actions { padding: 3px; gap: 2px; }
+                    #ph-kek-upload .ph-kek-action-btn { height: 31px; }
+                    #ph-kek-upload .ph-kek-top { padding: 9px; }
+                    #ph-kek-upload .ph-kek-subtitle { font-size: 10px; }
+                    #ph-kek-upload .ph-kek-list-extra { display: none; }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    #ph-kek-upload .ph-kek-thumb-link img,
+                    #ph-kek-upload .ph-kek-primary,
+                    #ph-kek-upload .ph-kek-drop { transition: none; }
+                }
             `);
         }
 
-        function updateSyncBadge() {
-            const el = document.getElementById("ph-kek-sync-badge");
+        function updateSyncBadge(wrapper = document) {
+            const el = wrapper.querySelector("#ph-kek-sync-badge");
             if (!el) return;
-
-            if (ENABLE_GIST_SYNC) {
-                el.textContent = "☁️ Cloud";
-                el.style.color = "green";
-            } else {
-                el.textContent = "💾 Local";
-                el.style.color = "gray";
-            }
+            el.dataset.mode = ENABLE_GIST_SYNC ? "cloud" : "local";
+            el.innerHTML = ENABLE_GIST_SYNC
+                ? '<span class="fas fa-cloud" aria-hidden="true"></span><span>Gist aktív</span>'
+                : '<span class="fas fa-save" aria-hidden="true"></span><span>Helyi mentés</span>';
+            el.title = ENABLE_GIST_SYNC ? "Gist-szinkronizálás bekapcsolva" : "A galéria ezen az eszközön tárolódik";
         }
 
         function setActiveTab(wrapper, tab) {
-            const btnGrid = wrapper.querySelector("#ph-kek-tab-grid");
-            const btnList = wrapper.querySelector("#ph-kek-tab-list");
+            const isGrid = tab !== "list";
+            wrapper.dataset.activeTab = isGrid ? "grid" : "list";
+            wrapper.querySelector("#ph-kek-tab-grid")?.setAttribute("aria-pressed", String(isGrid));
+            wrapper.querySelector("#ph-kek-tab-list")?.setAttribute("aria-pressed", String(!isGrid));
             const viewGrid = wrapper.querySelector("#ph-kek-view-grid");
             const viewList = wrapper.querySelector("#ph-kek-view-list");
-
-            wrapper.dataset.activeTab = tab;
-
-            if (tab === "grid") {
-                btnGrid.classList.add("btn-secondary");
-                btnGrid.classList.remove("btn-light");
-                btnList.classList.add("btn-light");
-                btnList.classList.remove("btn-secondary");
-                viewGrid.style.display = "block";
-                viewList.style.display = "none";
-            } else {
-                btnList.classList.add("btn-secondary");
-                btnList.classList.remove("btn-light");
-                btnGrid.classList.add("btn-light");
-                btnGrid.classList.remove("btn-secondary");
-                viewList.style.display = "block";
-                viewGrid.style.display = "none";
-            }
+            if (viewGrid) viewGrid.hidden = !isGrid;
+            if (viewList) viewList.hidden = isGrid;
         }
 
         const RESET_KEY = KEYS.KEK.GALLERY_RESET_TS;
@@ -5859,283 +6113,380 @@
             }
         }
 
+        function formatKekFileSize(bytes) {
+            const size = Number(bytes);
+            if (!Number.isFinite(size) || size < 0) return "";
+            if (size < 1024) return `${Math.round(size)} B`;
+            if (size < 1024 * 1024) return `${(size / 1024).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} KB`;
+            return `${(size / (1024 * 1024)).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} MB`;
+        }
+
+        function makeKekAction(item, action, icon, label) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `ph-kek-action-btn${action === "delete" ? " is-danger" : ""}`;
+            button.dataset.action = action;
+            button.dataset.url = item.url;
+            button.title = label;
+            button.setAttribute("aria-label", `${label}: ${item.originalName || item.filename || "kép"}`);
+            button.innerHTML = `<span class="fas ${icon}" aria-hidden="true"></span>`;
+            return button;
+        }
+
         function renderGallery(wrapper) {
             applyGalleryResetIfNeeded();
             if (!wrapper) return;
 
             const items = loadGallery();
-
-            const emptyGrid = wrapper.querySelector("#ph-kek-empty-grid");
-            const emptyList = wrapper.querySelector("#ph-kek-empty-list");
             const gridEl = wrapper.querySelector("#ph-kek-grid");
             const listEl = wrapper.querySelector("#ph-kek-list");
+            const emptyGrid = wrapper.querySelector("#ph-kek-empty-grid");
+            const emptyList = wrapper.querySelector("#ph-kek-empty-list");
+            const count = wrapper.querySelector("#ph-kek-count");
+            if (!gridEl || !listEl) return;
 
-            gridEl.innerHTML = "";
-            listEl.innerHTML = "";
+            gridEl.replaceChildren();
+            listEl.replaceChildren();
+            if (count) count.textContent = String(items.length);
+            if (emptyGrid) emptyGrid.hidden = items.length > 0;
+            if (emptyList) emptyList.hidden = items.length > 0;
+            if (!items.length) return;
 
-            if (!items.length) {
-                emptyGrid.style.display = "block";
-                emptyList.style.display = "block";
-                return;
-            }
-            emptyGrid.style.display = "none";
-            emptyList.style.display = "none";
+            const gridFragment = document.createDocumentFragment();
+            const listFragment = document.createDocumentFragment();
 
-            // GRID
-            for (const it of items) {
-                const cell = document.createElement("div");
+            for (const item of items) {
+                if (!item || typeof item.url !== "string" || !/^https?:\/\//i.test(item.url)) continue;
+                const name = item.originalName || item.filename || item.url.split("/").pop() || "Kép";
+
+                const cell = document.createElement("article");
                 cell.className = "ph-kek-cell";
-                cell.style.width = `${GRID_THUMB_SIZE_PX}px`;
-                cell.style.height = `${GRID_THUMB_SIZE_PX}px`;
-                cell.style.borderRadius = "8px";
-                cell.style.overflow = "hidden";
-                cell.style.border = "1px solid rgba(0,0,0,0.15)";
-                cell.style.background = "rgba(0,0,0,0.02)";
-
-                const a = document.createElement("a");
-                a.href = it.url;
-                a.target = "_blank";
-                a.rel = "noopener";
-                a.title = "Megnyitás új lapon";
-                a.style.display = "block";
-                a.style.width = "100%";
-                a.style.height = "100%";
-                a.style.position = "absolute";
-                a.style.inset = "0";
-                a.style.zIndex = "1";
+                const link = document.createElement("a");
+                link.className = "ph-kek-thumb-link";
+                link.href = item.url;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+                link.title = "Kép megnyitása új lapon";
 
                 const img = document.createElement("img");
-                img.src = it.url;
-                img.alt = it.filename || "";
+                img.src = item.url;
+                img.alt = name;
                 img.loading = "lazy";
-                img.style.width = "100%";
-                img.style.height = "100%";
-                img.style.objectFit = "cover";
-                a.appendChild(img);
+                img.decoding = "async";
+                link.appendChild(img);
 
-                const overlay = document.createElement("div");
-                overlay.className = "ph-kek-overlay";
-                overlay.style.position = "absolute";
-                overlay.style.left = "0";
-                overlay.style.right = "0";
-                overlay.style.bottom = "0";
-                overlay.style.padding = "8px";
-                overlay.style.display = "flex";
-                overlay.style.gap = "8px";
-                overlay.style.justifyContent = "center";
-                overlay.style.background = "rgba(0,0,0,0.55)";
-                overlay.style.transition = "opacity 120ms ease";
-                overlay.style.zIndex = "2";
+                const caption = document.createElement("span");
+                caption.className = "ph-kek-card-name";
+                caption.textContent = name;
+                caption.title = name;
 
-                const makeMiniBtn = (action, title, innerHtml, className) => {
-                    const b = document.createElement("button");
-                    b.type = "button";
-                    b.className = className;
-                    b.dataset.action = action;
-                    b.dataset.url = it.url;
-                    b.title = title;
-                    b.innerHTML = innerHtml;
-                    return b;
-                };
+                const actions = document.createElement("div");
+                actions.className = "ph-kek-actions";
+                actions.append(
+                    makeKekAction(item, "insert-image", "fa-image", "Kép beszúrása"),
+                    makeKekAction(item, "insert-link", "fa-link", "Képlink beszúrása"),
+                    makeKekAction(item, "delete", "fa-trash", "Kép törlése")
+                );
+                cell.append(link, caption, actions);
+                gridFragment.appendChild(cell);
 
-                overlay.appendChild(makeMiniBtn("insert-image", "Kép beszúrás", `<span class="fas fa-image"></span>`, "btn btn-light btn-xs"));
-                overlay.appendChild(makeMiniBtn("insert-link", "Link beszúrás ([kép])", `<span class="fas fa-link"></span>`, "btn btn-light btn-xs"));
-                overlay.appendChild(makeMiniBtn("delete", "Törlés", `<span class="fas fa-trash"></span>`, "btn btn-light btn-xs"));
-
-                cell.appendChild(a);
-                cell.appendChild(overlay);
-                gridEl.appendChild(cell);
-            }
-
-            // LISTA
-            for (const it of items) {
-                const row = document.createElement("div");
-                row.style.display = "flex";
-                row.style.alignItems = "center";
-                row.style.gap = "10px";
-                row.style.padding = "6px 0";
-                row.style.borderTop = "1px solid rgba(0,0,0,0.08)";
-
+                const row = document.createElement("article");
+                row.className = "ph-kek-list-row";
                 const thumbLink = document.createElement("a");
-                thumbLink.href = it.url;
+                thumbLink.className = "ph-kek-list-thumb";
+                thumbLink.href = item.url;
                 thumbLink.target = "_blank";
-                thumbLink.rel = "noopener";
-                thumbLink.title = "Megnyitás új lapon";
-
+                thumbLink.rel = "noopener noreferrer";
+                thumbLink.title = "Kép megnyitása új lapon";
                 const thumb = document.createElement("img");
-                thumb.src = it.url;
-                thumb.alt = it.filename || "";
+                thumb.src = item.url;
+                thumb.alt = name;
                 thumb.loading = "lazy";
-                thumb.style.width = "56px";
-                thumb.style.height = "56px";
-                thumb.style.objectFit = "cover";
-                thumb.style.borderRadius = "4px";
-                thumb.style.border = "1px solid rgba(0,0,0,0.15)";
+                thumb.decoding = "async";
                 thumbLink.appendChild(thumb);
 
                 const meta = document.createElement("div");
-                meta.style.flex = "1";
-                meta.style.minWidth = "0";
+                meta.className = "ph-kek-list-meta";
+                const rowName = document.createElement("span");
+                rowName.className = "ph-kek-list-name";
+                rowName.textContent = name;
+                rowName.title = name;
+                const rowUrl = document.createElement("span");
+                rowUrl.className = "ph-kek-list-url";
+                rowUrl.textContent = item.url;
+                rowUrl.title = item.url;
+                meta.append(rowName, rowUrl);
 
-                const title = document.createElement("div");
-                title.textContent = it.originalName || it.filename || it.url.split("/").pop();
-                title.style.fontSize = "12px";
-                title.style.fontWeight = "600";
-                title.style.whiteSpace = "nowrap";
-                title.style.overflow = "hidden";
-                title.style.textOverflow = "ellipsis";
-                title.title = it.url;
+                const details = [formatKekFileSize(item.size)];
+                const createdDate = Date.parse(item.createdAt || "");
+                if (Number.isFinite(createdDate)) details.push(new Date(createdDate).toLocaleDateString("hu-HU"));
+                if (details.filter(Boolean).length) {
+                    const extra = document.createElement("span");
+                    extra.className = "ph-kek-list-extra";
+                    extra.textContent = details.filter(Boolean).join(" · ");
+                    meta.appendChild(extra);
+                }
 
-                const urlLine = document.createElement("div");
-                urlLine.textContent = it.url;
-                urlLine.style.fontSize = "11px";
-                urlLine.style.color = "#666";
-                urlLine.style.whiteSpace = "nowrap";
-                urlLine.style.overflow = "hidden";
-                urlLine.style.textOverflow = "ellipsis";
-                urlLine.title = it.url;
+                const rowActions = document.createElement("div");
+                rowActions.className = "ph-kek-list-actions";
+                rowActions.append(
+                    makeKekAction(item, "insert-image", "fa-image", "Kép beszúrása"),
+                    makeKekAction(item, "insert-link", "fa-link", "Képlink beszúrása"),
+                    makeKekAction(item, "delete", "fa-trash", "Kép törlése")
+                );
+                row.append(thumbLink, meta, rowActions);
+                listFragment.appendChild(row);
+            }
 
-                meta.appendChild(title);
-                meta.appendChild(urlLine);
+            gridEl.appendChild(gridFragment);
+            listEl.appendChild(listFragment);
+        }
 
-                const actions = document.createElement("div");
-                actions.style.display = "flex";
-                actions.style.gap = "6px";
-                actions.style.flexWrap = "wrap";
-                actions.style.justifyContent = "flex-end";
+        const selectedKekFiles = new WeakMap();
 
-                const mkBtn = (action, icon, label) => {
-                    const b = document.createElement("button");
-                    b.type = "button";
-                    b.className = "btn btn-light btn-xs my-1";
-                    b.dataset.action = action;
-                    b.dataset.url = it.url;
-                    b.innerHTML = `<span class="fas ${icon}"></span> <span class="d-none d-md-inline-block">${label}</span>`;
-                    return b;
-                };
+        function getKekSelectedFile(wrapper) {
+            return (wrapper && selectedKekFiles.get(wrapper)) || null;
+        }
 
-                actions.appendChild(mkBtn("insert-image", "fa-image", "Beszúrás"));
-                actions.appendChild(mkBtn("insert-link", "fa-link", "Link beszúrás"));
-                actions.appendChild(mkBtn("delete", "fa-trash", "Törlés"));
+        function refreshKekFileSelection(wrapper) {
+            if (!wrapper) return;
+            const file = getKekSelectedFile(wrapper);
+            const label = wrapper.querySelector("#ph-kek-file-label");
+            const hint = wrapper.querySelector("#ph-kek-file-hint");
+            const button = wrapper.querySelector("#ph-kek-upload-btn");
+            const drop = wrapper.querySelector(".ph-kek-drop");
+            const busy = wrapper.dataset.uploading === "true";
+            if (label) { label.textContent = file ? file.name : "Kép kiválasztása"; label.title = file?.name || ""; }
+            if (hint) hint.textContent = file
+                ? [formatKekFileSize(file.size), "Kattints a cseréhez"].filter(Boolean).join(" · ")
+                : "Kattints ide vagy húzz ide egy képet · max. 5 MB";
+            if (button) button.disabled = busy || !file;
+            if (drop) { drop.classList.toggle("is-busy", busy); drop.dataset.hasFile = file ? "true" : "false"; }
+        }
 
-                row.appendChild(thumbLink);
-                row.appendChild(meta);
-                row.appendChild(actions);
+        function setKekUploading(wrapper, busy) {
+            if (!wrapper) return;
+            wrapper.dataset.uploading = busy ? "true" : "false";
+            const input = wrapper.querySelector("#ph-kek-file");
+            if (input) input.disabled = busy;
+            const buttonText = wrapper.querySelector("#ph-kek-upload-btn .ph-kek-upload-button-label");
+            const buttonIcon = wrapper.querySelector("#ph-kek-upload-btn .fas");
+            if (buttonText) buttonText.textContent = busy ? "Feltöltés…" : "Feltöltés";
+            if (buttonIcon) buttonIcon.className = busy ? "fas fa-spinner fa-spin" : "fas fa-cloud-upload-alt";
+            refreshKekFileSelection(wrapper);
+        }
 
-                listEl.appendChild(row);
+        function bindKekPickerGlobalEvents() {
+            const isKekFileInput = target => !!target?.matches?.("#ph-kek-upload #ph-kek-file");
+
+            window.addEventListener("click", e => {
+                const drop = e.target?.closest?.("#ph-kek-upload .ph-kek-drop");
+                if (!drop) return;
+                // A label/input natív kattintás marad: nincs preventDefault,
+                // input.click vagy showPicker, tehát nincs elvesző aktiváció.
+                e.stopPropagation();
+            }, true);
+
+            const rememberPickedFile = e => {
+                if (!isKekFileInput(e.target)) return;
+                e.stopPropagation();
+                const input = e.target;
+                const wrapper = input.closest("#ph-kek-upload");
+                if (!wrapper || wrapper.dataset.uploading === "true") return;
+                const file = input.files?.[0];
+                if (!file) return; // Még nincs fájl, vagy a választást megszakították.
+
+                selectedKekFiles.set(wrapper, file);
+                input.value = "";
+                refreshKekFileSelection(wrapper);
+                setStatus(wrapper, "");
+            };
+            for (const type of ["input", "change"]) {
+                window.addEventListener(type, rememberPickedFile, true);
+            }
+
+            const handleDrag = e => {
+                const drop = e.target?.closest?.("#ph-kek-upload .ph-kek-drop");
+                if (!drop) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const wrapper = drop.closest("#ph-kek-upload");
+                if (!wrapper) return;
+                const busy = wrapper.dataset.uploading === "true";
+                if (e.type === "dragleave") {
+                    if (!drop.contains(e.relatedTarget)) drop.classList.remove("is-dragover");
+                    return;
+                }
+                if (e.type === "dragenter" || e.type === "dragover") {
+                    if (!busy) {
+                        drop.classList.add("is-dragover");
+                        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+                    }
+                    return;
+                }
+                if (e.type !== "drop") return;
+                drop.classList.remove("is-dragover");
+                if (busy) return;
+
+                const file = Array.from(e.dataTransfer?.files || []).find(f =>
+                    f.type?.startsWith("image/") || (!f.type && /\.(jpe?g|png|gif|webp|avif|bmp|svg|heic|heif|tiff?)$/i.test(f.name || ""))
+                );
+                if (!file) {
+                    setStatus(wrapper, "Húzz ide egy képfájlt a fájlkezelőből (például JPG, PNG vagy WebP).", "error");
+                    return;
+                }
+                selectedKekFiles.set(wrapper, file);
+                const input = wrapper.querySelector("#ph-kek-file");
+                if (input) input.value = "";
+                refreshKekFileSelection(wrapper);
+                setStatus(wrapper, "");
+            };
+            for (const type of ["dragenter", "dragover", "dragleave", "drop"]) {
+                window.addEventListener(type, handleDrag, true);
             }
         }
+
+        function bindKekFilePicker(wrapper) {
+            // A file input fölött teljes felületű, natívan kattintható overlay van.
+            // A change/input feldolgozás központilag, capture szakaszban történik.
+            refreshKekFileSelection(wrapper);
+        }
+
+        bindKekPickerGlobalEvents();
 
         function ensureUi(target) {
             if (!target) return null;
             if (target.querySelector("#ph-kek-upload")) return target.querySelector("#ph-kek-upload");
 
             injectCssOnce();
-
-            const wrapper = document.createElement("div");
+            const wrapper = document.createElement("section");
             wrapper.id = "ph-kek-upload";
-            wrapper.style.marginTop = "20px";
-            wrapper.style.paddingTop = "15px";
-            wrapper.style.borderTop = "1px dashed #aaa";
             wrapper.dataset.activeTab = "grid";
+            wrapper.innerHTML = `
+                <header class="ph-kek-top">
+                    <span class="ph-kek-brand-mark" aria-hidden="true"><span class="fas fa-images"></span></span>
+                    <div class="ph-kek-top-copy">
+                        <strong class="ph-kek-title">kek.sh képfeltöltő</strong>
+                        <span class="ph-kek-subtitle">PH Power Tools · Képek feltöltése és beszúrása</span>
+                    </div>
+                </header>
+            `;
 
             if (!hasKekKey()) {
-                wrapper.innerHTML = `
-                    <h6 style="margin-bottom:10px;">Képfeltöltés (kek.sh)</h6>
-                    <div style="
-                        padding: 12px 14px;
-                        border: 1px solid rgba(0,0,0,0.12);
-                        border-radius: 10px;
-                        background: rgba(0,0,0,0.03);
-                        font-size: 13px;
-                        line-height: 1.45;">
-                        <div style="font-weight:700; margin-bottom:6px;">Nincs beállítva kek.sh API kulcs</div>
-                        <div style="margin-bottom:8px;">
-                            1) Regisztrálj itt: 
-                            <a href="https://kek.sh/" target="_blank" rel="noopener noreferrer">kek.sh</a><br>
-                            2) API kulcs: 
-                            <a href="https://kek.sh/settings/api" target="_blank" rel="noopener noreferrer">kek.sh/settings/api</a><br>
-                            3) Állítsd be: <b>PH Power Tools <span class="fas fa-cog"></span> Kulcsok / Szinkron</b> (kek.sh API key)
-                        </div>
-                        <div style="opacity:0.9;">
-                            Ingyenes csomag: <b>5 GB</b> tárhely, <b>1000</b> kép, <b>5 MB/kép</b>.
-                        </div>
+                wrapper.insertAdjacentHTML("beforeend", `
+                    <div class="ph-kek-key-guide">
+                        <p><strong>A képfeltöltéshez kek.sh API-kulcs szükséges.</strong></p>
+                        <ol>
+                            <li>Jelentkezz be a <a href="https://kek.sh/" target="_blank" rel="noopener noreferrer">kek.sh</a> oldalra.</li>
+                            <li>Másold ki az <a href="https://kek.sh/settings/api" target="_blank" rel="noopener noreferrer">API-kulcsodat</a>.</li>
+                            <li>Add meg a <strong>PH Power Tools → Kulcsok és szinkron</strong> ablakban.</li>
+                        </ol>
+                        
+                        </ol>
+                        <span class="ph-kek-guide-tip">
+                            Ingyenes csomag:
+                            <b>5 GB</b> tárhely ·
+                            <b>1000</b> kép ·
+                            <b>5 MB/kép</b>.
+                            <a href="https://kek.sh/pricing"
+                               target="_blank"
+                               rel="noopener noreferrer">
+                                Részletek
+                            </a>
+                        </span>
+                        
+                        <span class="ph-kek-guide-tip">
+                            A kulcs mentése után az oldal újratöltődik,
+                            és megjelenik a feltöltő.
+                        </span>
                     </div>
-                `;
-
+                `);
                 target.appendChild(wrapper);
                 return wrapper;
             }
 
-            wrapper.innerHTML = `
-                <h6 style="margin-bottom:10px;">Külső feltöltés (kek.sh)</h6>
-                <div id="ph-kek-upload-row" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                    <input type="file" id="ph-kek-file" accept="image/*" style="flex: 1 1 260px; min-width: 220px;">
-                    <button id="ph-kek-upload-btn" class="btn btn-secondary btn-sm" type="button" style="flex: 0 0 auto;">
-                        Feltöltés
-                    </button>
-                    <span id="ph-kek-status" style="flex: 1 1 200px; min-width: 180px; font-size:0.8rem;"></span>
-                </div>
-        
-                <div style="margin-top:14px; padding-top:12px; border-top:1px dashed #aaa;">
-                    <div id="ph-kek-gallery-head" style="position: sticky; top: 0; z-index: 2;
-                                padding: 6px 0; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
-                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                            <h6 style="margin:0;">Képeim (kek.sh)</h6>
-                            <div style="display:flex; gap:6px; align-items:center;">
-                                <button type="button" id="ph-kek-tab-grid" class="btn btn-secondary btn-sm">Rács</button>
-                                <button type="button" id="ph-kek-tab-list" class="btn btn-light btn-sm">Lista</button>
-                            </div>
-                        </div>
-        
-                        <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
-                            <div style="display:flex; align-items:center;">
-                                <span id="ph-kek-sync-badge"></span>
-                            </div>
-                            ${ENABLE_GIST_SYNC ? `<button id="ph-kek-sync-now" class="btn btn-light btn-sm">Szinkronizálás</button>` : ``}
-                            <button type="button" class="btn btn-light btn-sm" id="ph-kek-clear">Mind törlése</button>
-                        </div>
+            wrapper.insertAdjacentHTML("beforeend", `
+                <div class="ph-kek-section-body">
+                    <div class="ph-kek-upload-row" id="ph-kek-upload-row">
+                        <label class="ph-kek-drop" title="Válassz egy képfájlt, vagy húzd ide">
+                            <input id="ph-kek-file" class="ph-kek-file-input" type="file" accept="image/*"
+                                   aria-label="Képfájl kiválasztása">
+                            <span class="ph-kek-pick-icon" aria-hidden="true"><span class="fas fa-plus"></span></span>
+                            <span class="ph-kek-file-copy">
+                                <span id="ph-kek-file-label" class="ph-kek-file-label">Kép kiválasztása</span>
+                                <span id="ph-kek-file-hint" class="ph-kek-file-hint">Kattints ide vagy húzz ide egy képet</span>
+                            </span>
+                        </label>
+                        <button id="ph-kek-upload-btn" type="button" class="ph-kek-primary" disabled>
+                            <span class="fas fa-cloud-upload-alt" aria-hidden="true"></span>
+                            <span class="ph-kek-upload-button-label">Feltöltés</span>
+                        </button>
                     </div>
-        
+                    <div id="ph-kek-status" class="ph-kek-status" role="status" aria-live="polite"></div>
+                </div>
+                <section class="ph-kek-gallery-section" aria-label="Feltöltött képek">
+                    <header id="ph-kek-gallery-head" class="ph-kek-gallery-head">
+                        <div class="ph-kek-gallery-heading">
+                            <span class="fas fa-images" aria-hidden="true"></span>
+                            <strong>Képeim</strong>
+                            <span id="ph-kek-count" class="ph-kek-count" aria-label="Képek száma">0</span>
+                        </div>
+                        <div class="ph-kek-tools">
+                            <div class="ph-kek-tabs" role="group" aria-label="Galéria nézet">
+                                <button type="button" id="ph-kek-tab-grid" class="ph-kek-tab" aria-pressed="true" title="Rácsnézet">
+                                    <span class="fas fa-th-large" aria-hidden="true"></span><span class="ph-kek-tab-label">Rács</span>
+                                </button>
+                                <button type="button" id="ph-kek-tab-list" class="ph-kek-tab" aria-pressed="false" title="Listanézet">
+                                    <span class="fas fa-list" aria-hidden="true"></span><span class="ph-kek-tab-label">Lista</span>
+                                </button>
+                            </div>
+                            <span id="ph-kek-sync-badge" class="ph-kek-sync-badge"></span>
+                            ${ENABLE_GIST_SYNC ? `
+                                <button type="button" id="ph-kek-sync-now" class="ph-kek-toolbar-btn" title="Galéria szinkronizálása" aria-label="Galéria szinkronizálása">
+                                    <span class="fas fa-sync-alt" aria-hidden="true"></span><span class="ph-kek-toolbar-label">Szinkron</span>
+                                </button>
+                            ` : ``}
+                            <button type="button" id="ph-kek-clear" class="ph-kek-toolbar-btn is-danger"
+                                    title="Összes kép törlése a szerverről és a galériából" aria-label="Összes kép törlése">
+                                <span class="fas fa-trash" aria-hidden="true"></span><span class="ph-kek-toolbar-label">Mind törlése</span>
+                            </button>
+                        </div>
+                    </header>
                     <div id="ph-kek-view-grid">
-                        <div id="ph-kek-empty-grid" style="font-size:12px; color:#666; display:none;">
-                            Nincs elmentett kép. Feltöltés után itt fognak megjelenni.
+                        <div id="ph-kek-empty-grid" class="ph-kek-empty" hidden>
+                            <span class="fas fa-images" aria-hidden="true"></span>
+                            <strong>Még nincs feltöltött kép</strong>
+                            Feltöltés után itt jelennek meg a képeid.
                         </div>
-                        <div id="ph-kek-grid"
-                            style="display:flex; flex-wrap:wrap; gap:12px;
-                                    max-height:${GALLERY_MAX_HEIGHT_PX}px; overflow-y:auto;
-                                    padding-right:6px;">
-                        </div>
+                        <div id="ph-kek-grid" class="ph-kek-grid" aria-label="Képek rácsnézetben"></div>
                     </div>
-        
-                    <div id="ph-kek-view-list" style="display:none;">
-                        <div id="ph-kek-empty-list" style="font-size:12px; color:#666; display:none;">
-                            Nincs elmentett kép. Feltöltés után itt fognak megjelenni.
+                    <div id="ph-kek-view-list" hidden>
+                        <div id="ph-kek-empty-list" class="ph-kek-empty" hidden>
+                            <span class="fas fa-images" aria-hidden="true"></span>
+                            <strong>Még nincs feltöltött kép</strong>
+                            Feltöltés után itt jelennek meg a képeid.
                         </div>
-                        <div id="ph-kek-list"
-                            style="max-height:${GALLERY_MAX_HEIGHT_PX}px; overflow-y:auto; padding-right:6px;">
-                        </div>
+                        <div id="ph-kek-list" class="ph-kek-list" aria-label="Képek listanézetben"></div>
                     </div>
-                </div>
-            `;
+                </section>
+            `);
 
             target.appendChild(wrapper);
-
-            wrapper.querySelector("#ph-kek-tab-grid").addEventListener("click", () => setActiveTab(wrapper, "grid"));
-            wrapper.querySelector("#ph-kek-tab-list").addEventListener("click", () => setActiveTab(wrapper, "list"));
+            bindKekFilePicker(wrapper);
             setActiveTab(wrapper, "grid");
-
             renderGallery(wrapper);
-            updateSyncBadge();
-
+            updateSyncBadge(wrapper);
             return wrapper;
         }
 
-        function setStatus(wrapperOrDoc, text) {
+        function setStatus(wrapperOrDoc, message, tone = "info") {
             const status = (wrapperOrDoc instanceof HTMLElement)
                 ? wrapperOrDoc.querySelector("#ph-kek-status")
                 : document.getElementById("ph-kek-status");
-            if (status) status.textContent = text || "";
+            if (!status) return;
+            status.textContent = message || "";
+            if (message) status.dataset.tone = tone;
+            else status.removeAttribute("data-tone");
         }
 
         function getWrapperFromEvent(e) {
@@ -6147,87 +6498,118 @@
         function handleUpload(e) {
             applyGalleryResetIfNeeded();
             const wrapper = getWrapperFromEvent(e);
-            const fileInput = wrapper?.querySelector("#ph-kek-file");
-
-            if (!fileInput?.files?.length) {
-                alert("Nincs kiválasztott fájl.");
+            if (!wrapper || wrapper.dataset.uploading === "true") return;
+            const fileInput = wrapper.querySelector("#ph-kek-file");
+            const file = getKekSelectedFile(wrapper);
+            if (!file) {
+                setStatus(wrapper, "Előbb válassz ki egy képet.", "error");
+                return;
+            }
+            if (file.type && !file.type.startsWith("image/")) {
+                setStatus(wrapper, "Csak képfájlt lehet feltölteni.", "error");
                 return;
             }
 
-            const file = fileInput.files[0];
-            setStatus(wrapper, "Feltöltés...");
-
             const formData = new FormData();
             formData.append("file", file);
+            setKekUploading(wrapper, true);
+            setStatus(wrapper, "Feltöltés folyamatban…");
 
-            gmRequest({
-                method: "POST",
-                url: "https://kek.sh/api/v1/posts",
-                headers: { "x-kek-auth": KEK_SH_API_KEY },
-                data: formData,
-                onload: async function (res) {
-                    if (res.status < 200 || res.status >= 300) {
-                        setStatus(wrapper, `❌ HTTP ${res.status}`);
-                        return;
-                    }
-
-                    const json = safeJsonParse(res.responseText, null);
-                    if (!json) {
-                        setStatus(wrapper, "❌ JSON parse hiba");
-                        return;
-                    }
-
-                    const url = buildImageUrlFromApi(json);
-                    if (!url) {
-                        setStatus(wrapper, "❌ Nem sikerült URL-t találni");
-                        return;
-                    }
-
-                    await addToGallery({
-                        id: json.id,
-                        token: json.token,
-                        url,
-                        filename: json.filename,
-                        originalName: file.name,
-                        createdAt: json.createdAt || new Date().toISOString(),
-                        size: json.size || file.size || null
-                    });
-
-                    if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
-                        try {
-                            await storage.flush();
-                            setStatus(wrapper, "✅ Feltöltve és Gistbe szinkronizálva");
-                        } catch (err) {
-                            console.error('[PH Power Tools] Gallery upload sync failed:', err);
-                            setStatus(wrapper, `⚠️ Feltöltve, de a Gist-szinkron hibázott: ${err?.message || 'ismeretlen hiba'}`);
+            try {
+                gmRequest({
+                    method: "POST",
+                    url: "https://kek.sh/api/v1/posts",
+                    headers: { "x-kek-auth": KEK_SH_API_KEY },
+                    data: formData,
+                    timeout: 120000,
+                    onprogress: event => {
+                        if (event.lengthComputable && event.total > 0) {
+                            const percent = Math.min(99, Math.round(event.loaded / event.total * 100));
+                            setStatus(wrapper, `Feltöltés: ${percent}%`);
                         }
-                    } else {
-                        setStatus(wrapper, "✅ Feltöltve (helyileg elmentve)");
-                    }
+                    },
+                    onload: async res => {
+                        try {
+                            if (res.status < 200 || res.status >= 300) {
+                                setStatus(wrapper, `Feltöltési hiba (HTTP ${res.status}).`, "error");
+                                return;
+                            }
+                            const json = safeJsonParse(res.responseText, null);
+                            if (!json) {
+                                setStatus(wrapper, "A szerver válasza nem érvényes JSON.", "error");
+                                return;
+                            }
+                            const url = buildImageUrlFromApi(json);
+                            if (!url) {
+                                setStatus(wrapper, "A szerver válaszából hiányzik a kép URL-je.", "error");
+                                return;
+                            }
 
-                    renderGallery(wrapper);
-                    updateSyncBadge();
-                    fileInput.value = "";
-                },
-                onerror: function () {
-                    setStatus(wrapper, "❌ Feltöltési hiba");
-                }
-            });
+                            await addToGallery({
+                                id: json.id,
+                                token: json.token,
+                                url,
+                                filename: json.filename,
+                                originalName: file.name,
+                                createdAt: json.createdAt || new Date().toISOString(),
+                                size: json.size || file.size || null
+                            });
+
+                            if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                                try {
+                                    await storage.flush();
+                                    setStatus(wrapper, "Kép feltöltve, galériába mentve és Gistbe szinkronizálva.", "success");
+                                } catch (error) {
+                                    console.error("[PH Power Tools] Gallery upload sync failed:", error);
+                                    setStatus(wrapper, `A kép feltöltve, de a Gist-szinkron hibázott: ${error?.message || "ismeretlen hiba"}`, "error");
+                                }
+                            } else {
+                                setStatus(wrapper, "Kép sikeresen feltöltve és a galériába mentve.", "success");
+                            }
+
+                            renderGallery(wrapper);
+                            updateSyncBadge(wrapper);
+                            selectedKekFiles.delete(wrapper);
+                            if (fileInput) fileInput.value = "";
+                        } catch (error) {
+                            console.error("[PH Power Tools] kek.sh upload failed:", error);
+                            setStatus(wrapper, `Feltöltési vagy mentési hiba: ${error?.message || "ismeretlen hiba"}`, "error");
+                        } finally {
+                            setKekUploading(wrapper, false);
+                        }
+                    },
+                    onerror: () => {
+                        setStatus(wrapper, "Hálózati hiba történt feltöltés közben.", "error");
+                        setKekUploading(wrapper, false);
+                    },
+                    ontimeout: () => {
+                        setStatus(wrapper, "A feltöltés időtúllépés miatt megszakadt.", "error");
+                        setKekUploading(wrapper, false);
+                    },
+                    onabort: () => {
+                        setStatus(wrapper, "A feltöltés megszakadt.", "error");
+                        setKekUploading(wrapper, false);
+                    }
+                });
+            } catch (error) {
+                console.error("[PH Power Tools] kek.sh upload request failed:", error);
+                setStatus(wrapper, `Nem sikerült elindítani a feltöltést: ${error?.message || "ismeretlen hiba"}`, "error");
+                setKekUploading(wrapper, false);
+            }
         }
 
         /* ================= EVENTS ================= */
 
-        document.addEventListener("click", async (e) => {
+        document.addEventListener("click", async e => {
             const wrapper = getWrapperFromEvent(e);
-            if (!wrapper) return;
+            if (!wrapper || !wrapper.contains(e.target)) return;
 
-            const uploadBtn = e.target?.closest?.("#ph-kek-upload-btn");
-            const clearBtn = e.target?.closest?.("#ph-kek-clear");
-            const tabGrid = e.target?.closest?.("#ph-kek-tab-grid");
-            const tabList = e.target?.closest?.("#ph-kek-tab-list");
-            const syncNowBtn = e.target?.closest?.("#ph-kek-sync-now");
-
-            const actionBtn = e.target?.closest?.("#ph-kek-upload button[data-action], #ph-kek-grid button[data-action], #ph-kek-list button[data-action]");
+            const uploadBtn = e.target.closest("#ph-kek-upload-btn");
+            const clearBtn = e.target.closest("#ph-kek-clear");
+            const tabGrid = e.target.closest("#ph-kek-tab-grid");
+            const tabList = e.target.closest("#ph-kek-tab-list");
+            const syncNowBtn = e.target.closest("#ph-kek-sync-now");
+            const actionBtn = e.target.closest("#ph-kek-upload button[data-action]");
 
             if (uploadBtn) {
                 e.preventDefault();
@@ -6236,129 +6618,135 @@
                 return;
             }
 
+            if (tabGrid || tabList) {
+                e.preventDefault();
+                e.stopPropagation();
+                setActiveTab(wrapper, tabGrid ? "grid" : "list");
+                return;
+            }
+
             if (clearBtn) {
-                if (!confirm("Biztos törlöd az ÖSSZES kek.sh képed a szerverről is?")) {
-                    return;
-                }
                 e.preventDefault();
                 e.stopPropagation();
+                if (!confirm("Biztos törlöd az ÖSSZES kek.sh képed a szerverről is?")) return;
+                clearBtn.disabled = true;
+                setStatus(wrapper, "Összes kép törlése a szerverről…");
+                try {
+                    const response = await deleteAllRemotePosts();
+                    if (!response.ok) {
+                        setStatus(wrapper, `Nem sikerült mindent törölni a szerveren (HTTP ${response.status}).`, "error");
+                        return;
+                    }
 
-                setStatus(wrapper, "🗑️ Minden törlése a szerveren...");
-                const r = await deleteAllRemotePosts();
+                    storage.setItem(KEYS.KEK.GALLERY_RESET_TS, String(Date.now()));
+                    storage.removeItem(KEYS.KEK.GALLERY_DELETED);
+                    await clearGallery();
+                    renderGallery(wrapper);
 
-                if (!r.ok) {
-                    setStatus(wrapper, `❌ Nem sikerült mindent törölni a szerveren (HTTP ${r.status}).`);
-                    return;
+                    if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                        try {
+                            await storage.flush();
+                            setStatus(wrapper, "Minden kép törölve a szerverről, a galériából és a Gistből.", "success");
+                        } catch (error) {
+                            setStatus(wrapper, `A szerver és a helyi galéria ürítve, de a Gist-szinkron hibázott: ${error?.message || "ismeretlen hiba"}`, "error");
+                        }
+                    } else {
+                        setStatus(wrapper, "Minden kép törölve a szerverről és a galériából.", "success");
+                    }
+                    updateSyncBadge(wrapper);
+                } catch (error) {
+                    console.error("[PH Power Tools] kek.sh gallery clear failed:", error);
+                    setStatus(wrapper, `Törlési hiba: ${error?.message || "ismeretlen hiba"}`, "error");
+                } finally {
+                    clearBtn.disabled = false;
                 }
-
-                storage.setItem(KEYS.KEK.GALLERY_RESET_TS, String(Date.now()));
-                storage.removeItem(KEYS.KEK.GALLERY_DELETED);
-                await clearGallery();
-
-                if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
-                    await storage.flush(); // ✅ gist azonnal ürül
-                }
-
-                renderGallery(wrapper);
-                setStatus(wrapper, "🗑️ Mind törölve (szerver + galéria)");
-                updateSyncBadge();
-                return;
-            }
-
-            if (tabGrid) {
-                e.preventDefault();
-                e.stopPropagation();
-                setActiveTab(wrapper, "grid");
-                return;
-            }
-
-            if (tabList) {
-                e.preventDefault();
-                e.stopPropagation();
-                setActiveTab(wrapper, "list");
                 return;
             }
 
             if (syncNowBtn) {
                 e.preventDefault();
                 e.stopPropagation();
-
-                // Valódi kétirányú kézi sync: előbb pull + merge, utána push.
                 if (ENABLE_GIST_SYNC && typeof storage.syncNow === "function") {
                     syncNowBtn.disabled = true;
-                    setStatus(wrapper, "☁️ Szinkronizálás a Gisttel...");
-
+                    setStatus(wrapper, "Galéria szinkronizálása a Gisttel…");
                     try {
                         await storage.syncNow();
                         applyGalleryResetIfNeeded();
                         renderGallery(wrapper);
-                        setStatus(wrapper, `☁️ Szinkron kész (${loadGallery().length} kép)`);
-                    } catch (err) {
-                        console.error('[PH Power Tools] Manual Gist sync failed:', err);
-                        setStatus(wrapper, `❌ Szinkron hiba: ${err?.message || 'ismeretlen hiba'}`);
+                        setStatus(wrapper, `Szinkron kész (${loadGallery().length} kép).`, "success");
+                    } catch (error) {
+                        console.error("[PH Power Tools] Manual Gist sync failed:", error);
+                        setStatus(wrapper, `Szinkronizálási hiba: ${error?.message || "ismeretlen hiba"}`, "error");
                     } finally {
                         syncNowBtn.disabled = false;
-                        updateSyncBadge();
+                        updateSyncBadge(wrapper);
                     }
                 }
                 return;
             }
 
-            if (actionBtn) {
-                e.preventDefault();
-                e.stopPropagation();
+            if (!actionBtn) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const action = actionBtn.dataset.action;
+            const url = actionBtn.dataset.url;
+            if (!url) return;
+            const editor = findEditorNear(wrapper);
 
-                const action = actionBtn.dataset.action;
-                const url = actionBtn.dataset.url;
-                if (!url) return;
+            if (action === "insert-image") {
+                const ok = insertHtmlIntoEditor(editor, `<img src="${escapeHtml(url)}" alt="">`);
+                setStatus(wrapper, ok ? "Kép beszúrva a hozzászólásba." : "Nem található a szerkesztő.", ok ? "success" : "error");
+                return;
+            }
 
-                const editor = findEditorNear(wrapper);
+            if (action === "insert-link") {
+                const ok = insertHtmlIntoEditor(editor, buildLinkHtml(url));
+                setStatus(wrapper, ok ? "Képlink beszúrva a hozzászólásba." : "Nem található a szerkesztő.", ok ? "success" : "error");
+                return;
+            }
 
-                if (action === "insert-image") {
-                    const ok = insertHtmlIntoEditor(editor, `<img src="${escapeHtml(url)}" alt="">`);
-                    setStatus(wrapper, ok ? "✅ Kép beszúrva" : "❌ Nem találom az editort");
-                    return;
-                }
+            if (action === "delete") {
+                const item = loadGallery().find(x => x.url === url);
+                const hasRemoteId = !!item?.id;
+                const question = hasRemoteId
+                    ? "Biztos törlöd ezt a képet a kek.sh szerverről is?"
+                    : "Ehhez a képhez nincs szerverazonosító. Csak a helyi galériából törlöd. Folytatod?";
+                if (!confirm(question)) return;
 
-                if (action === "insert-link") {
-                    const ok = insertHtmlIntoEditor(editor, buildLinkHtml(url));
-                    setStatus(wrapper, ok ? "✅ Link beszúrva" : "❌ Nem találom az editort");
-                    return;
-                }
-
-                if (action === "delete") {
-                    if (!confirm("Biztos törlöd ezt a képet a szerverről is?")) {
-                        return;
-                    }
-                    const items = loadGallery();
-                    const item = items.find(x => x.url === url);
-
-                    if (item?.id) {
-                        setStatus(wrapper, "🗑️ Törlés a szerveren...");
-                        const r = await deleteRemotePost(item.id);
-
-                        if (!r.ok) {
-                            setStatus(wrapper, `❌ Nem sikerült törölni a szerveren (HTTP ${r.status}).`);
-                            return; // ✅ ne törölj lokálból, hogy ne vesszen el a nyoma
+                actionBtn.disabled = true;
+                try {
+                    if (hasRemoteId) {
+                        setStatus(wrapper, "Kép törlése a szerverről…");
+                        const response = await deleteRemotePost(item.id);
+                        if (!response.ok) {
+                            setStatus(wrapper, `Nem sikerült törölni a képet a szerverről (HTTP ${response.status}).`, "error");
+                            return;
                         }
-                    } else {
-                        setStatus(wrapper, "❌ Nincs id (régi elem) – csak lokál törlés.");
                     }
 
                     const deleted = loadDeletedMap();
                     deleted[url] = Date.now();
                     saveDeletedMap(deleted);
-
                     await removeFromGallery(url);
+                    renderGallery(wrapper);
 
                     if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
-                        await storage.flush();
+                        try {
+                            await storage.flush();
+                        } catch (error) {
+                            setStatus(wrapper, `A kép törölve, de a Gist-szinkron hibázott: ${error?.message || "ismeretlen hiba"}`, "error");
+                            return;
+                        }
                     }
-
-                    renderGallery(wrapper);
-                    setStatus(wrapper, "🗑️ Törölve (szerver + galéria)");
-                    updateSyncBadge();
-                    return;
+                    setStatus(wrapper, hasRemoteId
+                        ? "Kép törölve a szerverről és a galériából."
+                        : "A régi kép törölve a helyi galériából.", "success");
+                    updateSyncBadge(wrapper);
+                } catch (error) {
+                    console.error("[PH Power Tools] kek.sh image delete failed:", error);
+                    setStatus(wrapper, `Törlési hiba: ${error?.message || "ismeretlen hiba"}`, "error");
+                } finally {
+                    actionBtn.disabled = false;
                 }
             }
         }, true);
