@@ -2877,6 +2877,19 @@
                     max-height: calc(100dvh - 56px) !important;
                     z-index: 2000 !important;
                 }
+                .ph-pt-modal { z-index: 100050 !important; }
+                .ph-tooltip { z-index: 100060 !important; }
+                #header-sticky:has(#ph-power-tools-dropdown .ph-power-menu.show) {
+                    z-index: 100030 !important;
+                    overflow: visible !important;
+                }
+                #header-sticky:has(#ph-power-tools-dropdown .ph-power-menu.show) .navbar-buttons {
+                    overflow: visible !important;
+                }
+                #header-sticky #ph-power-tools-dropdown:has(> .ph-power-menu.show) {
+                    position: relative !important;
+                    z-index: 100031 !important;
+                }
                 .ph-accordion {
                     max-height: calc(100dvh - 150px);
                 }
