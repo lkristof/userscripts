@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.3.0
+// @version      2.3.1
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -4436,6 +4436,11 @@
                     box-shadow: var(--ph-mark-color) 5px 0 0 0 inset !important;
                     transition: box-shadow 1s ease;
                 }
+                .pager-navbar a.ph-pt-jump-first-unread[aria-disabled="true"] {
+                    opacity: 0.3;
+                    cursor: not-allowed;
+                    pointer-events: none;
+                }
             `);
         }
 
@@ -4472,7 +4477,89 @@
             storage.setItem(MAP_KEY, JSON.stringify(map));
         }
 
+        function findFirstUnreadPost() {
+            let first = null;
+
+            document.querySelectorAll('li[data-id]').forEach(li => {
+                if (!li.querySelector('.message-head.ph-new-post-header')) return;
+
+                const id = Number(li.dataset.id);
+                if (!Number.isSafeInteger(id) || id <= 0) return;
+
+                if (!first || id < first.id) first = { id, li };
+            });
+
+            return first;
+        }
+
+        function updateUnreadJumpButtons() {
+            const first = findFirstUnreadPost();
+
+            document.querySelectorAll('.ph-pt-jump-first-unread').forEach(link => {
+                const enabled = !!first;
+                link.classList.toggle('disabled', !enabled);
+                link.setAttribute('aria-disabled', String(!enabled));
+                link.tabIndex = enabled ? 0 : -1;
+
+                if (enabled) {
+                    link.href = `#msg${first.id}`;
+                    link.title = `Ugrás az első olvasatlan hozzászólásra (#${first.id})`;
+                } else {
+                    link.removeAttribute('href');
+                    link.title = 'Nincs jelölt olvasatlan hozzászólás ezen az oldalon';
+                }
+            });
+        }
+
+        function mountUnreadJumpButtons() {
+            const navLinks = document.querySelectorAll(
+                '.pager-navbar a[href$="#forum-nav-btm"], ' +
+                '.pager-navbar a[href$="#forum-nav-top"]'
+            );
+
+            navLinks.forEach(existingLink => {
+                const parentLi = existingLink.closest('li');
+                if (!parentLi || parentLi.nextElementSibling?.classList.contains('ph-pt-unread-nav-item')) return;
+
+                const li = document.createElement('li');
+                li.className = 'ph-pt-unread-nav-item';
+
+                const link = document.createElement('a');
+                link.className = 'btn ph-pt-jump-first-unread disabled';
+                link.setAttribute('role', 'button');
+                link.setAttribute('aria-label', 'Ugrás az első olvasatlan hozzászólásra');
+                link.setAttribute('aria-disabled', 'true');
+                link.tabIndex = -1;
+                link.innerHTML = '<span class="fas fa-comment-dots fa-fw" aria-hidden="true"></span>';
+
+                link.addEventListener('click', event => {
+                    const first = findFirstUnreadPost();
+                    if (!first) {
+                        event.preventDefault();
+                        updateUnreadJumpButtons();
+                        return;
+                    }
+
+                    const anchor = document.getElementById(`msg${first.id}`);
+                    if (!anchor || window.location.hash === `#msg${first.id}`) {
+                        event.preventDefault();
+
+                        if (!window.phPtMessageScroller?.scrollToMsgId?.(first.id)) {
+                            (anchor || first.li).scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }
+                });
+
+                li.appendChild(link);
+                parentLi.insertAdjacentElement('afterend', li);
+            });
+
+            updateUnreadJumpButtons();
+        }
+
         function process() {
+            mountUnreadJumpButtons();
+
             const slug = getTopicSlug();
             if (!slug) return;
 
@@ -4504,6 +4591,7 @@
                 // első sima megnyitás
                 map[slug] = pageMaxId;
                 writeMap(map);
+                updateUnreadJumpButtons();
                 return;
             }
 
@@ -4522,6 +4610,8 @@
                 map[slug] = pageMaxId;
                 writeMap(map);
             }
+
+            updateUnreadJumpButtons();
         }
 
         /* =========================
