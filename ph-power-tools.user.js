@@ -4436,6 +4436,27 @@
                     box-shadow: var(--ph-mark-color) 5px 0 0 0 inset !important;
                     transition: box-shadow 1s ease;
                 }
+                .pager-navbar li.ph-pt-unread-nav-item {
+                    margin-left: 6px;
+                }
+                .pager-navbar .ph-pt-unread-icon {
+                    position: relative;
+                    display: inline-block;
+                    vertical-align: middle;
+                    line-height: 1;
+                }
+                .pager-navbar a.ph-pt-jump-first-unread[aria-disabled="false"] .ph-pt-unread-icon::after {
+                    content: "";
+                    position: absolute;
+                    top: -3px;
+                    right: -2px;
+                    width: 7px;
+                    height: 7px;
+                    border-radius: 50%;
+                    background: #e53935;
+                    box-shadow: 0 0 0 1.5px var(--ph-ui-bg, #fff);
+                    pointer-events: none;
+                }
                 .pager-navbar a.ph-pt-jump-first-unread[aria-disabled="true"] {
                     opacity: 0.3;
                     cursor: not-allowed;
@@ -4530,7 +4551,7 @@
                 link.setAttribute('aria-label', 'Ugrás az első olvasatlan hozzászólásra');
                 link.setAttribute('aria-disabled', 'true');
                 link.tabIndex = -1;
-                link.innerHTML = '<span class="fas fa-comment-dots fa-fw" aria-hidden="true"></span>';
+                link.innerHTML = '<span class="ph-pt-unread-icon" aria-hidden="true"><span class="fas fa-comment fa-fw"></span></span>';
 
                 link.addEventListener('click', event => {
                     const first = findFirstUnreadPost();
