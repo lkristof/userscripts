@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.3.2
+// @version      2.4.0
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -18,6 +18,7 @@
 //
 // @require      https://code.jquery.com/jquery-3.7.1.min.js
 //
+// @grant        GM_info
 // @grant        GM.getValue
 // @grant        GM.setValue
 // @grant        GM.deleteValue
@@ -70,15 +71,46 @@
     const STORAGE_KEY = KEYS.SETTINGS;
     const SECRETS_KEY = KEYS.SECRETS;
 
+    // A biztonsági mentés a helyi beállításokat tartalmazza; a titkos
+    // kapcsolati adatok csak kifejezett, alapból kikapcsolt opcióval kerülnek bele.
+    // A titkos adatokat tartalmazó JSON nincs titkosítva, és nem megy a Gistbe.
+    const BACKUP_FORMAT = 'ph-power-tools-settings';
+    const BACKUP_FORMAT_VERSION = 1;
+    const BACKUP_PREFERENCE_KEYS = [
+        KEYS.SETTINGS,
+        KEYS.STATE.HIDDEN_USERS,
+        KEYS.STATE.HIDE_OFF,
+        KEYS.STATE.WIDE_VIEW,
+        KEYS.STATE.THREAD_VIEW,
+        'ph_wide_view_center_px',
+        'ph_mobile_scroll_nav_position',
+    ];
+    const BACKUP_EXTRA_KEYS = [
+        KEYS.STATE.TOPIC_MAX_ID_MAP,
+        KEYS.KEK.GALLERY,
+        KEYS.KEK.GALLERY_RESET_TS,
+        KEYS.KEK.GALLERY_DELETED,
+        KEYS.KEK.GALLERY_SEEN_RESET_TS,
+    ];
+
     const secrets = await loadSecrets();
 
-    const GIST_TOKEN = (secrets.gistToken || "").trim();
-    const GIST_ID = (secrets.gistId || "").trim();
     const DEFAULT_GIST_FILENAME = "ph_forum_settings.json";
-    const GIST_FILENAME = ((secrets.gistFilename || DEFAULT_GIST_FILENAME)).trim();
-    const ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
+    let GIST_TOKEN = (secrets.gistToken || "").trim();
+    let GIST_ID = (secrets.gistId || "").trim();
+    let GIST_FILENAME = ((secrets.gistFilename || DEFAULT_GIST_FILENAME)).trim();
+    let ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
+    let KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
 
-    const KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
+    // Importkor a memóriában használt Gist-hozzáférést is átállítjuk,
+    // különben az új beállítások még a korábban megadott Gistbe kerülhetnének.
+    function activateSecrets(saved) {
+        GIST_TOKEN = (saved.gistToken || '').trim();
+        GIST_ID = (saved.gistId || '').trim();
+        GIST_FILENAME = (saved.gistFilename || DEFAULT_GIST_FILENAME).trim();
+        KEK_SH_API_KEY = (saved.kekShApiKey || '').trim();
+        ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
+    }
 
     const DEFAULT_COLORIZE_PALETTE = {
         light: {
@@ -254,6 +286,227 @@
         try { return JSON.parse(str); } catch { return fallback; }
     }
 
+    // ===== Beállítások export / import =====
+    function isBackupObject(value) {
+        return value !== null && Object.prototype.toString.call(value) === '[object Object]';
+    }
+
+    function backupHas(obj, key) {
+        return Object.prototype.hasOwnProperty.call(obj, key);
+    }
+
+    function readBackupStorageValue(key) {
+        const raw = storage.getItem(key);
+        return raw === null ? null : safeJsonParse(raw, raw);
+    }
+
+    function normalizeBackupSettings(value) {
+        if (!isBackupObject(value)) throw new Error('A mentett beállítások formátuma hibás.');
+
+        const result = { ...defaultSettings, colorizePalette: structuredClone(DEFAULT_COLORIZE_PALETTE) };
+        for (const key of Object.keys(defaultSettings)) {
+            if (!backupHas(value, key) || key === 'colorizePalette') continue;
+            if (typeof value[key] !== 'boolean') {
+                throw new Error(`Érvénytelen kapcsolóérték: ${key}`);
+            }
+            result[key] = value[key];
+        }
+
+        if (backupHas(value, 'colorizePalette')) {
+            const palette = value.colorizePalette;
+            if (!isBackupObject(palette)) throw new Error('A színpaletta nem érvényes.');
+            for (const theme of ['light', 'dark']) {
+                if (!backupHas(palette, theme)) continue;
+                if (!isBackupObject(palette[theme])) {
+                    throw new Error(`A(z) ${theme} színpaletta nem érvényes.`);
+                }
+                for (const key of Object.keys(DEFAULT_COLORIZE_PALETTE[theme])) {
+                    if (!backupHas(palette[theme], key)) continue;
+                    const color = palette[theme][key];
+                    if (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color)) {
+                        throw new Error(`Érvénytelen szín: ${theme}.${key}`);
+                    }
+                    result.colorizePalette[theme][key] = color;
+                }
+            }
+        }
+        return result;
+    }
+
+    // A nyers API-/Gist-adatok csak ismert mezőkkel, szigorú típusellenőrzés
+    // után menthetők/visszaállíthatók. Korábbi, kulcsmentés nélküli fájlok is jók.
+    function validateBackupSecrets(value) {
+        if (!isBackupObject(value)) throw new Error('A kapcsolati adatok formátuma hibás.');
+        const fields = {
+            gistToken: 4096,
+            gistId: 256,
+            gistFilename: 512,
+            kekShApiKey: 4096,
+        };
+        const result = {};
+        for (const [key, maxLength] of Object.entries(fields)) {
+            if (!backupHas(value, key) || typeof value[key] !== 'string'
+                || value[key].length > maxLength) {
+                throw new Error(`Érvénytelen kapcsolati adat: ${key}`);
+            }
+            result[key] = value[key].trim();
+        }
+        return result;
+    }
+
+    async function makeSettingsBackup(includeExtras, includeSecrets = false) {
+        const values = {};
+        for (const key of BACKUP_PREFERENCE_KEYS) {
+            values[key] = key === KEYS.SETTINGS
+                ? normalizeBackupSettings(getMergedSettings())
+                : readBackupStorageValue(key);
+        }
+        if (includeExtras) {
+            for (const key of BACKUP_EXTRA_KEYS) values[key] = readBackupStorageValue(key);
+        }
+        const backup = {
+            format: BACKUP_FORMAT,
+            formatVersion: BACKUP_FORMAT_VERSION,
+            scriptVersion: GM_info.script.version,
+            exportedAt: new Date().toISOString(),
+            values,
+        };
+        if (includeSecrets) {
+            const saved = await loadSecrets();
+            backup.secrets = validateBackupSecrets({
+                gistToken: saved.gistToken ?? '',
+                gistId: saved.gistId ?? '',
+                gistFilename: saved.gistFilename ?? '',
+                kekShApiKey: saved.kekShApiKey ?? '',
+            });
+        }
+        // A létrejött fájl biztosan visszaolvasható legyen az importálóval.
+        prepareSettingsBackupImport(backup);
+        return backup;
+    }
+
+    function validatedBackupInteger(value, key) {
+        const n = typeof value === 'number' ? value
+            : (typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN);
+        if (!Number.isSafeInteger(n) || n < 0) {
+            throw new Error(`Érvénytelen számérték: ${key}`);
+        }
+        return n;
+    }
+
+    function serializeBackupValue(key, value) {
+        // Null = a mentésben nem volt helyi érték: importkor törölni kell.
+        if (value === null && key !== KEYS.SETTINGS) return null;
+        if (key === KEYS.SETTINGS) {
+            return JSON.stringify(normalizeBackupSettings(value));
+        }
+        if (key === KEYS.STATE.HIDDEN_USERS) {
+            if (!Array.isArray(value) || value.some(user =>
+                typeof user !== 'string' || !user.trim() || user.length > 200)) {
+                throw new Error('Érvénytelen rejtettfelhasználó-lista.');
+            }
+            return JSON.stringify([...new Set(value.map(user => user.trim()))]);
+        }
+        if ([KEYS.STATE.HIDE_OFF, KEYS.STATE.WIDE_VIEW, KEYS.STATE.THREAD_VIEW].includes(key)) {
+            if (value !== 'enabled' && value !== 'disabled') {
+                throw new Error(`Érvénytelen nézetállapot: ${key}`);
+            }
+            return value;
+        }
+        if (key === 'ph_wide_view_center_px') {
+            const px = validatedBackupInteger(value, key);
+            if (px < 100 || px > 20000) throw new Error('Érvénytelen szélesnézet-szélesség.');
+            return String(px);
+        }
+        if (key === 'ph_mobile_scroll_nav_position') {
+            if (!isBackupObject(value) || !['left', 'right'].includes(value.side)
+                || typeof value.hidden !== 'boolean') {
+                throw new Error('Érvénytelen mobilnavigáció-beállítás.');
+            }
+            const bottom = Number(value.bottom);
+            if (!Number.isFinite(bottom) || bottom < 0 || bottom > 20000) {
+                throw new Error('Érvénytelen mobilnavigáció-pozíció.');
+            }
+            return JSON.stringify({ side: value.side, bottom, hidden: value.hidden });
+        }
+        if (key === KEYS.STATE.TOPIC_MAX_ID_MAP || key === KEYS.KEK.GALLERY_DELETED) {
+            if (!isBackupObject(value)) throw new Error(`Érvénytelen adatok: ${key}`);
+            const out = Object.create(null);
+            for (const [name, id] of Object.entries(value)) {
+                if (!name || name.length > 4096 || ['__proto__', 'prototype', 'constructor'].includes(name)) {
+                    throw new Error(`Érvénytelen adatazonosító: ${key}`);
+                }
+                if (key === KEYS.KEK.GALLERY_DELETED && !/^https?:\/\//i.test(name)) {
+                    throw new Error('Érvénytelen töröltkép-hivatkozás.');
+                }
+                out[name] = validatedBackupInteger(id, key);
+            }
+            return JSON.stringify(out);
+        }
+        if (key === KEYS.KEK.GALLERY) {
+            if (!Array.isArray(value) || value.length > 5000) {
+                throw new Error('Érvénytelen képgaléria-adatok.');
+            }
+            const gallery = value.map((item, i) => {
+                if (!isBackupObject(item) || typeof item.url !== 'string'
+                    || item.url.length > 4096 || !/^https?:\/\//i.test(item.url)) {
+                    throw new Error(`Érvénytelen képbejegyzés: ${i + 1}`);
+                }
+                const clean = { url: item.url };
+                if (item.id != null) {
+                    if (!((typeof item.id === 'string' && item.id.length <= 4096)
+                        || (Number.isSafeInteger(item.id) && item.id >= 0))) {
+                        throw new Error('Érvénytelen galériaazonosító.');
+                    }
+                    clean.id = item.id;
+                }
+                for (const field of ['token', 'filename', 'originalName', 'createdAt']) {
+                    if (item[field] == null) continue;
+                    if (typeof item[field] !== 'string' || item[field].length > 4096) {
+                        throw new Error(`Érvénytelen galériaérték: ${field}`);
+                    }
+                    clean[field] = item[field];
+                }
+                if (item.size != null) {
+                    clean.size = validatedBackupInteger(item.size, 'gallery.size');
+                }
+                return clean;
+            });
+            return JSON.stringify(gallery);
+        }
+        if ([KEYS.KEK.GALLERY_RESET_TS, KEYS.KEK.GALLERY_SEEN_RESET_TS].includes(key)) {
+            return String(validatedBackupInteger(value, key));
+        }
+        throw new Error(`Nem támogatott mentési kulcs: ${key}`);
+    }
+
+    function prepareSettingsBackupImport(backup) {
+        if (!isBackupObject(backup) || backup.format !== BACKUP_FORMAT
+            || backup.formatVersion !== BACKUP_FORMAT_VERSION || !isBackupObject(backup.values)) {
+            throw new Error('Nem támogatott PH Power Tools biztonsági mentés.');
+        }
+        if (!backupHas(backup.values, KEYS.SETTINGS)) {
+            throw new Error('A mentés nem tartalmazza a fő beállításokat.');
+        }
+
+        // MINDEN érték ellenőrzése megelőzi a tároló bármilyen módosítását.
+        const updates = [];
+        for (const key of [...BACKUP_PREFERENCE_KEYS, ...BACKUP_EXTRA_KEYS]) {
+            if (backupHas(backup.values, key)) {
+                updates.push([key, serializeBackupValue(key, backup.values[key])]);
+            }
+        }
+        const includesSecrets = backupHas(backup, 'secrets');
+        const importedSecrets = includesSecrets ? validateBackupSecrets(backup.secrets) : null;
+        return {
+            updates,
+            includesExtras: BACKUP_EXTRA_KEYS.some(key => backupHas(backup.values, key)),
+            includesSecrets,
+            importedSecrets,
+            exportedAt: typeof backup.exportedAt === 'string' ? backup.exportedAt : '',
+        };
+    }
+
     /**
      * Inject / update a <style> tag exactly once.
      * Helps avoid duplicate style tags when the script (or parts of it) re-run.
@@ -374,6 +627,7 @@
         let gistCache = null;
         let pushTimer = null;
         let inited = false;
+        let syncSuspended = false;
 
         // Csak az ebben a futásban ténylegesen módosított helyi kulcsok
         // szólhatnak bele a következő Gist írásba. A localStorage egyébként cache.
@@ -636,7 +890,7 @@
         }
 
         function schedulePush() {
-            if (!ENABLE_GIST_SYNC) return;
+            if (!ENABLE_GIST_SYNC || syncSuspended) return;
             if (pushTimer) clearTimeout(pushTimer);
             pushTimer = setTimeout(() => {
                 pushTimer = null;
@@ -656,6 +910,31 @@
 
         return {
             init,
+            suspendSync() {
+                syncSuspended = true;
+                if (pushTimer) {
+                    clearTimeout(pushTimer);
+                    pushTimer = null;
+                }
+            },
+            resumeSync() {
+                syncSuspended = false;
+                if (dirtyWrites.size || dirtyDeletes.size) schedulePush();
+            },
+            // Importkor a változatlan helyi értékek is bekerüljenek az új Gistbe.
+            markImportKeysDirty(keys) {
+                for (const key of keys) {
+                    if (!keyShouldSync(key)) continue;
+                    if (localStorage.getItem(key) === null) {
+                        dirtyWrites.delete(key);
+                        dirtyDeletes.add(key);
+                    } else {
+                        dirtyDeletes.delete(key);
+                        dirtyWrites.add(key);
+                    }
+                }
+                schedulePush();
+            },
             async flush() {
                 return cancelTimerAndRun(doPushNow);
             },
@@ -843,6 +1122,14 @@
                         ` : ``}
 
                         <button type="button"
+                                id="ph-open-backup"
+                                class="ph-icon-btn"
+                                title="Beállítások importálása / exportálása"
+                                aria-label="Beállítások importálása / exportálása">
+                            <span class="fas fa-file-export"></span>
+                        </button>
+
+                        <button type="button"
                                 id="ph-open-secrets"
                                 class="ph-icon-btn"
                                 title="Kulcsok és szinkron"
@@ -971,6 +1258,88 @@
             document.body.appendChild(modal);
         }
 
+        // ===== Beállítások biztonsági mentése / visszaállítása =====
+        if (!document.getElementById('ph-backup-modal')) {
+            const backupModal = document.createElement('div');
+            backupModal.id = 'ph-backup-modal';
+            backupModal.className = 'ph-pt-modal';
+            backupModal.innerHTML = `
+                <div class="ph-pt-dialog ph-pt-dialog-wide" role="dialog" aria-modal="true"
+                     aria-labelledby="ph-backup-title">
+                    <div class="ph-dialog-head">
+                        <div class="ph-dialog-title-wrap">
+                            <span class="ph-dialog-mark"><span class="fas fa-file-export"></span></span>
+                            <span>
+                                <strong id="ph-backup-title" class="ph-dialog-title">Beállítások mentése</strong>
+                                <small class="ph-dialog-subtitle">Exportálás és importálás JSON-fájlból</small>
+                            </span>
+                        </div>
+                        <button type="button" class="ph-icon-btn ph-dialog-close" id="ph-backup-close"
+                                title="Bezárás" aria-label="Bezárás"><span class="fas fa-times"></span></button>
+                    </div>
+                    <div class="ph-dialog-body ph-backup-body">
+                        <section class="ph-backup-section">
+                            <strong class="ph-backup-heading"><span class="fas fa-download"></span> Exportálás</strong>
+                            <p>Kapcsolók, egyéni színek, rejtett felhasználók és mentett nézetállapotok letöltése.</p>
+                            <label class="ph-backup-option" data-enabled="false">
+                                <span class="ph-backup-option-copy">Olvasottsági adatok és kek.sh képgaléria mentése is</span>
+                                <span class="ph-backup-option-control">
+                                    <input type="checkbox" id="ph-backup-extra" class="ph-backup-toggle">
+                                    <span class="ph-backup-switch" aria-hidden="true"><span class="ph-backup-switch-knob"></span></span>
+                                    <strong class="ph-backup-option-state" aria-hidden="true">KI</strong>
+                                </span>
+                            </label>
+                            <label class="ph-backup-option" data-enabled="false">
+                                <span class="ph-backup-option-copy">API-kulcsok és Gist-kapcsolati adatok mentése is</span>
+                                <span class="ph-backup-option-control">
+                                    <input type="checkbox" id="ph-backup-secrets" class="ph-backup-toggle">
+                                    <span class="ph-backup-switch" aria-hidden="true"><span class="ph-backup-switch-knob"></span></span>
+                                    <strong class="ph-backup-option-state" aria-hidden="true">KI</strong>
+                                </span>
+                            </label>
+                            <div id="ph-backup-sensitive-warning" class="ph-backup-sensitive-warning" role="note" hidden>
+                                <span class="fas fa-exclamation-triangle" aria-hidden="true"></span>
+                                <span class="ph-backup-sensitive-copy">
+                                    A fájl a GitHub Gist tokent, Gist ID-t, fájlnevet és a kek.sh API-kulcsot
+                                    <strong>titkosítatlanul</strong> tartalmazza. Ne oszd meg, és csak biztonságos helyen tárold!
+                                </span>
+                            </div>
+                            <button type="button" id="ph-backup-export"
+                                    class="btn btn-sm btn-forum btn-primary">
+                                <span class="fas fa-download"></span> Exportálás (.json)
+                            </button>
+                        </section>
+                        <section class="ph-backup-section">
+                            <strong class="ph-backup-heading"><span class="fas fa-upload"></span> Importálás</strong>
+                            <p>Korábban exportált PH Power Tools-fájl betöltése. Az importált beállítások
+                               felülírják a jelenlegieket; előtte megerősítést kérünk.</p>
+                            <input type="file" id="ph-backup-file" accept=".json,.txt,application/json,text/plain" hidden>
+                            <button type="button" id="ph-backup-import"
+                                    class="btn btn-sm btn-forum ph-secondary-btn">
+                                <span class="fas fa-folder-open"></span> Fájl kiválasztása…
+                            </button>
+                        </section>
+                        <div class="ph-backup-hint">
+                            <span class="fas fa-shield-alt"></span>
+                            <span>
+                                Az API-/Gist-kulcsok mentése külön kapcsolható.
+                                A galéria bizalmas tokeneket is tartalmazhat.
+                                Aktív Gist-szinkron esetén az olvasottsági és
+                                galériaadatok összeolvadhatnak a távoli adatokkal.
+                            </span>
+                        </div>
+                    </div>
+                    <div class="ph-dialog-footer">
+                        <span id="ph-backup-status" class="ph-dialog-status ph-backup-status" aria-live="polite"></span>
+                        <div class="ph-dialog-buttons">
+                            <button type="button" id="ph-backup-done" class="btn btn-sm btn-forum ph-secondary-btn">Bezárás</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(backupModal);
+        }
+
         // ===== Colorize Colors modal =====
         if (!document.getElementById('ph-colors-modal')) {
             const modal = document.createElement('div');
@@ -1087,6 +1456,182 @@
         const colorsModal = document.getElementById('ph-colors-modal');
 
         let colorsDraftPalette = null;
+
+        const backupModal = document.getElementById('ph-backup-modal');
+        const openBackupBtn = li.querySelector('#ph-open-backup');
+        const backupStatus = backupModal?.querySelector('#ph-backup-status');
+        const backupFileInput = backupModal?.querySelector('#ph-backup-file');
+        const backupExportBtn = backupModal?.querySelector('#ph-backup-export');
+        const backupImportBtn = backupModal?.querySelector('#ph-backup-import');
+        const backupExtraInput = backupModal?.querySelector('#ph-backup-extra');
+        const backupSecretsInput = backupModal?.querySelector('#ph-backup-secrets');
+        const backupSensitiveWarning = backupModal?.querySelector('#ph-backup-sensitive-warning');
+
+        function refreshBackupOptions() {
+            for (const input of [backupExtraInput, backupSecretsInput]) {
+                if (!input) continue;
+                const row = input.closest('.ph-backup-option');
+                if (!row) continue;
+                row.dataset.enabled = input.checked ? 'true' : 'false';
+                const state = row.querySelector('.ph-backup-option-state');
+                if (state) state.textContent = input.checked ? 'BE' : 'KI';
+            }
+            if (backupSensitiveWarning) backupSensitiveWarning.hidden = !backupSecretsInput?.checked;
+        }
+
+        backupExtraInput?.addEventListener('change', refreshBackupOptions);
+        backupSecretsInput?.addEventListener('change', refreshBackupOptions);
+        refreshBackupOptions();
+
+        function setBackupBusy(busy) {
+            if (backupExportBtn) backupExportBtn.disabled = busy;
+            if (backupImportBtn) backupImportBtn.disabled = busy;
+            if (backupExtraInput) backupExtraInput.disabled = busy;
+            if (backupSecretsInput) backupSecretsInput.disabled = busy;
+        }
+
+        function closeBackupModal() {
+            if (backupModal) backupModal.style.display = 'none';
+            // Bizalmas adatok exportálásához minden alkalommal új döntés szükséges.
+            if (backupSecretsInput) backupSecretsInput.checked = false;
+            refreshBackupOptions();
+        }
+
+        openBackupBtn?.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            li.querySelector('.dropdown-toggle')?.click();
+            setTimeout(() => {
+                phPtSyncThemeAttr();
+                if (backupSecretsInput) backupSecretsInput.checked = false;
+                refreshBackupOptions();
+                if (backupStatus) backupStatus.textContent = '';
+                if (backupModal) backupModal.style.display = 'flex';
+            }, 0);
+        });
+
+        backupModal?.addEventListener('click', event => {
+            if (event.target === backupModal) closeBackupModal();
+        });
+        backupModal?.querySelector('#ph-backup-close')?.addEventListener('click', closeBackupModal);
+        backupModal?.querySelector('#ph-backup-done')?.addEventListener('click', closeBackupModal);
+
+        backupExportBtn?.addEventListener('click', async () => {
+            setBackupBusy(true);
+            try {
+                const includeExtras = !!backupExtraInput?.checked;
+                const includeSecrets = !!backupSecretsInput?.checked;
+                const backup = await makeSettingsBackup(includeExtras, includeSecrets);
+                const json = JSON.stringify(backup, null, 2);
+                const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = `ph-power-tools-${includeSecrets ? 'with-secrets' : 'settings'}-${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                if (backupStatus) backupStatus.textContent = includeSecrets
+                    ? 'A bizalmas adatokat is tartalmazó mentés letöltése elindult.'
+                    : 'A letöltés elindult.';
+            } catch (error) {
+                console.error('[PH Power Tools] Backup export failed:', error);
+                if (backupStatus) backupStatus.textContent = `Exportálási hiba: ${error.message}`;
+            } finally {
+                setBackupBusy(false);
+            }
+        });
+
+        backupImportBtn?.addEventListener('click', () => backupFileInput?.click());
+        backupFileInput?.addEventListener('change', async () => {
+            const file = backupFileInput.files?.[0];
+            backupFileInput.value = ''; // Ugyanazt a fájlt később ismét ki lehessen választani.
+            if (!file) return;
+            setBackupBusy(true);
+            if (backupStatus) backupStatus.textContent = 'A mentés ellenőrzése…';
+            let modified = false;
+            try {
+                if (file.size > 10 * 1024 * 1024) {
+                    throw new Error('A fájl túl nagy (maximum 10 MB).');
+                }
+                const backup = JSON.parse(await file.text());
+                const { updates, includesExtras, includesSecrets, importedSecrets, exportedAt } =
+                    prepareSettingsBackupImport(backup);
+                const date = Date.parse(exportedAt);
+                const displayDate = Number.isFinite(date)
+                    ? new Date(date).toLocaleString('hu-HU') : 'ismeretlen';
+                const extraMessage = includesExtras
+                    ? '\nA mentés képgaléria- és olvasottsági adatokat is tartalmaz.' : '';
+                const secretMessage = includesSecrets
+                    ? '\nA mentés API-/Gist-kulcsokat is tartalmaz; a jelenlegi kapcsolati adatokat felülírja.' : '';
+                const syncMessage = includesSecrets && importedSecrets.gistToken && importedSecrets.gistId
+                    ? '\nA visszaállított Gist-kapcsolatra a beállítások szinkronizálódnak.' : '';
+                const confirmed = window.confirm(
+                    `PH Power Tools beállítások importálása\n\n` +
+                    `Mentés dátuma: ${displayDate}\n` +
+                    `A mentés ${updates.length} tárolási bejegyzést állít vissza, felülírva a jelenlegi értékeket.` +
+                    `${extraMessage}${secretMessage}${syncMessage}\n\nFolytatod?`
+                );
+                if (!confirmed) {
+                    if (backupStatus) backupStatus.textContent = 'Importálás megszakítva.';
+                    return;
+                }
+
+                const previousValues = updates.map(([key]) => [key, storage.getItem(key)]);
+                const previousSecrets = includesSecrets ? await loadSecrets() : null;
+                storage.suspendSync();
+                try {
+                    for (const [key, value] of updates) {
+                        if (value === null) storage.removeItem(key);
+                        else storage.setItem(key, value);
+                    }
+                    if (includesSecrets) {
+                        // A régi Gist-kapcsolattal egyetlen importált adat se menjen ki.
+                        await saveSecrets(importedSecrets);
+                        activateSecrets(importedSecrets);
+                    }
+                    // A Gistbe az importált értékek kerüljenek akkor is, ha a
+                    // helyi gyorsítótárban azonos szöveg szerepelt.
+                    storage.markImportKeysDirty(updates.map(([key]) => key));
+                } catch (writeError) {
+                    // Tárolási hiba esetén állítsuk vissza a korábbi helyi állapotot.
+                    for (const [key, previous] of previousValues) {
+                        try {
+                            if (previous === null) storage.removeItem(key);
+                            else storage.setItem(key, previous);
+                        } catch (rollbackError) {
+                            console.warn('[PH Power Tools] Backup rollback failed:', key, rollbackError);
+                        }
+                    }
+                    if (includesSecrets) {
+                        try {
+                            await saveSecrets(previousSecrets);
+                            activateSecrets(previousSecrets);
+                        } catch (rollbackError) {
+                            console.warn('[PH Power Tools] Secret rollback failed:', rollbackError);
+                        }
+                    }
+                    throw writeError;
+                } finally {
+                    storage.resumeSync();
+                }
+                modified = true;
+                await storage.flush();
+                if (backupStatus) backupStatus.textContent = 'Importálás kész. Az oldal újratöltődik…';
+                location.reload();
+            } catch (error) {
+                console.error('[PH Power Tools] Backup import failed:', error);
+                if (backupStatus) {
+                    backupStatus.textContent = modified
+                        ? `Helyi import kész, de a Gist-szinkron hibázott: ${error.message}. Ellenőrizd a kapcsolatot, majd importálj újra.`
+                        : `Importálási hiba: ${error.message}`;
+                }
+            } finally {
+                setBackupBusy(false);
+            }
+        });
+
 
         function openColorsModal() {
             if (!colorsModal) return;
@@ -1225,6 +1770,12 @@
 
                 const secretsModal = document.getElementById('ph-secrets-modal');
                 const colorsModal  = document.getElementById('ph-colors-modal');
+                const backupModal  = document.getElementById('ph-backup-modal');
+
+                if (backupModal?.style.display === 'flex') {
+                    backupModal.style.display = 'none';
+                    return;
+                }
 
                 // Először a színek modalt zárjuk, ha az van nyitva
                 if (colorsModal?.style.display === 'flex') {
@@ -1925,6 +2476,175 @@
                 border-radius: 6px;
                 background: transparent;
                 cursor: pointer;
+            }
+
+            /* Beállítások importálása / exportálása. */
+            .ph-backup-body {
+                display: grid;
+                gap: 10px;
+            }
+            .ph-backup-section {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 9px;
+                padding: 12px;
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 10px;
+                background: var(--ph-ui-soft);
+            }
+            .ph-backup-heading {
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                font-size: 12px;
+                color: var(--ph-ui-fg);
+            }
+            .ph-backup-heading .fas {
+                color: var(--ph-ui-accent);
+            }
+            .ph-backup-section p {
+                margin: 0;
+                font-size: 11.5px;
+                line-height: 1.45;
+                color: var(--ph-ui-muted);
+            }
+            /* Látható, billentyűzettel is vezérelhető BE/KI kapcsolók. */
+            .ph-backup-option {
+                width: 100%;
+                min-height: 43px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                margin: 0;
+                padding: 8px 10px;
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 9px;
+                background: var(--ph-ui-bg);
+                color: var(--ph-ui-fg);
+                cursor: pointer;
+                box-sizing: border-box;
+            }
+            .ph-backup-option[data-enabled="true"] {
+                border-color: color-mix(in srgb, var(--ph-ui-accent) 65%, var(--ph-ui-border));
+                background: color-mix(in srgb, var(--ph-ui-accent) 8%, var(--ph-ui-bg));
+            }
+            .ph-backup-option-copy {
+                flex: 1 1 auto;
+                font-size: 11.5px;
+                font-weight: 600;
+                line-height: 1.35;
+            }
+            .ph-backup-option-control {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                flex: 0 0 auto;
+            }
+            .ph-backup-toggle {
+                position: absolute !important;
+                inset: 0;
+                opacity: 0 !important;
+                width: 100%;
+                height: 100%;
+                margin: 0 !important;
+                cursor: pointer;
+                z-index: 1;
+            }
+            .ph-backup-switch {
+                width: 34px;
+                height: 20px;
+                display: inline-flex;
+                align-items: center;
+                padding: 3px;
+                border-radius: 999px;
+                box-sizing: border-box;
+                background: color-mix(in srgb, var(--ph-ui-muted) 55%, var(--ph-ui-bg));
+                transition: background 160ms ease;
+                pointer-events: none;
+            }
+            .ph-backup-switch-knob {
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                background: #fff;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.24);
+                transform: translateX(0);
+                transition: transform 160ms ease;
+            }
+            .ph-backup-toggle:checked + .ph-backup-switch {
+                background: var(--ph-ui-accent);
+            }
+            .ph-backup-toggle:checked + .ph-backup-switch .ph-backup-switch-knob {
+                transform: translateX(14px);
+            }
+            .ph-backup-toggle:focus-visible + .ph-backup-switch {
+                outline: 2px solid var(--ph-ui-accent);
+                outline-offset: 3px;
+            }
+            .ph-backup-option-state {
+                min-width: 22px;
+                font-size: 11px;
+                font-weight: 800;
+                text-align: center;
+                color: var(--ph-ui-muted);
+                letter-spacing: .03em;
+            }
+            .ph-backup-option[data-enabled="true"] .ph-backup-option-state {
+                color: var(--ph-ui-accent);
+            }
+            .ph-backup-option:has(.ph-backup-toggle:disabled) {
+                opacity: .55;
+                cursor: default;
+            }
+            .ph-backup-sensitive-warning {
+                display: flex;
+                align-items: flex-start;
+                gap: 7px;
+                padding: 9px 10px;
+                border: 1px solid color-mix(in srgb, #c9811b 45%, var(--ph-ui-border));
+                border-radius: 9px;
+                background: color-mix(in srgb, #c9811b 9%, var(--ph-ui-bg));
+                color: var(--ph-ui-fg);
+                font-size: 11px;
+                line-height: 1.45;
+            }
+            .ph-backup-sensitive-warning[hidden] {
+                display: none !important;
+            }
+            .ph-backup-sensitive-warning .fas {
+                flex: 0 0 auto;
+                color: #c9811b;
+                margin-top: 2px;
+            }
+            .ph-backup-sensitive-copy {
+                flex: 1 1 auto;
+                min-width: 0;
+                overflow-wrap: break-word;
+            }
+            .ph-backup-section .btn {
+                min-height: 30px;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .ph-backup-hint {
+                display: flex;
+                align-items: flex-start;
+                gap: 7px;
+                font-size: 10.5px;
+                line-height: 1.4;
+                color: var(--ph-ui-muted);
+            }
+            .ph-backup-hint .fas {
+                margin-top: 2px;
+            }
+            .ph-backup-status {
+                flex: 1 1 auto;
+                min-width: 0;
+                overflow-wrap: anywhere;
             }
 
             /* Rejtett felhasználók szerkesztő. */
