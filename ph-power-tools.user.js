@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.3.1
+// @version      2.3.2
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -25,6 +25,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
 // @connect      kek.sh
 // @connect      api.github.com
 // @connect      gist.githubusercontent.com
@@ -4460,7 +4461,7 @@
                 .pager-navbar a.ph-pt-jump-first-unread[aria-disabled="true"] {
                     opacity: 0.3;
                     cursor: not-allowed;
-                    pointer-events: none;
+                    pointer-events: auto !important;
                 }
             `);
         }
@@ -4515,6 +4516,7 @@
 
         function updateUnreadJumpButtons() {
             const first = findFirstUnreadPost();
+            const siteJQuery = typeof unsafeWindow !== 'undefined' ? unsafeWindow.jQuery : window.jQuery;
 
             document.querySelectorAll('.ph-pt-jump-first-unread').forEach(link => {
                 const enabled = !!first;
@@ -4524,10 +4526,19 @@
 
                 if (enabled) {
                     link.href = `#msg${first.id}`;
-                    link.title = `Ugrás az első olvasatlan hozzászólásra (#${first.id})`;
                 } else {
                     link.removeAttribute('href');
-                    link.title = 'Nincs jelölt olvasatlan hozzászólás ezen az oldalon';
+                }
+
+                const tooltipText = enabled
+                    ? `Ugrás az első olvasatlan hozzászólásra (#${first.id})`
+                    : 'Nincs jelölt olvasatlan hozzászólás ezen az oldalon';
+                link.setAttribute('data-original-title', tooltipText);
+                if (typeof siteJQuery?.fn?.tooltip === 'function') {
+                    link.title = '';
+                    siteJQuery(link).tooltip();
+                } else {
+                    link.title = tooltipText;
                 }
             });
         }
@@ -4549,11 +4560,20 @@
                 link.className = 'btn ph-pt-jump-first-unread disabled';
                 link.setAttribute('role', 'button');
                 link.setAttribute('aria-label', 'Ugrás az első olvasatlan hozzászólásra');
+                link.setAttribute('data-toggle', 'tooltip');
                 link.setAttribute('aria-disabled', 'true');
                 link.tabIndex = -1;
                 link.innerHTML = '<span class="ph-pt-unread-icon" aria-hidden="true"><span class="fas fa-comment fa-fw"></span></span>';
 
                 link.addEventListener('click', event => {
+                    const $site = typeof unsafeWindow !== 'undefined'
+                        ? unsafeWindow.jQuery : window.jQuery;
+
+                    if (typeof $site?.fn?.tooltip === 'function') {
+                        $site(link).tooltip('hide');
+                    }
+                    link.blur();
+
                     const first = findFirstUnreadPost();
                     if (!first) {
                         event.preventDefault();
