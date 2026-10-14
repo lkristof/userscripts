@@ -4444,6 +4444,44 @@
                 overflow: visible; /* A fórum hárompontos menüje ne vágódjon le. */
                 container: ph-tv-card / inline-size;
             }
+            /* A felhasználó-rejtés a .message max-height-ját 0-ra állítja.
+               A Thread kártya overflow:visible értéke különben felülírja a
+               .ph-collapsible[data-collapsed] overflow:hidden szabályát, ezért
+               a "rejtett" tartalom átlóg a következő válaszkártyára. */
+            ul.ph-tv-active > li.ph-thread > .message.ph-collapsible[data-collapsed="true"] {
+                max-height: 0 !important;
+                overflow: hidden !important;
+                border-width: 0 !important;
+                box-shadow: none !important;
+                pointer-events: none !important;
+            }
+            /* A saját, kattintható rejtéssáv azonos behúzással és szélességgel
+               jelenjen meg, mint a Thread nézet többi kártyája. */
+            ul.ph-tv-active > li.ph-thread > .hidden-bar {
+                position: relative;
+                z-index: 3;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-sizing: border-box;
+                width: 100%;
+                min-width: 0;
+                min-height: 35px;
+                margin: 0;
+                padding: 7px 10px;
+                border: 1px solid var(--ph-tv-card-edge);
+                border-radius: 10px;
+                background: color-mix(in srgb, var(--ph-ui-fg) 85%, var(--ph-ui-bg)) !important;
+                color: var(--ph-ui-bg) !important;
+                font-size: 12px;
+                font-weight: 600;
+                line-height: 1.25;
+                text-align: center;
+                overflow-wrap: anywhere;
+            }
+            ul.ph-tv-active > li.ph-thread > .hidden-bar:hover {
+                background: color-mix(in srgb, var(--ph-ui-fg) 72%, var(--ph-ui-bg)) !important;
+            }
             /* A fórum az AJAX-os válaszszerkesztőt külön LI-ként beszúrja az UL-be.
                Ez nem "ph-thread", ezért külön igazítjuk a célhozzászólás gyermekének
                behúzásához. A bal oldali válaszág-sín így nem megy át a szerkesztőn. */
@@ -5420,7 +5458,7 @@
             const toggle = document.createElement('a');
             toggle.href = 'javascript:;';
             toggle.className = 'btn btn-forum ph-tv-toggle';
-            toggle.innerHTML = '<span class="fas fa-comments fa-fw"></span> Thread nézet';
+            toggle.innerHTML = '<span class="fas fa-code-branch fa-fw"></span> Thread nézet';
             toggle.addEventListener('click', event => {
                 event.preventDefault();
                 closeMenus();
