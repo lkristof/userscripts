@@ -8243,23 +8243,11 @@
 
     function stickySidebar() {
         injectStyleOnce('ph-sticky-sidebar-style', `
-            #right.slotSingleColumn {
-                padding-left: 4px;
-                margin-left: -4px;
-                overflow-y: auto;
-                overscroll-behavior-y: contain;
-                overscroll-behavior-x: auto;
-            }
-            #right.slotSingleColumn::-webkit-scrollbar {
-                width: 4px;
-            }
-            #right.slotSingleColumn::-webkit-scrollbar-thumb {
-                background-color: #ccc;
-                border-radius: 10px;
-            }
+            #right.slotSingleColumn::-webkit-scrollbar,
             #left::-webkit-scrollbar {
                 width: 4px;
             }
+            #right.slotSingleColumn::-webkit-scrollbar-thumb,
             #left::-webkit-scrollbar-thumb {
                 background-color: #ccc;
                 border-radius: 10px;
@@ -8295,37 +8283,65 @@
             body[data-theme="dark"] .active-topic-header a {
                 color: var(--ph-ui-fg) !important;
             }
-            #right.slotSingleColumn,
-            #left {
-                position: sticky;
-                top: 85px;
-                max-height: calc(100vh - 55px);
-                overflow-y: auto;
-                overscroll-behavior-y: contain;
-                overscroll-behavior-x: auto;
-                transition: top 0.3s ease, max-height 0.3s ease;
-            }
-            html.scroll-down #right.slotSingleColumn,
-            html.scroll-down #left {
-                top: 45px;
-                max-height: calc(100vh - 10px);
-            }
-            @media (max-width: 991px) {
+            /* Asztalon megmarad a sticky oldalsav es a kulon gorgetes. */
+            @media (min-width: 992px) {
                 #right.slotSingleColumn {
-                    top: 53px;
+                    padding-left: 4px;
+                    margin-left: -4px;
                 }
-                html.scroll-down #right.slotSingleColumn{
-                    top: 5px;
+                #right.slotSingleColumn,
+                #left {
+                    position: sticky;
+                    top: 85px;
+                    max-height: calc(100vh - 55px);
+                    overflow-y: auto;
+                    overscroll-behavior-y: contain;
+                    overscroll-behavior-x: auto;
+                    transition: top 0.3s ease, max-height 0.3s ease;
+                }
+                html.scroll-down #right.slotSingleColumn,
+                html.scroll-down #left {
+                    top: 45px;
                     max-height: calc(100vh - 10px);
                 }
             }
-            @media (max-width: 768px) {
+            /* Mobilon es tableten a dokumentum az egyetlen fuggoleges scroller.
+               A webhely sajat magassagi/overflow beallitasait is felulirjuk. */
+            @media (max-width: 991.98px) {
+                #right.slotSingleColumn,
+                #left {
+                    position: static !important;
+                    top: auto !important;
+                    bottom: auto !important;
+                    height: auto !important;
+                    max-height: none !important;
+                    overflow: visible !important;
+                    overscroll-behavior: auto !important;
+                    transition: none !important;
+                }
                 #right.slotSingleColumn {
-                    overflow-y: visible;
-                    max-height: none;
+                    padding-left: 0 !important;
+                    margin-left: 0 !important;
                 }
             }
         `);
+
+        const desktopSidebarQuery = window.matchMedia('(min-width: 992px)');
+
+        // Szelesbol mobilnezetbe valtaskor a desktop sidebar korabbi
+        // belso scroll pozicioja sem tarthatja vissza a tartalmat.
+        function resetMobileSidebarScroll() {
+            if (desktopSidebarQuery.matches) return;
+            for (const sidebar of document.querySelectorAll('#right.slotSingleColumn, #left')) {
+                if (sidebar.scrollTop !== 0) sidebar.scrollTop = 0;
+            }
+        }
+        resetMobileSidebarScroll();
+        if (desktopSidebarQuery.addEventListener) {
+            desktopSidebarQuery.addEventListener('change', resetMobileSidebarScroll);
+        } else if (desktopSidebarQuery.addListener) {
+            desktopSidebarQuery.addListener(resetMobileSidebarScroll);
+        }
 
         const currentMatch = window.location.pathname.match(/\/tema\/[^/]+\//);
         if (!currentMatch) return;
@@ -8340,7 +8356,7 @@
                 if (li) {
                     li.classList.add('active-topic-sidebar');
                     const sidebar = document.querySelector('#right.slotSingleColumn');
-                    if (sidebar) {
+                    if (sidebar && desktopSidebarQuery.matches) {
                         const liRect = li.getBoundingClientRect();
                         const sidebarRect = sidebar.getBoundingClientRect();
                         const scrollTarget = sidebar.scrollTop
