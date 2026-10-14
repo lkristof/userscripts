@@ -179,7 +179,7 @@
         msgAnchorHighlight: 'Az URL-ben megadott #msg hozzászóláshoz görget és kiemeli azt. Színek a 🎨 menüben.',
         offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
         wideView: 'Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.',
-        threadView: 'Hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése.',
+        threadView: 'Reddit-szerű válaszfa folytonos, kiemelhető ágvonalakkal és összecsukható hozzászólásokkal. A Thread nézet gomb lenyíló menüjében minden ág összecsukható vagy kibontható.',
         keyboardNavigation: 'Billentyű navigáció a hozzászólások között\n← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő\nR előzmény\nshift + R vissza az R-el bejárt útvonalon',
         hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
         markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
@@ -3311,6 +3311,8 @@
                 wrapper.className = "ph-pt-chain-link message-btn";
                 wrapper.href = "javascript:;";
                 wrapper.role = "button";
+                wrapper.title = 'Hozzászólás-lánc kiemelése';
+                wrapper.setAttribute('aria-label', 'Hozzászólás-lánc kiemelése');
 
                 wrapper.innerHTML = `
                     <span class="fas fa-link fa-fw"></span>
@@ -3682,6 +3684,11 @@
                         }, 500);
                     }
                 }
+            });
+            // Inform the thread layer after the OFF transition classes are updated.
+            // These callbacks run after the per-post requestAnimationFrame updates.
+            requestAnimationFrame(() => {
+                document.dispatchEvent(new Event('ph-pt-off-visibility-changed'));
             });
         }
 
@@ -4130,282 +4137,1407 @@
     }
 
     function threadView() {
-        const INDENT       = 10;
-        const LINE_COLOR   = "#C1BFB6";
-        const LINE_OPACITY = 1;
-        const LINE_THICK   = 1;
-        const STORAGE_KEY  = KEYS.STATE.THREAD_VIEW;
-        const STATUS       = { ON: 'enabled', OFF: 'disabled' };
+        // A hozzászólások az eredeti UL közvetlen LI elemei maradnak.
+        // A kapcsolatok egyetlen, pozíciók alapján rajzolt SVG-rétegen futnak:
+        // így a hozzászólások közti margó/padding sem szakíthatja meg a vonalakat.
+        const STORAGE_KEY = KEYS.STATE.THREAD_VIEW;
+        const STATUS = { ON: 'enabled', OFF: 'disabled' };
+        const FOLD_KEY = 'ph_pt_thread_fold_v1:' + location.host + location.pathname + location.search;
+        const mobileQuery = window.matchMedia('(max-width: 640px)');
+        const SVG_NS = 'http://www.w3.org/2000/svg';
 
-        let threadContainerHeader = null;
+        let ul = null;
+        let svg = null;
         let threadActive = false;
-        const buttons = [];
+        let originalOrder = [];
+        let entries = [];
+        let postMap = new Map();
+        let parentMap = new Map();
+        let updateTimer = null;
+        let drawFrame = null;
+        let hoveredBranch = null;
+        let sizeObserver = null;
+        let lastListWidth = 0;
+        const controls = [];
+        const collapsedIds = new Set();
 
-        injectStyleOnce("ph-pt-thread-view-style", `
-            li[data-id] {
-                transition: transform 300ms ease, opacity 200ms ease;
+        // A böngészőfülön belül a korábbi összehajtások megmaradnak.
+        try {
+            const saved = JSON.parse(sessionStorage.getItem(FOLD_KEY) || '[]');
+            if (Array.isArray(saved)) {
+                for (const id of saved) {
+                    if (/^\d+$/.test(String(id))) collapsedIds.add(String(id));
+                }
             }
-            .thread-lines {
-                position: absolute;
-                top: 0;
-                bottom: 0;
-                pointer-events: none;
-                left: 0;
+        } catch (error) {
+            console.warn('[PH Power Tools] Thread-állapot beolvasása sikertelen:', error);
+        }
+
+        injectStyleOnce('ph-pt-thread-view-style', `
+            ul.ph-tv-active {
+                position: relative !important;
+                --ph-tv-line: color-mix(in srgb, var(--ph-ui-muted, #818995) 51%, transparent);
+                --ph-tv-line-hover: var(--ph-ui-accent-ink, #477baa);
+                --ph-tv-surface: var(--ph-ui-bg, #fff);
+                --ph-tv-text: var(--ph-ui-fg, #252525);
+                --ph-tv-muted: var(--ph-ui-muted, #74777b);
             }
-            .thread-line-vert {
-                position: absolute;
-                top: 0;
-                bottom: 0;
-                width: ${LINE_THICK}px;
-                background: ${LINE_COLOR};
-                opacity: ${LINE_OPACITY};
-                border-radius: ${LINE_THICK}px;
-            }
-            .thread-line-horiz {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: ${INDENT}px;
-                height: 50%;
-                border-left: ${LINE_THICK}px solid ${LINE_COLOR};
-                border-bottom: ${LINE_THICK}px solid ${LINE_COLOR};
-                border-bottom-left-radius: ${INDENT}px;
-                opacity: ${LINE_OPACITY};
+            ul.ph-tv-active > li.ph-thread {
+                position: relative !important;
                 box-sizing: border-box;
+                min-width: 0;
+                margin-left: 0 !important;
+                padding-left: var(--ph-tv-indent, 26px) !important;
+            }
+            /* A vonalakat nem daraboljuk hozzászólásonként: az SVG az egész UL-t lefedi. */
+            ul.ph-tv-active > .ph-tv-connections {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                overflow: visible;
+                pointer-events: none;
+                z-index: 2;
+            }
+            .ph-tv-connections .ph-tv-path {
+                fill: none;
+                stroke: var(--ph-tv-line);
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                pointer-events: none;
+                transition: stroke 140ms ease, stroke-width 140ms ease;
+            }
+            .ph-tv-connections .ph-tv-path-hit {
+                fill: none;
+                stroke: transparent;
+                stroke-width: 16;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                pointer-events: stroke;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            /* Chromium az SVG kattinthato, attetszo hit-pathjara kulon fokuszkeretet
+               rajzol. Ez a vastag kek kontur nem a Reddit-szeru agkiemeles resze. */
+            .ph-tv-connections .ph-tv-path-hit:focus,
+            .ph-tv-connections .ph-tv-path-hit:focus-visible {
+                outline: none !important;
+            }
+            .ph-tv-connections .ph-tv-branch.is-highlighted > .ph-tv-path {
+                stroke: var(--ph-tv-line-hover);
+                stroke-width: 3;
+            }
+            ul.ph-tv-active > li.ph-thread > .ph-tv-collapse {
+                position: absolute;
+                z-index: 5;
+                top: 10px;
+                left: calc(var(--ph-tv-rail-x, 13px) - 9px);
+                width: 18px;
+                height: 18px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid var(--ph-tv-line);
+                border-radius: 50%;
+                background: var(--ph-tv-surface);
+                color: var(--ph-tv-muted);
+                font-size: 16px;
+                font-family: Arial, sans-serif;
+                line-height: 1;
+                padding: 0;
+                cursor: pointer;
+                transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+            }
+            ul.ph-tv-active > li.ph-thread > .ph-tv-collapse:hover,
+            ul.ph-tv-active > li.ph-thread > .ph-tv-collapse:focus-visible,
+            ul.ph-tv-active > li.ph-thread.ph-tv-branch-hover > .ph-tv-collapse {
+                border-color: var(--ph-tv-line-hover);
+                background: color-mix(in srgb, var(--ph-tv-line-hover) 12%, var(--ph-tv-surface));
+                color: var(--ph-tv-line-hover);
+                outline-offset: 2px;
+            }
+            /* Összecsukáskor a +/- kapcsoló is látható marad, és az SVG ehhez köt. */
+            ul.ph-tv-active > li.ph-tv-collapsed > :not(.ph-tv-collapse):not(.ph-tv-summary) {
+                display: none !important;
+            }
+            ul.ph-tv-active > li.ph-thread > .ph-tv-summary {
+                display: none;
+                width: 100%;
+                min-width: 0;
+                align-items: center;
+                gap: 7px;
+                min-height: 38px;
+                margin: 1px 0 5px;
+                padding: 7px 11px;
+                box-sizing: border-box;
+                text-align: left;
+                border: 1px solid var(--ph-tv-line);
+                border-radius: 9px;
+                background: color-mix(in srgb, var(--ph-tv-text) 5%, var(--ph-tv-surface));
+                color: var(--ph-tv-text);
+                cursor: pointer;
+            }
+            ul.ph-tv-active > li.ph-thread.ph-tv-collapsed > .ph-tv-summary {
+                display: flex;
+            }
+            ul.ph-tv-active > li.ph-thread > .ph-tv-summary:hover,
+            ul.ph-tv-active > li.ph-thread > .ph-tv-summary:focus-visible {
+                border-color: var(--ph-tv-line-hover);
+                background: color-mix(in srgb, var(--ph-tv-line-hover) 10%, var(--ph-tv-surface));
+                outline-offset: 2px;
+            }
+            .ph-tv-summary-icon {
+                flex: 0 0 auto;
+                width: 19px;
+                height: 19px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 50%;
+                background: color-mix(in srgb, var(--ph-tv-line-hover) 15%, var(--ph-tv-surface));
+                color: var(--ph-tv-line-hover);
+                font-size: 15px;
+                font-weight: 700;
+            }
+            .ph-tv-summary-author {
+                font-size: 12px;
+                font-weight: 700;
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+            }
+            .ph-tv-summary-meta {
+                min-width: 0;
+                font-size: 11px;
+                color: var(--ph-tv-muted);
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+            }
+            ul.ph-tv-active > li.ph-tv-branch-hidden {
+                display: none !important;
+            }
+            /* An OFF-hidden message must not leave a +/- button or an empty LI. */
+            ul.ph-tv-active > li.ph-tv-off-hidden {
+                display: none !important;
+            }
+            /* Az összes művelet a Thread nézet osztott gombjának menüjében van. */
+            .ph-tv-control {
+                position: relative;
+                z-index: 1000;
+                display: inline-flex;
+                align-items: stretch;
+                margin-left: 5px;
+                vertical-align: middle;
+                isolation: isolate;
+            }
+            .ph-tv-control > .ph-tv-toggle {
+                margin-left: 0 !important;
+            }
+            .ph-tv-control.ph-tv-enabled > .ph-tv-toggle {
+                border-top-right-radius: 0 !important;
+                border-bottom-right-radius: 0 !important;
+            }
+            .ph-tv-control > .ph-tv-menu-trigger {
+                min-width: 26px;
+                margin-left: -1px;
+                padding: 0 7px;
+                border-top-left-radius: 0 !important;
+                border-bottom-left-radius: 0 !important;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+            }
+            .ph-tv-control > .ph-tv-menu-trigger[hidden],
+            .ph-tv-menu[hidden] { display: none !important; }
+            .ph-tv-menu {
+                position: absolute;
+                z-index: 1000;
+                top: calc(100% + 5px);
+                right: 0;
+                min-width: 180px;
+                padding: 5px;
+                box-sizing: border-box;
+                border: 1px solid var(--ph-ui-border, #ccc);
+                border-radius: 9px;
+                background: var(--ph-ui-bg, #fff);
+                color: var(--ph-ui-fg, #222);
+                box-shadow: var(--ph-ui-shadow, 0 5px 18px rgba(0,0,0,.18));
+            }
+            .ph-tv-menu .ph-tv-menu-item {
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                width: 100%;
+                min-height: 32px;
+                padding: 7px 9px;
+                border: 0;
+                border-radius: 6px;
+                background: transparent;
+                color: inherit;
+                font: inherit;
+                font-size: 12px;
+                text-align: left;
+                white-space: nowrap;
+                cursor: pointer;
+            }
+            .ph-tv-menu .ph-tv-menu-item:hover,
+            .ph-tv-menu .ph-tv-menu-item:focus-visible {
+                background: var(--ph-ui-hover, rgba(127,127,127,.12));
+                color: var(--ph-ui-accent-ink, #477baa);
+                outline-offset: -2px;
+            }
+            .ph-tv-menu .ph-tv-menu-item + .ph-tv-menu-item {
+                margin-top: 2px;
+            }
+            @media (max-width: 640px) {
+                .ph-tv-control { margin-left: 3px; }
+                ul.ph-tv-active > li.ph-thread > .ph-tv-summary { min-height: 34px; padding: 6px 7px; }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .ph-tv-connections .ph-tv-path,
+                ul.ph-tv-active > li.ph-thread > .ph-tv-collapse { transition: none !important; }
             }
         `);
 
-        function saveState(active) {
+        // A kártyák kizárólag az aktív Thread nézetben kapják meg az új külsőt.
+        // A meglévő hivatkozásokat, dropdownokat és eseménykezelőket nem mozgatjuk:
+        // a gombsor saját, konténerfüggő tördelése az extra műveletekkel is működik.
+        injectStyleOnce('ph-pt-thread-card-style', `
+            ul.ph-tv-active {
+                box-sizing: border-box;
+                width: 100%;
+                min-width: 0;
+                max-width: 100%;
+                margin-inline: 0 !important;
+                padding: 0 !important;
+                list-style: none !important;
+                --ph-tv-card-edge: color-mix(in srgb, var(--ph-ui-muted) 28%, transparent);
+                --ph-tv-card-head: color-mix(in srgb, var(--ph-ui-bg) 91%, var(--ph-ui-muted) 9%);
+                --ph-tv-card-body: color-mix(in srgb, var(--ph-ui-bg) 55%, #b4aa81 45%);
+            }
+            body[data-theme="dark"] ul.ph-tv-active {
+                --ph-tv-card-head: color-mix(in srgb, var(--ph-ui-bg) 94%, var(--ph-ui-muted) 6%);
+                --ph-tv-card-body: color-mix(in srgb, var(--ph-ui-bg) 90%, #a3977a 10%);
+            }
+            ul.ph-tv-active > li.ph-thread {
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                list-style: none !important;
+                margin-bottom: 9px !important;
+            }
+            ul.ph-tv-active > li.ph-thread > :is(.message, .message-off) {
+                display: flex;
+                flex-direction: column;
+                box-sizing: border-box;
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                margin: 0 !important;
+                border: 1px solid var(--ph-tv-card-edge);
+                border-radius: 11px;
+                background: var(--ph-ui-bg);
+                box-shadow: 0 2px 9px rgba(0, 0, 0, .05);
+                overflow: visible; /* A fórum hárompontos menüje ne vágódjon le. */
+                container: ph-tv-card / inline-size;
+            }
+            /* A fórum az AJAX-os válaszszerkesztőt külön LI-ként beszúrja az UL-be.
+               Ez nem "ph-thread", ezért külön igazítjuk a célhozzászólás gyermekének
+               behúzásához. A bal oldali válaszág-sín így nem megy át a szerkesztőn. */
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor {
+                position: relative;
+                box-sizing: border-box;
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0;
+                margin: 0 0 9px !important;
+                padding: 0 0 0 var(--ph-tv-editor-indent, 26px) !important;
+                list-style: none !important;
+            }
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor > .message {
+                box-sizing: border-box;
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0;
+                border: 1px solid var(--ph-tv-card-edge);
+                border-radius: 11px;
+                background: var(--ph-ui-bg);
+                overflow: visible;
+            }
+            /* Az űrlap saját fejlécét és eszköztárát megtartjuk, csak a
+               tördelést és az azonosító/válasz feliratot rendezzük. */
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor > .message > .message-head {
+                display: flex !important;
+                flex-wrap: wrap !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                gap: 5px 9px !important;
+                min-height: 0 !important;
+                height: auto !important;
+                padding: 7px 10px !important;
+                border-radius: 10px 10px 0 0;
+                background: var(--ph-tv-card-head);
+                border-bottom: 1px solid var(--ph-tv-card-edge);
+            }
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .message-head > .message-head-infos > .message-reply {
+                display: none !important;
+            }
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .message-head > .message-head-user {
+                display: flex !important;
+                align-items: center !important;
+                gap: 7px;
+                min-width: 0;
+                margin: 0 !important;
+            }
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .message-head-user .user-face {
+                flex: 0 0 34px;
+                width: 34px;
+                height: 34px;
+                min-width: 34px;
+                min-height: 34px;
+            }
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor > .message > .message-body,
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .message-body-main,
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .msg-editor-wrapper {
+                box-sizing: border-box;
+                min-width: 0;
+                max-width: 100%;
+            }
+            @media (max-width: 640px) {
+                ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor > .message > .message-head {
+                    padding: 6px 8px !important;
+                }
+                ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .message-head-user .user-face {
+                    flex-basis: 29px;
+                    min-width: 29px;
+                    width: 29px;
+                    min-height: 29px;
+                    height: 29px;
+                }
+            }
+            /* Egységes KÉTSOROS fejléc valamennyi képernyőméreten.
+               A korábbi flex-wrap a három fejlécblokkot széles kijelzőn is
+               szétdobhatta, ami jelentős üres függőleges helyet okozott. */
+            ul.ph-tv-active > li.ph-thread > .message > .message-head {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) minmax(0, max-content) !important;
+                grid-template-rows: auto auto !important;
+                grid-template-areas: 'author info' 'actions actions' !important;
+                align-items: center !important;
+                align-content: start !important;
+                justify-content: stretch !important;
+                gap: 3px 9px !important;
+                box-sizing: border-box;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                margin: 0 !important;
+                padding: 7px 11px 6px !important;
+                border: 0;
+                border-bottom: 1px solid var(--ph-tv-card-edge);
+                border-radius: 10px 10px 0 0;
+                color: var(--ph-ui-fg);
+                background: var(--ph-tv-card-head);
+                overflow: visible;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head > .message-head-user {
+                grid-area: author;
+                display: flex !important;
+                position: static !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                gap: 8px !important;
+                float: none !important;
+                flex: initial !important;
+                justify-self: stretch;
+                align-self: center;
+                box-sizing: border-box;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-user .user-face {
+                display: inline-flex !important;
+                flex: 0 0 34px !important;
+                align-items: center;
+                justify-content: center;
+                box-sizing: border-box;
+                width: 34px !important;
+                height: 34px !important;
+                min-width: 34px !important;
+                max-width: 34px !important;
+                min-height: 34px !important;
+                max-height: 34px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden;
+                border: 1px solid var(--ph-tv-card-edge);
+                border-radius: 50%;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-user .user-face img {
+                display: block;
+                width: 100% !important;
+                height: 100% !important;
+                max-width: 100% !important;
+                object-fit: cover;
+                border-radius: 50%;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-user .user-title {
+                display: flex !important;
+                flex: 1 1 auto;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 1px 6px;
+                min-width: 0;
+                max-width: 100%;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                line-height: 1.25 !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-user .user-link {
+                display: inline-block;
+                min-width: 0;
+                max-width: 100%;
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+                color: var(--ph-ui-fg) !important;
+                font-weight: 700;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-user .user-title > :not(.user-link) {
+                color: var(--ph-ui-muted);
+            }
+            /* Szám FELÜL, dátum ALATTA; közös, jobbra igazított oszlop. */
+            ul.ph-tv-active > li.ph-thread .message-head > .message-head-infos {
+                grid-area: info;
+                display: flex !important;
+                position: static !important;
+                flex: initial !important;
+                flex-direction: column !important;
+                flex-wrap: nowrap !important;
+                align-items: flex-end !important;
+                justify-content: center !important;
+                justify-self: end !important;
+                align-self: center !important;
+                gap: 1px !important;
+                box-sizing: border-box;
+                float: none !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                color: var(--ph-ui-muted);
+                font-size: 12px;
+                line-height: 1.25 !important;
+                text-align: right !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-infos > :not(.message-reply) {
+                position: static !important;
+                display: block !important;
+                flex: none !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                float: none !important;
+                text-align: right !important;
+                line-height: inherit !important;
+                overflow-wrap: anywhere;
+            }
+            /* A válasz címzettje a message-body-infos részben már szerepel.
+               A fejlécbeli példányt kizárólag Thread nézetben rejtjük el:
+               a DOM-ban marad, így a szálfa parent-ID kiolvasása tovább működik. */
+            ul.ph-tv-active > li.ph-thread .message-head > .message-head-infos > .message-reply {
+                display: none !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-infos > .message-id {
+                order: -1 !important;
+                color: var(--ph-ui-fg) !important;
+                font-weight: 650;
+            }
+            /* Gombsor: kizárólag a fejléc második sora. Több gombnál törik,
+               de a gombok nem préselődnek össze és nem lógnak túl. */
+            ul.ph-tv-active > li.ph-thread .message-head > .message-head-btns {
+                grid-area: actions;
+                display: flex !important;
+                position: relative !important;
+                flex: initial !important;
+                flex-wrap: wrap !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                align-content: center;
+                gap: 2px 3px !important;
+                box-sizing: border-box;
+                float: none !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 3px 0 0 !important;
+                border-top: 1px solid var(--ph-ui-border);
+                white-space: normal !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-btns > :is(a, button, .dropdown, .btn-group) {
+                flex: 0 0 auto !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-btns :is(a.message-btn, button.message-btn),
+            ul.ph-tv-active > li.ph-thread .message-head-btns > :is(a, button) {
+                display: inline-flex !important;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
+                box-sizing: border-box;
+                min-height: 25px !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 2px 6px !important;
+                border: 1px solid transparent !important;
+                border-radius: 6px;
+                background: transparent !important;
+                color: var(--ph-ui-fg) !important;
+                font-size: 12px;
+                font-weight: 600;
+                line-height: 1.25;
+                text-decoration: none !important;
+                white-space: normal !important;
+                overflow-wrap: anywhere;
+                cursor: pointer;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-btns :is(a.message-btn, button.message-btn):is(:hover, :focus-visible),
+            ul.ph-tv-active > li.ph-thread .message-head-btns > :is(a, button):is(:hover, :focus-visible) {
+                background: var(--ph-ui-hover) !important;
+                border-color: var(--ph-ui-border) !important;
+                color: var(--ph-ui-accent-ink) !important;
+                outline-offset: 2px;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-btns .dropdown-menu {
+                z-index: 10;
+                min-width: min(180px, 100cqw) !important;
+                max-width: min(260px, 100cqw) !important;
+                white-space: normal;
+            }
+            ul.ph-tv-active > li.ph-thread > .message > .message-body {
+                box-sizing: border-box;
+                width: 100%;
+                min-width: 0;
+                max-width: 100%;
+                margin: 0 !important;
+                padding: 14px 16px !important;
+                border-radius: 0 0 10px 10px;
+                color: var(--ph-ui-fg);
+                line-height: 1.5;
+                overflow-wrap: anywhere;
+            }
+            /* A felhasználó saját színei, a lánc és a #msg-kiemelés elsőbbséget élveznek. */
+            ul.ph-tv-active > li.ph-thread > .message > .message-body:not(
+                .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author,
+                .ph-pt-focus-reply, .ph-pt-chain, .hash-highlight
+            ) {
+                background-color: var(--ph-tv-card-body) !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-content,
+            ul.ph-tv-active > li.ph-thread .message-content-replied {
+                min-width: 0;
+                max-width: 100%;
+                overflow-wrap: anywhere;
+            }
+            ul.ph-tv-active > li.ph-thread .message-content-replied {
+                margin-bottom: 9px;
+            }
+            ul.ph-tv-active > li.ph-thread .message-body img,
+            ul.ph-tv-active > li.ph-thread .message-body video,
+            ul.ph-tv-active > li.ph-thread .message-body iframe {
+                max-width: 100% !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-body :is(pre, table) {
+                max-width: 100%;
+                overflow-x: auto;
+            }
+            /* A kártya tényleges szélességéhez igazodik, nem a teljes
+               képernyőhöz. Így a mélyen behúzott válaszoknál is működik. */
+            @container ph-tv-card (max-width: 620px) {
+                ul.ph-tv-active > li.ph-thread > .message > .message-head {
+                    gap: 2px 7px !important;
+                    padding: 6px 8px 5px !important;
+                }
+                ul.ph-tv-active > li.ph-thread .message-head > .message-head-user {
+                    gap: 6px !important;
+                }
+                ul.ph-tv-active > li.ph-thread .message-head-user .user-face {
+                    flex-basis: 31px !important;
+                    width: 31px !important;
+                    min-width: 31px !important;
+                    max-width: 31px !important;
+                    height: 31px !important;
+                    min-height: 31px !important;
+                    max-height: 31px !important;
+                }
+                ul.ph-tv-active > li.ph-thread .message-head > .message-head-infos {
+                    font-size: 11px;
+                    line-height: 1.2 !important;
+                }
+                ul.ph-tv-active > li.ph-thread .message-head > .message-head-btns {
+                    padding-top: 2px !important;
+                }
+                ul.ph-tv-active > li.ph-thread .message-head-btns :is(a.message-btn, button.message-btn),
+                ul.ph-tv-active > li.ph-thread .message-head-btns > :is(a, button) {
+                    min-height: 24px !important;
+                    padding: 2px 5px !important;
+                    font-size: 11.5px;
+                }
+                ul.ph-tv-active > li.ph-thread > .message > .message-body {
+                    padding: 11px 12px !important;
+                }
+                ul.ph-tv-active > li.ph-thread .message-head-btns .dropdown-menu {
+                    left: 0 !important;
+                    right: auto !important;
+                }
+            }
+            /* Nagyon mély válaszág / keskeny oszlop: jobb, ha az azonosító
+               külön, jobbra igazított sorba kerül, mintha a név olvashatatlanul
+               keskenyre szorulna. Az ID/dátum itt is egymás alatt marad. */
+            @container ph-tv-card (max-width: 210px) {
+                ul.ph-tv-active > li.ph-thread > .message > .message-head {
+                    grid-template-columns: minmax(0, 1fr) !important;
+                    grid-template-areas: 'author' 'info' 'actions' !important;
+                    row-gap: 2px !important;
+                }
+                ul.ph-tv-active > li.ph-thread .message-head > .message-head-infos {
+                    width: 100% !important;
+                    justify-self: stretch !important;
+                }
+            }
+        `);
+
+        function saveEnabled(active) {
             storage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
         }
 
-        function shouldBeActive() {
-            return storage.getItem(STORAGE_KEY) === STATUS.ON;
+        function saveFolds() {
+            try {
+                sessionStorage.setItem(FOLD_KEY, JSON.stringify([...collapsedIds]));
+            } catch (error) {
+                console.warn('[PH Power Tools] Thread-állapot mentése sikertelen:', error);
+            }
         }
 
-        function renderThreading() {
-            if (threadActive) return;
-            if (!threadContainerHeader) return;
-
-            let ul = threadContainerHeader.nextElementSibling;
-            while (ul && !(ul.tagName === 'UL' && ul.classList.length === 0)) {
-                ul = ul.nextElementSibling;
+        function getMessageList(header) {
+            let list = header?.nextElementSibling;
+            while (list && !(list.tagName === 'UL' && list.classList.length === 0)) {
+                list = list.nextElementSibling;
             }
-            if (!ul) return;
-
-            // Adatgyűjtés
-            const allMedia = [...ul.querySelectorAll('li[data-id]')];
-            const items = allMedia.filter(li => li.dataset.id);
-
-            if (!items.length) return;
-
-            const postMap = {}, childrenMap = {}, allIds = new Set();
-            items.forEach(li => {
-                allIds.add(li.dataset.id);
-                postMap[li.dataset.id] = li;
-            });
-
-            items.forEach(li => {
-                const id = li.dataset.id;
-                let parent = li.dataset.rplid || null;
-                if (parent && !allIds.has(parent)) parent = null;
-                if (!childrenMap[parent]) childrenMap[parent] = [];
-                childrenMap[parent].push(id);
-            });
-
-            // Ürítés és újraépítés
-            animateReorder(ul, () => {
-                ul.innerHTML = '';
-                (childrenMap[null] || []).forEach(id =>
-                    renderThread(id, 0, [])
-                );
-            });
-
-            // Rekurzív renderelő
-            function renderThread(id, depth, ancestorPath = []) {
-                const el = postMap[id];
-                if (!el) return;
-
-                el.classList.add('ph-thread');
-                const currentIndent = depth * INDENT;
-                el.style.setProperty('--indent', currentIndent + 'px');
-                el.style.marginLeft = "0px";
-                el.style.paddingLeft = currentIndent + "px";
-
-                if (depth > 0) {
-                    let box = el.querySelector('.thread-lines');
-                    if (!box) {
-                        box = document.createElement('div');
-                        box.className = 'thread-lines';
-                        el.appendChild(box);
-                    }
-                    box.innerHTML = '';
-
-                    for (let d = 0; d < depth - 1; d++) {
-                        if (ancestorPath[d]) continue;
-                        const vert = document.createElement('div');
-                        vert.className = 'thread-line-vert';
-                        vert.style.left = (d * INDENT) + 'px';
-                        box.appendChild(vert);
-                    }
-
-                    if (!ancestorPath[depth - 1]) {
-                        const vert = document.createElement('div');
-                        vert.className = 'thread-line-vert';
-                        vert.style.left = ((depth - 1) * INDENT) + 'px';
-                        box.appendChild(vert);
-                    }
-
-                    // Könyök az aktuális elemhez
-                    const elbow = document.createElement('div');
-                    elbow.className = 'thread-line-horiz';
-                    elbow.style.left = ((depth - 1) * INDENT) + 'px';
-                    box.appendChild(elbow);
-                }
-
-                ul.appendChild(el);
-
-                const children = childrenMap[id] || [];
-                children.forEach((childId, i) => {
-                    const isLastChild = (i === children.length - 1);
-                    renderThread(childId, depth + 1, [...ancestorPath, isLastChild]);
-                });
-            }
-
-            // Indítás a gyökér szintű elemekkel
-            (childrenMap[null] || []).forEach(id => renderThread(id, 0, []));
-
-            threadActive = true;
-            saveState(true);
+            return list;
         }
 
-        let originalOrder = [];
-
-        function initOriginalOrder() {
-            if (!threadContainerHeader) return;
-            let ul = threadContainerHeader.nextElementSibling;
-            while (ul && !(ul.tagName === 'UL' && ul.classList.length === 0)) {
-                ul = ul.nextElementSibling;
-            }
-            if (!ul) return;
-
-            originalOrder = [...ul.querySelectorAll('li[data-id]')];
+        function getPostsInDom() {
+            return ul ? [...ul.children].filter(el => el.matches('li[data-id]') && el.dataset.id) : [];
         }
 
-        function restoreOriginalOrder() {
-            if (!threadContainerHeader) return;
-
-            let ul = threadContainerHeader.nextElementSibling;
-            while (ul && !(ul.tagName === 'UL' && ul.classList.length === 0)) {
-                ul = ul.nextElementSibling;
-            }
-            if (!ul) return;
-
-            // A teljes folyamatot az animateReorder-re bízzuk
-            animateReorder(ul, () => {
-                // 1. Töröljük a threading-hez kapcsolódó stílusokat és elemeket
-                originalOrder.forEach(li => {
-                    li.classList.remove('ph-thread');
-                    li.style.marginLeft = '';
-                    li.style.paddingLeft = '';
-                    li.style.setProperty('--indent', '0px');
-                    const box = li.querySelector('.thread-lines');
-                    if (box) box.remove();
-                });
-
-                // 2. Visszahelyezzük őket az eredeti sorrendbe
-                ul.innerHTML = '';
-                originalOrder.forEach(li => ul.appendChild(li));
+        // Az UL más gyermekei a helyükön maradnak (reklám, lapozó stb.).
+        function reorder(posts) {
+            const current = getPostsInDom();
+            if (current.length !== posts.length) return;
+            if (current.every((li, i) => li === posts[i])) return;
+            const slots = current.map(li => {
+                const slot = document.createComment('ph-thread-position');
+                li.replaceWith(slot);
+                return slot;
             });
-
-            threadActive = false;
-            saveState(false);
+            slots.forEach((slot, i) => slot.replaceWith(posts[i]));
         }
 
-        function createToggleButton() {
-            const btn = document.createElement('a');
-            btn.href = 'javascript:;';
-            btn.className = 'btn btn-forum';
-            btn.innerHTML = `<span class="fas fa-project-diagram fa-fw"></span> Thread nézet`;
+        function getAuthor(li) {
+            return li.querySelector(
+                '.message-head-user .user-title .user-link, ' +
+                '.message-head-user .user-link, ' +
+                '.message-body-user .user-title .user-link'
+            )?.textContent?.trim() || `#${li.dataset.id}`;
+        }
 
-            function updateButtonUI() {
-                btn.classList.toggle('btn-primary', threadActive);
-                btn.title = threadActive ? 'Thread nézet kikapcsolása' : 'Thread nézet bekapcsolása';
-            }
-
-            btn.addEventListener('click', e => {
-                e.preventDefault();
-                if (threadActive) restoreOriginalOrder();
-                else renderThreading();
-                updateAllButtons();
+        function makeButton(className, label, callback) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = className;
+            btn.setAttribute('aria-label', label);
+            btn.title = label;
+            btn.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                callback();
             });
-
-            btn._update = updateButtonUI;
-            updateButtonUI();
-
             return btn;
         }
 
-        function updateAllButtons() {
-            buttons.forEach(btn => btn._update());
+        // A mélységi sorrendben egy ág minden tagja egymás után található.
+        function branchIds(rootId) {
+            const i = entries.findIndex(entry => entry.id === rootId);
+            if (i < 0) return [];
+            const depth = entries[i].depth;
+            const ids = [];
+            for (let j = i; j < entries.length; j++) {
+                if (j > i && entries[j].depth <= depth) break;
+                ids.push(entries[j].id);
+            }
+            return ids;
+        }
+
+        function setHoveredBranch(id) {
+            if (hoveredBranch === id) return;
+            hoveredBranch = id;
+            const selected = id ? new Set(branchIds(id)) : null;
+            for (const entry of entries) {
+                entry.li.classList.toggle('ph-tv-branch-hover', !!selected?.has(entry.id));
+            }
+            svg?.querySelectorAll('.ph-tv-branch').forEach(group => {
+                group.classList.toggle('is-highlighted', !!selected?.has(group.dataset.branchId));
+            });
+        }
+
+        function toggleFold(id) {
+            if (!threadActive || !postMap.has(id)) return;
+            setHoveredBranch(null);
+            if (collapsedIds.has(id)) collapsedIds.delete(id);
+            else collapsedIds.add(id);
+            applyFolds();
+            saveFolds();
+        }
+
+        function createPostControls(li, id) {
+            const collapse = makeButton('ph-tv-collapse', 'Hozzászólás és válaszág összecsukása', () => toggleFold(id));
+            collapse.textContent = '−';
+            collapse.addEventListener('mouseenter', () => setHoveredBranch(id));
+            collapse.addEventListener('mouseleave', () => setHoveredBranch(null));
+            // Egeres kattintas utan ne ragadjon be a fokusz miatti agakijeloles.
+            // Billentyuzetes fokusznal az agak vizualis visszajelzese megmarad.
+            collapse.addEventListener('focus', () => {
+                if (collapse.matches(':focus-visible')) setHoveredBranch(id);
+            });
+            collapse.addEventListener('blur', () => setHoveredBranch(null));
+
+            const summary = makeButton('ph-tv-summary', 'Hozzászólás kibontása', () => toggleFold(id));
+            summary.setAttribute('aria-expanded', 'false');
+            const icon = document.createElement('span');
+            icon.className = 'ph-tv-summary-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = '+';
+            const author = document.createElement('span');
+            author.className = 'ph-tv-summary-author';
+            author.textContent = getAuthor(li);
+            const meta = document.createElement('span');
+            meta.className = 'ph-tv-summary-meta';
+            summary.append(icon, author, meta);
+            li.append(collapse, summary);
+        }
+
+        // offHider hides the .message/.message-off element, not necessarily its LI.
+        // Hide the entire row only while thread view is active, to avoid orphan
+        // collapse buttons and connectors pointing at invisible OFF posts.
+        function isOffPostHidden(li) {
+            return li.classList.contains('off-post-hidden') ||
+                !!li.querySelector('.message.off-post-hidden, .message-off.off-post-hidden');
+        }
+
+        function syncOffVisibility() {
+            if (!threadActive) return;
+            let changed = false;
+            for (const entry of entries) {
+                if (entry.li.classList.toggle('ph-tv-off-hidden', isOffPostHidden(entry.li))) {
+                    changed = true;
+                }
+            }
+            if (changed) setHoveredBranch(null);
+            scheduleConnectorDraw();
+        }
+
+        function threadIndentForDepth(depth) {
+            const isMobile = mobileQuery.matches;
+            const step = isMobile ? 16 : 22;
+            const limit = isMobile ? 5 : 11;
+            const visualDepth = Math.min(Math.max(0, depth), limit);
+            const listWidth = ul?.clientWidth || document.documentElement.clientWidth;
+            const readableWidth = Math.min(310, Math.max(170, listWidth * .76));
+            const maxIndent = Math.max(24, Math.floor(listWidth - readableWidth));
+            return Math.min(26 + visualDepth * step, maxIndent);
+        }
+
+        // Nem mozgathatjuk át az AJAX-os szerkesztőt: a fórum eseménykezelői
+        // és TinyMCE-állapota a helyén marad. CSS-behúzással tesszük pontosan
+        // a megválaszolt hozzászólás gyermekével egy szintre.
+        function syncInlineEditors() {
+            if (!threadActive || !ul) return;
+            const depthById = new Map(entries.map(entry => [entry.id, entry.depth]));
+            for (const editor of ul.querySelectorAll(':scope > li.msg-editor')) {
+                const action = editor.querySelector('.msg-form')?.getAttribute('action') || '';
+                const targetInAction = action.match(/[?&]rtoid=(\d+)(?:&|$)/)?.[1];
+                const replyText = editor.querySelector('.message-head-infos > .message-reply .message-id')?.textContent || '';
+                const targetId = targetInAction || replyText.match(/#(\d+)/)?.[1];
+                const targetDepth = targetId ? depthById.get(targetId) : undefined;
+                const depth = targetDepth === undefined ? 0 : targetDepth + 1;
+                const indent = `${threadIndentForDepth(depth)}px`;
+                editor.classList.add('ph-tv-inline-editor');
+                if (editor.style.getPropertyValue('--ph-tv-editor-indent') !== indent) {
+                    editor.style.setProperty('--ph-tv-editor-indent', indent);
+                }
+            }
+        }
+
+        function syncPostUi(entry) {
+            const li = entry.li;
+            li.classList.add('ph-thread');
+            li.classList.toggle('ph-tv-off-hidden', isOffPostHidden(li));
+            li.classList.toggle('ph-tv-has-children', entry.descendants > 0);
+            if (!li.querySelector(':scope > .ph-tv-collapse')) createPostControls(li, entry.id);
+            // A válaszkártyák és a beillesztett űrlap pontosan ugyanazt a
+            // reszponzív mélységi behúzást használják.
+            const indent = threadIndentForDepth(entry.depth);
+            li.style.setProperty('--ph-tv-indent', `${indent}px`);
+            li.style.setProperty('--ph-tv-rail-x', `${indent - 13}px`);
+            const meta = li.querySelector(':scope > .ph-tv-summary .ph-tv-summary-meta');
+            if (meta) meta.textContent = entry.descendants > 0
+                ? `#${entry.id} · ${entry.descendants} válasz elrejtve`
+                : `#${entry.id} · hozzászólás elrejtve`;
+            const author = li.querySelector(':scope > .ph-tv-summary .ph-tv-summary-author');
+            if (author) author.textContent = getAuthor(li);
+        }
+
+        function makeSvgNode(tag, attrs) {
+            const element = document.createElementNS(SVG_NS, tag);
+            for (const [key, value] of Object.entries(attrs || {})) {
+                element.setAttribute(key, String(value));
+            }
+            return element;
+        }
+
+        function syncResponsiveWidth(force = false) {
+            if (!threadActive || !ul) return;
+            const currentWidth = ul.clientWidth;
+            if (force || currentWidth !== lastListWidth) {
+                lastListWidth = currentWidth;
+                entries.forEach(syncPostUi);
+            }
+            scheduleConnectorDraw();
+        }
+
+        function scheduleConnectorDraw() {
+            if (!threadActive || !svg || drawFrame !== null) return;
+            drawFrame = requestAnimationFrame(() => {
+                drawFrame = null;
+                drawConnectors();
+            });
+        }
+
+        // Az űrlap az UL külön LI-gyermeke. A teljes szerkesztőkártyát
+        // vesszük figyelembe, nem csupán a belső contenteditable mezőt:
+        // így az avatar/fejléc és a gombsáv sem kerül ágvonal alá.
+        function getEditorOcclusions(offsetX, offsetY, width, height) {
+            const areas = [];
+            const editors = new Set(ul.querySelectorAll(':scope > li.msg-editor > .message'));
+            // Egyes szerkesztőváltozatok a .msg-editor-wrapper elemet
+            // közvetlenül egy már meglévő LI-be szúrják be.
+            ul.querySelectorAll('.msg-editor-wrapper').forEach(wrapper => {
+                if (!wrapper.closest('li.msg-editor')) editors.add(wrapper);
+            });
+            for (const editor of editors) {
+                const rect = editor.getBoundingClientRect();
+                if (rect.width < 24 || rect.height < 24) continue;
+                // A szerkesztő ELŐTTI, bal oldali ágakat nem takarjuk el.
+                // A 4px ráhagyás az avatar/border széleit is védi.
+                const x1 = Math.max(0, rect.left - offsetX - 4);
+                const y1 = Math.max(0, rect.top - offsetY - 4);
+                const x2 = Math.min(width, rect.right - offsetX + 4);
+                const y2 = Math.min(height, rect.bottom - offsetY + 4);
+                if (x2 > x1 && y2 > y1) {
+                    areas.push({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
+                }
+            }
+            return areas;
+        }
+
+        function drawConnectors() {
+            if (!threadActive || !svg || !ul) return;
+            // Ekkorra a dinamikusan beszúrt űrlap a válasza mélységéhez
+            // igazodik; a méreteket már az új elrendezésben mérjük.
+            syncInlineEditors();
+            const listRect = ul.getBoundingClientRect();
+            const width = Math.max(1, ul.clientWidth);
+            const height = Math.max(1, ul.clientHeight);
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            const offsetX = listRect.left + ul.clientLeft;
+            const offsetY = listRect.top + ul.clientTop;
+            const points = new Map();
+            const visible = new Set();
+
+            for (const entry of entries) {
+                if (entry.li.classList.contains('ph-tv-branch-hidden') ||
+                    entry.li.classList.contains('ph-tv-off-hidden')) continue;
+                const button = entry.li.querySelector(':scope > .ph-tv-collapse');
+                if (!button) continue;
+                const rect = button.getBoundingClientRect();
+                if (!rect.width || !rect.height) continue;
+                points.set(entry.id, {
+                    x: rect.left + rect.width / 2 - offsetX,
+                    y: rect.top + rect.height / 2 - offsetY,
+                    radius: rect.width / 2
+                });
+                visible.add(entry.id);
+            }
+
+            // Egyetlen összefüggő, elágazó útvonal jut minden szülő hozzászólásnak.
+            // A valós képernyőkoordináták miatt a margókon át is pontos az illesztés.
+            const children = new Map();
+            for (const entry of entries) {
+                if (!visible.has(entry.id)) continue;
+                const parentId = parentMap.get(entry.id);
+                if (!parentId || !visible.has(parentId)) continue;
+                if (!children.has(parentId)) children.set(parentId, []);
+                children.get(parentId).push(entry.id);
+            }
+
+            const fragment = document.createDocumentFragment();
+            const marked = hoveredBranch ? new Set(branchIds(hoveredBranch)) : null;
+            for (const [parentId, childIds] of children) {
+                const p = points.get(parentId);
+                const childPoints = childIds.map(id => points.get(id)).filter(Boolean);
+                if (!p || !childPoints.length) continue;
+                const last = childPoints[childPoints.length - 1];
+                const parts = [];
+                const dx = last.x - p.x;
+                const startY = p.y + p.radius;
+                if (dx >= 10) {
+                    // A törzs az utolsó gyermek kerekített könyökénél ér véget;
+                    // az összes testvér ehhez a közös, megszakítás nélküli ághoz köt.
+                    const endY = last.y - Math.min(10, dx / 2);
+                    if (endY > startY) parts.push(`M ${p.x} ${startY} V ${endY}`);
+                    for (const child of childPoints) {
+                        const corner = Math.min(10, (child.x - p.x) / 2);
+                        const endX = child.x - child.radius + 0.7;
+                        parts.push(`M ${p.x} ${child.y - corner} Q ${p.x} ${child.y} ` +
+                            `${p.x + corner} ${child.y} H ${endX}`);
+                    }
+                } else {
+                    // Maximális behúzásnál a gyermekek X-koordinátája megegyezik
+                    // a szülőével. A körgombokat ekkor nem szeli át a törzsvonal.
+                    let nextStart = startY;
+                    for (const child of childPoints) {
+                        const stop = child.y - child.radius;
+                        if (stop > nextStart) parts.push(`M ${p.x} ${nextStart} V ${stop}`);
+                        nextStart = child.y + child.radius;
+                    }
+                }
+                const d = parts.join(' ');
+                const group = makeSvgNode('g', { 'class': 'ph-tv-branch', 'data-branch-id': parentId });
+                if (marked?.has(parentId)) group.classList.add('is-highlighted');
+                const path = makeSvgNode('path', { 'class': 'ph-tv-path', d });
+                const hit = makeSvgNode('path', {
+                    'class': 'ph-tv-path-hit', d, 'role': 'button', 'tabindex': '0',
+                    'aria-label': 'Válaszág összecsukása'
+                });
+                const title = makeSvgNode('title');
+                title.textContent = 'Válaszág összecsukása';
+                hit.appendChild(title);
+                hit.addEventListener('mouseenter', () => setHoveredBranch(parentId));
+                hit.addEventListener('mouseleave', () => setHoveredBranch(null));
+                hit.addEventListener('focus', () => {
+                    if (hit.matches(':focus-visible')) setHoveredBranch(parentId);
+                });
+                hit.addEventListener('blur', () => setHoveredBranch(null));
+                hit.addEventListener('click', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    toggleFold(parentId);
+                });
+                hit.addEventListener('keydown', event => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    toggleFold(parentId);
+                });
+                group.append(path, hit);
+                fragment.appendChild(group);
+            }
+            const covered = getEditorOcclusions(offsetX, offsetY, width, height);
+            if (!covered.length) {
+                svg.replaceChildren(fragment);
+            } else {
+                // Az SVG-maszk csak a rajzolást rejti el, a láthatatlan
+                // kattintható "hit-path" azonban továbbra is elkapná az
+                // egérkattintást. A clipPath mindkettőt kizárja.
+                const defs = makeSvgNode('defs');
+                let visibleLines = makeSvgNode('g');
+                visibleLines.appendChild(fragment);
+                covered.forEach((area, index) => {
+                    const clipId = `ph-tv-editor-clip-${index}`;
+                    const clip = makeSvgNode('clipPath', {
+                        id: clipId, clipPathUnits: 'userSpaceOnUse'
+                    });
+                    const { x, y, width: cutWidth, height: cutHeight } = area;
+                    // A második téglalap lyuk a teljes SVG területén;
+                    // több szerkesztő esetén a clip-ek metszete érvényesül.
+                    const d = `M 0 0 H ${width} V ${height} H 0 Z ` +
+                        `M ${x} ${y} H ${x + cutWidth} V ${y + cutHeight} H ${x} Z`;
+                    clip.appendChild(makeSvgNode('path', { d, 'clip-rule': 'evenodd' }));
+                    defs.appendChild(clip);
+                    const layer = makeSvgNode('g', { 'clip-path': `url(#${clipId})` });
+                    layer.appendChild(visibleLines);
+                    visibleLines = layer;
+                });
+                svg.replaceChildren(defs, visibleLines);
+            }
+        }
+
+        // Az eredeti (lapos) LI-sorrendet eltároljuk; a hibás vagy körkörös
+        // hivatkozások sem tudnak végtelen fa-bejárást előidézni.
+        function rebuildTree() {
+            const current = getPostsInDom();
+            const currentSet = new Set(current);
+            originalOrder = originalOrder.filter(li => currentSet.has(li));
+            const known = new Set(originalOrder);
+            for (const li of current) {
+                if (!known.has(li)) {
+                    originalOrder.push(li);
+                    known.add(li);
+                }
+            }
+            postMap = new Map();
+            for (const li of originalOrder) {
+                if (!postMap.has(li.dataset.id)) postMap.set(li.dataset.id, li);
+            }
+            if (!postMap.size) return;
+
+            const children = new Map();
+            const roots = [];
+            for (const li of originalOrder) {
+                const id = li.dataset.id;
+                const parent = li.dataset.rplid;
+                if (parent && parent !== id && postMap.has(parent)) {
+                    if (!children.has(parent)) children.set(parent, []);
+                    children.get(parent).push(id);
+                } else {
+                    roots.push(id);
+                }
+            }
+
+            const nextEntries = [];
+            const nextParentMap = new Map();
+            const visited = new Set();
+            function walk(id, depth, parentId) {
+                if (visited.has(id)) return;
+                const li = postMap.get(id);
+                if (!li) return;
+                visited.add(id);
+                nextParentMap.set(id, parentId);
+                nextEntries.push({ id, li, depth, descendants: 0 });
+                for (const child of children.get(id) || []) walk(child, depth + 1, id);
+            }
+            roots.forEach(id => walk(id, 0, null));
+            for (const li of originalOrder) {
+                if (!visited.has(li.dataset.id)) walk(li.dataset.id, 0, null);
+            }
+
+            const stack = [];
+            for (let i = nextEntries.length - 1; i >= 0; i--) {
+                const item = nextEntries[i];
+                while (stack.length && stack[stack.length - 1].depth > item.depth) {
+                    const child = stack.pop();
+                    item.descendants += 1 + child.descendants;
+                }
+                stack.push(item);
+            }
+
+            entries = nextEntries;
+            parentMap = nextParentMap;
+            lastListWidth = ul.clientWidth;
+            entries.forEach(syncPostUi);
+            reorder(entries.map(entry => entry.li));
+            syncInlineEditors();
+            if (sizeObserver) {
+                sizeObserver.disconnect();
+                sizeObserver.observe(ul);
+                entries.forEach(entry => sizeObserver.observe(entry.li));
+            }
+            applyFolds();
+        }
+
+        function applyFolds() {
+            // A gyerekek UL-testvérek maradnak, ezért az aktuális mélységet
+            // használjuk a rejtett ágak megállapításához.
+            const hiddenBy = [];
+            for (const entry of entries) {
+                while (hiddenBy.length && hiddenBy[hiddenBy.length - 1] >= entry.depth) {
+                    hiddenBy.pop();
+                }
+                const folded = collapsedIds.has(entry.id);
+                entry.li.classList.toggle('ph-tv-branch-hidden', hiddenBy.length > 0);
+                entry.li.classList.toggle('ph-tv-collapsed', folded);
+                const button = entry.li.querySelector(':scope > .ph-tv-collapse');
+                if (button) {
+                    button.setAttribute('aria-expanded', String(!folded));
+                    button.setAttribute('aria-label', folded
+                        ? 'Hozzászólás és válaszág kibontása'
+                        : 'Hozzászólás és válaszág összecsukása');
+                    button.title = folded ? 'Válaszág kibontása' : 'Válaszág összecsukása';
+                    button.textContent = folded ? '+' : '−';
+                }
+
+                if (folded) hiddenBy.push(entry.depth);
+            }
+            scheduleConnectorDraw();
+        }
+
+        function revealById(id) {
+            if (!threadActive) return false;
+            const key = String(id).replace(/^msg/, '');
+            if (!postMap.has(key)) return false;
+            const seen = new Set();
+            let parent = parentMap.get(key);
+            let changed = false;
+            while (parent && !seen.has(parent)) {
+                seen.add(parent);
+                if (collapsedIds.delete(parent)) changed = true;
+                parent = parentMap.get(parent);
+            }
+            if (changed) {
+                applyFolds();
+                saveFolds();
+            }
+            return true;
+        }
+
+        function revealHashTarget() {
+            const m = location.hash.match(/^#msg(\d+)$/);
+            if (m) revealById(m[1]);
+        }
+
+        function setAllFolded(fold) {
+            if (!threadActive) return;
+            setHoveredBranch(null);
+            if (fold) {
+                for (const entry of entries) {
+                    if (entry.depth === 0 && entry.descendants) collapsedIds.add(entry.id);
+                }
+            } else {
+                collapsedIds.clear();
+            }
+            applyFolds();
+            saveFolds();
+            if (!fold) revealHashTarget();
+        }
+
+        function closeMenus() {
+            for (const control of controls) {
+                control.menu.hidden = true;
+                control.trigger.setAttribute('aria-expanded', 'false');
+            }
+        }
+
+        function updateButtons() {
+            for (const control of controls) {
+                const { toggle, trigger, wrapper } = control;
+                toggle.classList.toggle('btn-primary', threadActive);
+                toggle.title = threadActive
+                    ? 'Reddit-szerű thread nézet kikapcsolása'
+                    : 'Reddit-szerű thread nézet bekapcsolása';
+                toggle.setAttribute('aria-pressed', String(threadActive));
+                wrapper.classList.toggle('ph-tv-enabled', threadActive);
+                trigger.hidden = !threadActive;
+            }
+            if (!threadActive) closeMenus();
+        }
+
+        function renderThreading() {
+            if (threadActive || !ul) return;
+            originalOrder = getPostsInDom();
+            if (!originalOrder.length) return;
+            threadActive = true;
+            ul.classList.add('ph-tv-active');
+            svg = makeSvgNode('svg', { 'class': 'ph-tv-connections', 'aria-hidden': 'false' });
+            svg.setAttribute('aria-label', 'Összecsukható válaszágak');
+            ul.appendChild(svg);
+            rebuildTree();
+            revealHashTarget();
+            saveEnabled(true);
+            updateButtons();
+        }
+
+        function restoreOriginalOrder() {
+            if (!threadActive || !ul) return;
+            threadActive = false;
+            setHoveredBranch(null);
+            if (drawFrame !== null) cancelAnimationFrame(drawFrame);
+            drawFrame = null;
+            sizeObserver?.disconnect();
+            svg?.remove();
+            svg = null;
+            lastListWidth = 0;
+            for (const editor of ul.querySelectorAll(':scope > li.msg-editor.ph-tv-inline-editor')) {
+                editor.classList.remove('ph-tv-inline-editor');
+                editor.style.removeProperty('--ph-tv-editor-indent');
+            }
+            for (const li of originalOrder) {
+                li.classList.remove('ph-thread', 'ph-tv-collapsed', 'ph-tv-branch-hidden',
+                    'ph-tv-off-hidden', 'ph-tv-has-children', 'ph-tv-branch-hover');
+                li.style.removeProperty('--ph-tv-indent');
+                li.style.removeProperty('--ph-tv-rail-x');
+                li.querySelectorAll(':scope > .ph-tv-collapse, :scope > .ph-tv-summary')
+                    .forEach(node => node.remove());
+            }
+            ul.classList.remove('ph-tv-active');
+            reorder(originalOrder);
+            entries = [];
+            postMap.clear();
+            parentMap.clear();
+            saveEnabled(false);
+            updateButtons();
+        }
+
+        function createControls() {
+            const wrapper = document.createElement('span');
+            wrapper.className = 'ph-tv-control';
+            const toggle = document.createElement('a');
+            toggle.href = 'javascript:;';
+            toggle.className = 'btn btn-forum ph-tv-toggle';
+            toggle.innerHTML = '<span class="fas fa-comments fa-fw"></span> Thread nézet';
+            toggle.addEventListener('click', event => {
+                event.preventDefault();
+                closeMenus();
+                if (threadActive) restoreOriginalOrder();
+                else renderThreading();
+            });
+            const trigger = document.createElement('button');
+            trigger.type = 'button';
+            trigger.className = 'btn btn-forum ph-tv-menu-trigger';
+            trigger.innerHTML = '<span class="fas fa-chevron-down fa-fw"></span>';
+            trigger.title = 'Thread nézet – válaszág műveletek';
+            trigger.setAttribute('aria-label', 'Thread nézet műveletek');
+            trigger.setAttribute('aria-haspopup', 'true');
+            trigger.setAttribute('aria-expanded', 'false');
+            trigger.hidden = true;
+            const menu = document.createElement('div');
+            menu.className = 'ph-tv-menu';
+            menu.setAttribute('role', 'menu');
+            menu.hidden = true;
+            const fold = makeButton('ph-tv-menu-item', 'Összes válaszág összecsukása', () => {
+                setAllFolded(true);
+                closeMenus();
+            });
+            fold.innerHTML = '<span class="fas fa-minus-circle fa-fw"></span> Összecsuk mind';
+            fold.setAttribute('role', 'menuitem');
+            const unfold = makeButton('ph-tv-menu-item', 'Összes válaszág kibontása', () => {
+                setAllFolded(false);
+                closeMenus();
+            });
+            unfold.innerHTML = '<span class="fas fa-plus-circle fa-fw"></span> Kibont mind';
+            unfold.setAttribute('role', 'menuitem');
+            menu.append(fold, unfold);
+            trigger.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                const opening = menu.hidden;
+                closeMenus();
+                if (threadActive && opening) {
+                    menu.hidden = false;
+                    trigger.setAttribute('aria-expanded', 'true');
+                }
+            });
+            wrapper.append(toggle, trigger, menu);
+            controls.push({ wrapper, toggle, trigger, menu });
+            return wrapper;
         }
 
         function init() {
             const headers = document.querySelectorAll('h4.list-message');
-            if (!headers.length || buttons.length > 0) return false;
+            if (!headers.length || controls.length) return false;
+            ul = getMessageList(headers[0]);
+            if (!ul || !getPostsInDom().length) return false;
+            headers.forEach(header => header.append(createControls()));
+            originalOrder = getPostsInDom();
+            updateButtons();
 
-            threadContainerHeader = headers[0];
-            initOriginalOrder();
-
-            headers.forEach(header => {
-                const btn = createToggleButton();
-                buttons.push(btn);
-                header.appendChild(btn);
-            });
-
-            if (shouldBeActive()) {
-                renderThreading();
-                updateAllButtons();
+            // Az utólag betöltődő képek, OFF-összecsukások és a szövegtörések
+            // is változtathatják a hozzászólások magasságát.
+            if (typeof ResizeObserver === 'function') {
+                sizeObserver = new ResizeObserver(syncResponsiveWidth);
             }
+            window.addEventListener('resize', () => syncResponsiveWidth(), { passive: true });
+            if (mobileQuery.addEventListener) {
+                mobileQuery.addEventListener('change', () => syncResponsiveWidth(true));
+            } else if (mobileQuery.addListener) {
+                mobileQuery.addListener(() => syncResponsiveWidth(true));
+            }
+            document.fonts?.ready?.then(scheduleConnectorDraw);
+            document.addEventListener('ph-pt-off-visibility-changed', syncOffVisibility);
 
-            return true;
-        }
-
-        function animateReorder(ul, reorderFn) {
-            const items = [...ul.querySelectorAll('li[data-id]')];
-
-            // FIRST – pozíció mentése
-            const firstRects = new Map();
-            items.forEach(el => {
-                firstRects.set(el, el.getBoundingClientRect());
-                // Ideiglenesen kikapcsoljuk az átmenetet, hogy ne zavarja a mérést
-                el.style.transition = 'none';
+            // Az UL közvetlen LI-gyermekeinek AJAX-os cseréjét is követjük.
+            const listObserver = new MutationObserver(() => {
+                if (!threadActive) return;
+                const live = getPostsInDom();
+                if (live.length === postMap.size &&
+                    live.every(li => postMap.get(li.dataset.id) === li)) return;
+                clearTimeout(updateTimer);
+                updateTimer = setTimeout(() => {
+                    updateTimer = null;
+                    if (threadActive) rebuildTree();
+                }, 50);
             });
+            listObserver.observe(ul, { childList: true });
 
-            // DOM átrendezés (ezt te adod át a reorderFn-ben)
-            reorderFn();
-
-            // LAST – új pozíció
-            items.forEach(el => {
-                const first = firstRects.get(el);
-                const last = el.getBoundingClientRect();
-
-                const dx = first.left - last.left;
-                const dy = first.top  - last.top;
-
-                if (dx || dy) {
-                    el.style.transform = `translate(${dx}px, ${dy}px)`;
-                }
-            });
-
-            // PLAY – kényszerített reflow után visszaengedjük az animációt
-            requestAnimationFrame(() => {
-                items.forEach(el => {
-                    // Visszaadjuk a CSS-ben definiált transition-t
-                    el.style.transition = '';
-                    el.style.transform = '';
+            // A válaszszerkesztő AJAX-szal jelenik meg / tűnik el. A megnyitás
+            // és bezárás után a kitakarás frissüljön azonnal, ne csak resize-ra.
+            const editorSelector = 'li.msg-editor, .msg-editor-wrapper, .rtif-content[contenteditable="true"]';
+            const editorObserver = new MutationObserver(changes => {
+                if (!threadActive) return;
+                const changed = changes.some(change => {
+                    if (svg?.contains(change.target)) return false;
+                    if (change.type === 'attributes') {
+                        return change.target.matches?.(editorSelector) ||
+                            !!change.target.closest?.('.msg-editor-wrapper');
+                    }
+                    return [...change.addedNodes, ...change.removedNodes].some(node =>
+                        node.nodeType === 1 &&
+                        (node.matches?.(editorSelector) || node.querySelector?.(editorSelector)));
                 });
+                if (changed) scheduleConnectorDraw();
             });
+            editorObserver.observe(document.body, {
+                childList: true, subtree: true, attributes: true,
+                attributeFilter: ['class', 'style', 'hidden']
+            });
+
+            document.addEventListener('click', event => {
+                if (!event.target.closest('.ph-tv-control')) closeMenus();
+            });
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape') closeMenus();
+            });
+            window.phPtThreadView = { revealById };
+            window.addEventListener('hashchange', revealHashTarget);
+
+            if (storage.getItem(STORAGE_KEY) === STATUS.ON) renderThreading();
+            return true;
         }
 
         if (!init()) {
@@ -4451,11 +5583,13 @@
         }
 
         function scrollToMsgId(msgId) {
-            const el = document.getElementById(
-                String(msgId).startsWith('msg') ? msgId : 'msg' + msgId
-            );
-
-            return scrollToEl(el);
+            const id = String(msgId).replace(/^msg/, '');
+            // Az összecsukott ágban lévő célhoz először nyissuk ki az őseit.
+            window.phPtThreadView?.revealById?.(id);
+            const el = document.getElementById('msg' + id);
+            const row = el?.closest('li[data-id]');
+            // A saját maga összecsukott kommentet a rövid, látható sorához görgetjük.
+            return scrollToEl(row?.classList.contains('ph-tv-collapsed') ? row : el);
         }
 
         window.phPtMessageScroller = {
@@ -4738,13 +5872,17 @@
                 return;
             }
 
-            let currentIndex = getSafeCurrentIndex(posts);
+            const visiblePosts = posts.filter(li =>
+                !li.classList.contains('ph-tv-branch-hidden') &&
+                !li.classList.contains('ph-tv-off-hidden'));
+            if (!visiblePosts.length) return;
+            let currentIndex = getSafeCurrentIndex(visiblePosts);
 
-            // SHIFT + ↑ / ↓ : következő létező msgId (ID sorrendben)
+            // SHIFT + ↑ / ↓ : következő látható msgId (ID sorrendben)
             if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
                 e.preventDefault();
 
-                const sortedIds = getSortedPostIds(posts);
+                const sortedIds = getSortedPostIds(visiblePosts);
                 if (!sortedIds.length) return;
 
                 let idx = getCurrentIdIndex(sortedIds);
@@ -4777,22 +5915,22 @@
             switch (e.key) {
                 case 'ArrowUp':
                     e.preventDefault();
-                    jumpToIndex(posts, Math.max(0, currentIndex - 1));
+                    jumpToIndex(visiblePosts, Math.max(0, currentIndex - 1));
                     break;
 
                 case 'ArrowDown':
                     e.preventDefault();
-                    jumpToIndex(posts, Math.min(posts.length - 1, currentIndex + 1));
+                    jumpToIndex(visiblePosts, Math.min(visiblePosts.length - 1, currentIndex + 1));
                     break;
 
                 case 'ArrowLeft':
                     e.preventDefault();
-                    jumpToIndex(posts, 0);
+                    jumpToIndex(visiblePosts, 0);
                     break;
 
                 case 'ArrowRight':
                     e.preventDefault();
-                    jumpToIndex(posts, posts.length - 1);
+                    jumpToIndex(visiblePosts, visiblePosts.length - 1);
                     break;
             }
         });
