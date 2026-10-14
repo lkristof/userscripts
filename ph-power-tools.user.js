@@ -3689,7 +3689,6 @@
             const btn = document.createElement('a');
             btn.href = 'javascript:;';
             btn.className = 'btn btn-forum';
-            btn.style.marginLeft = '5px';
             btn.innerHTML = `<span class="fas fa-ban fa-fw"></span> OFF elrejtése`;
 
             function updateAppearance() {
@@ -4080,7 +4079,6 @@
             const btn = document.createElement('a');
             btn.href = 'javascript:;';
             btn.className = 'btn btn-forum';
-            btn.style.marginLeft = '5px';
             btn.innerHTML = `<span class="fas fa-expand-arrows-alt fa-fw"></span> Széles nézet`;
 
             function updateUI() {
@@ -4328,7 +4326,6 @@
             const btn = document.createElement('a');
             btn.href = 'javascript:;';
             btn.className = 'btn btn-forum';
-            btn.style.marginLeft = '5px';
             btn.innerHTML = `<span class="fas fa-project-diagram fa-fw"></span> Thread nézet`;
 
             function updateButtonUI() {
@@ -4983,7 +4980,6 @@
             const editBtn = document.createElement("a");
             editBtn.href = "javascript:;";
             editBtn.className = "btn btn-forum";
-            editBtn.style.marginLeft = "5px";
             editBtn.title = "Rejtett felhasználók szerkesztése";
 
             function refreshButton(btn) {
