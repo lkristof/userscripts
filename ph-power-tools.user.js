@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.3.1
+// @version      2.4.0
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -18,6 +18,7 @@
 //
 // @require      https://code.jquery.com/jquery-3.7.1.min.js
 //
+// @grant        GM_info
 // @grant        GM.getValue
 // @grant        GM.setValue
 // @grant        GM.deleteValue
@@ -25,6 +26,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
 // @connect      kek.sh
 // @connect      api.github.com
 // @connect      gist.githubusercontent.com
@@ -69,15 +71,46 @@
     const STORAGE_KEY = KEYS.SETTINGS;
     const SECRETS_KEY = KEYS.SECRETS;
 
+    // A biztonsági mentés a helyi beállításokat tartalmazza; a titkos
+    // kapcsolati adatok csak kifejezett, alapból kikapcsolt opcióval kerülnek bele.
+    // A titkos adatokat tartalmazó JSON nincs titkosítva, és nem megy a Gistbe.
+    const BACKUP_FORMAT = 'ph-power-tools-settings';
+    const BACKUP_FORMAT_VERSION = 1;
+    const BACKUP_PREFERENCE_KEYS = [
+        KEYS.SETTINGS,
+        KEYS.STATE.HIDDEN_USERS,
+        KEYS.STATE.HIDE_OFF,
+        KEYS.STATE.WIDE_VIEW,
+        KEYS.STATE.THREAD_VIEW,
+        'ph_wide_view_center_px',
+        'ph_mobile_scroll_nav_position',
+    ];
+    const BACKUP_EXTRA_KEYS = [
+        KEYS.STATE.TOPIC_MAX_ID_MAP,
+        KEYS.KEK.GALLERY,
+        KEYS.KEK.GALLERY_RESET_TS,
+        KEYS.KEK.GALLERY_DELETED,
+        KEYS.KEK.GALLERY_SEEN_RESET_TS,
+    ];
+
     const secrets = await loadSecrets();
 
-    const GIST_TOKEN = (secrets.gistToken || "").trim();
-    const GIST_ID = (secrets.gistId || "").trim();
     const DEFAULT_GIST_FILENAME = "ph_forum_settings.json";
-    const GIST_FILENAME = ((secrets.gistFilename || DEFAULT_GIST_FILENAME)).trim();
-    const ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
+    let GIST_TOKEN = (secrets.gistToken || "").trim();
+    let GIST_ID = (secrets.gistId || "").trim();
+    let GIST_FILENAME = ((secrets.gistFilename || DEFAULT_GIST_FILENAME)).trim();
+    let ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
+    let KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
 
-    const KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
+    // Importkor a memóriában használt Gist-hozzáférést is átállítjuk,
+    // különben az új beállítások még a korábban megadott Gistbe kerülhetnének.
+    function activateSecrets(saved) {
+        GIST_TOKEN = (saved.gistToken || '').trim();
+        GIST_ID = (saved.gistId || '').trim();
+        GIST_FILENAME = (saved.gistFilename || DEFAULT_GIST_FILENAME).trim();
+        KEK_SH_API_KEY = (saved.kekShApiKey || '').trim();
+        ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
+    }
 
     const DEFAULT_COLORIZE_PALETTE = {
         light: {
@@ -146,7 +179,7 @@
         msgAnchorHighlight: 'Az URL-ben megadott #msg hozzászóláshoz görget és kiemeli azt. Színek a 🎨 menüben.',
         offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
         wideView: 'Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.',
-        threadView: 'Hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése.',
+        threadView: 'Reddit-szerű válaszfa folytonos, kiemelhető ágvonalakkal és összecsukható hozzászólásokkal. A Thread nézet gomb lenyíló menüjében minden ág összecsukható vagy kibontható.',
         keyboardNavigation: 'Billentyű navigáció a hozzászólások között\n← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő\nR előzmény\nshift + R vissza az R-el bejárt útvonalon',
         hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
         markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
@@ -251,6 +284,227 @@
 
     function safeJsonParse(str, fallback) {
         try { return JSON.parse(str); } catch { return fallback; }
+    }
+
+    // ===== Beállítások export / import =====
+    function isBackupObject(value) {
+        return value !== null && Object.prototype.toString.call(value) === '[object Object]';
+    }
+
+    function backupHas(obj, key) {
+        return Object.prototype.hasOwnProperty.call(obj, key);
+    }
+
+    function readBackupStorageValue(key) {
+        const raw = storage.getItem(key);
+        return raw === null ? null : safeJsonParse(raw, raw);
+    }
+
+    function normalizeBackupSettings(value) {
+        if (!isBackupObject(value)) throw new Error('A mentett beállítások formátuma hibás.');
+
+        const result = { ...defaultSettings, colorizePalette: structuredClone(DEFAULT_COLORIZE_PALETTE) };
+        for (const key of Object.keys(defaultSettings)) {
+            if (!backupHas(value, key) || key === 'colorizePalette') continue;
+            if (typeof value[key] !== 'boolean') {
+                throw new Error(`Érvénytelen kapcsolóérték: ${key}`);
+            }
+            result[key] = value[key];
+        }
+
+        if (backupHas(value, 'colorizePalette')) {
+            const palette = value.colorizePalette;
+            if (!isBackupObject(palette)) throw new Error('A színpaletta nem érvényes.');
+            for (const theme of ['light', 'dark']) {
+                if (!backupHas(palette, theme)) continue;
+                if (!isBackupObject(palette[theme])) {
+                    throw new Error(`A(z) ${theme} színpaletta nem érvényes.`);
+                }
+                for (const key of Object.keys(DEFAULT_COLORIZE_PALETTE[theme])) {
+                    if (!backupHas(palette[theme], key)) continue;
+                    const color = palette[theme][key];
+                    if (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color)) {
+                        throw new Error(`Érvénytelen szín: ${theme}.${key}`);
+                    }
+                    result.colorizePalette[theme][key] = color;
+                }
+            }
+        }
+        return result;
+    }
+
+    // A nyers API-/Gist-adatok csak ismert mezőkkel, szigorú típusellenőrzés
+    // után menthetők/visszaállíthatók. Korábbi, kulcsmentés nélküli fájlok is jók.
+    function validateBackupSecrets(value) {
+        if (!isBackupObject(value)) throw new Error('A kapcsolati adatok formátuma hibás.');
+        const fields = {
+            gistToken: 4096,
+            gistId: 256,
+            gistFilename: 512,
+            kekShApiKey: 4096,
+        };
+        const result = {};
+        for (const [key, maxLength] of Object.entries(fields)) {
+            if (!backupHas(value, key) || typeof value[key] !== 'string'
+                || value[key].length > maxLength) {
+                throw new Error(`Érvénytelen kapcsolati adat: ${key}`);
+            }
+            result[key] = value[key].trim();
+        }
+        return result;
+    }
+
+    async function makeSettingsBackup(includeExtras, includeSecrets = false) {
+        const values = {};
+        for (const key of BACKUP_PREFERENCE_KEYS) {
+            values[key] = key === KEYS.SETTINGS
+                ? normalizeBackupSettings(getMergedSettings())
+                : readBackupStorageValue(key);
+        }
+        if (includeExtras) {
+            for (const key of BACKUP_EXTRA_KEYS) values[key] = readBackupStorageValue(key);
+        }
+        const backup = {
+            format: BACKUP_FORMAT,
+            formatVersion: BACKUP_FORMAT_VERSION,
+            scriptVersion: GM_info.script.version,
+            exportedAt: new Date().toISOString(),
+            values,
+        };
+        if (includeSecrets) {
+            const saved = await loadSecrets();
+            backup.secrets = validateBackupSecrets({
+                gistToken: saved.gistToken ?? '',
+                gistId: saved.gistId ?? '',
+                gistFilename: saved.gistFilename ?? '',
+                kekShApiKey: saved.kekShApiKey ?? '',
+            });
+        }
+        // A létrejött fájl biztosan visszaolvasható legyen az importálóval.
+        prepareSettingsBackupImport(backup);
+        return backup;
+    }
+
+    function validatedBackupInteger(value, key) {
+        const n = typeof value === 'number' ? value
+            : (typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN);
+        if (!Number.isSafeInteger(n) || n < 0) {
+            throw new Error(`Érvénytelen számérték: ${key}`);
+        }
+        return n;
+    }
+
+    function serializeBackupValue(key, value) {
+        // Null = a mentésben nem volt helyi érték: importkor törölni kell.
+        if (value === null && key !== KEYS.SETTINGS) return null;
+        if (key === KEYS.SETTINGS) {
+            return JSON.stringify(normalizeBackupSettings(value));
+        }
+        if (key === KEYS.STATE.HIDDEN_USERS) {
+            if (!Array.isArray(value) || value.some(user =>
+                typeof user !== 'string' || !user.trim() || user.length > 200)) {
+                throw new Error('Érvénytelen rejtettfelhasználó-lista.');
+            }
+            return JSON.stringify([...new Set(value.map(user => user.trim()))]);
+        }
+        if ([KEYS.STATE.HIDE_OFF, KEYS.STATE.WIDE_VIEW, KEYS.STATE.THREAD_VIEW].includes(key)) {
+            if (value !== 'enabled' && value !== 'disabled') {
+                throw new Error(`Érvénytelen nézetállapot: ${key}`);
+            }
+            return value;
+        }
+        if (key === 'ph_wide_view_center_px') {
+            const px = validatedBackupInteger(value, key);
+            if (px < 100 || px > 20000) throw new Error('Érvénytelen szélesnézet-szélesség.');
+            return String(px);
+        }
+        if (key === 'ph_mobile_scroll_nav_position') {
+            if (!isBackupObject(value) || !['left', 'right'].includes(value.side)
+                || typeof value.hidden !== 'boolean') {
+                throw new Error('Érvénytelen mobilnavigáció-beállítás.');
+            }
+            const bottom = Number(value.bottom);
+            if (!Number.isFinite(bottom) || bottom < 0 || bottom > 20000) {
+                throw new Error('Érvénytelen mobilnavigáció-pozíció.');
+            }
+            return JSON.stringify({ side: value.side, bottom, hidden: value.hidden });
+        }
+        if (key === KEYS.STATE.TOPIC_MAX_ID_MAP || key === KEYS.KEK.GALLERY_DELETED) {
+            if (!isBackupObject(value)) throw new Error(`Érvénytelen adatok: ${key}`);
+            const out = Object.create(null);
+            for (const [name, id] of Object.entries(value)) {
+                if (!name || name.length > 4096 || ['__proto__', 'prototype', 'constructor'].includes(name)) {
+                    throw new Error(`Érvénytelen adatazonosító: ${key}`);
+                }
+                if (key === KEYS.KEK.GALLERY_DELETED && !/^https?:\/\//i.test(name)) {
+                    throw new Error('Érvénytelen töröltkép-hivatkozás.');
+                }
+                out[name] = validatedBackupInteger(id, key);
+            }
+            return JSON.stringify(out);
+        }
+        if (key === KEYS.KEK.GALLERY) {
+            if (!Array.isArray(value) || value.length > 5000) {
+                throw new Error('Érvénytelen képgaléria-adatok.');
+            }
+            const gallery = value.map((item, i) => {
+                if (!isBackupObject(item) || typeof item.url !== 'string'
+                    || item.url.length > 4096 || !/^https?:\/\//i.test(item.url)) {
+                    throw new Error(`Érvénytelen képbejegyzés: ${i + 1}`);
+                }
+                const clean = { url: item.url };
+                if (item.id != null) {
+                    if (!((typeof item.id === 'string' && item.id.length <= 4096)
+                        || (Number.isSafeInteger(item.id) && item.id >= 0))) {
+                        throw new Error('Érvénytelen galériaazonosító.');
+                    }
+                    clean.id = item.id;
+                }
+                for (const field of ['token', 'filename', 'originalName', 'createdAt']) {
+                    if (item[field] == null) continue;
+                    if (typeof item[field] !== 'string' || item[field].length > 4096) {
+                        throw new Error(`Érvénytelen galériaérték: ${field}`);
+                    }
+                    clean[field] = item[field];
+                }
+                if (item.size != null) {
+                    clean.size = validatedBackupInteger(item.size, 'gallery.size');
+                }
+                return clean;
+            });
+            return JSON.stringify(gallery);
+        }
+        if ([KEYS.KEK.GALLERY_RESET_TS, KEYS.KEK.GALLERY_SEEN_RESET_TS].includes(key)) {
+            return String(validatedBackupInteger(value, key));
+        }
+        throw new Error(`Nem támogatott mentési kulcs: ${key}`);
+    }
+
+    function prepareSettingsBackupImport(backup) {
+        if (!isBackupObject(backup) || backup.format !== BACKUP_FORMAT
+            || backup.formatVersion !== BACKUP_FORMAT_VERSION || !isBackupObject(backup.values)) {
+            throw new Error('Nem támogatott PH Power Tools biztonsági mentés.');
+        }
+        if (!backupHas(backup.values, KEYS.SETTINGS)) {
+            throw new Error('A mentés nem tartalmazza a fő beállításokat.');
+        }
+
+        // MINDEN érték ellenőrzése megelőzi a tároló bármilyen módosítását.
+        const updates = [];
+        for (const key of [...BACKUP_PREFERENCE_KEYS, ...BACKUP_EXTRA_KEYS]) {
+            if (backupHas(backup.values, key)) {
+                updates.push([key, serializeBackupValue(key, backup.values[key])]);
+            }
+        }
+        const includesSecrets = backupHas(backup, 'secrets');
+        const importedSecrets = includesSecrets ? validateBackupSecrets(backup.secrets) : null;
+        return {
+            updates,
+            includesExtras: BACKUP_EXTRA_KEYS.some(key => backupHas(backup.values, key)),
+            includesSecrets,
+            importedSecrets,
+            exportedAt: typeof backup.exportedAt === 'string' ? backup.exportedAt : '',
+        };
     }
 
     /**
@@ -373,6 +627,7 @@
         let gistCache = null;
         let pushTimer = null;
         let inited = false;
+        let syncSuspended = false;
 
         // Csak az ebben a futásban ténylegesen módosított helyi kulcsok
         // szólhatnak bele a következő Gist írásba. A localStorage egyébként cache.
@@ -635,7 +890,7 @@
         }
 
         function schedulePush() {
-            if (!ENABLE_GIST_SYNC) return;
+            if (!ENABLE_GIST_SYNC || syncSuspended) return;
             if (pushTimer) clearTimeout(pushTimer);
             pushTimer = setTimeout(() => {
                 pushTimer = null;
@@ -655,6 +910,31 @@
 
         return {
             init,
+            suspendSync() {
+                syncSuspended = true;
+                if (pushTimer) {
+                    clearTimeout(pushTimer);
+                    pushTimer = null;
+                }
+            },
+            resumeSync() {
+                syncSuspended = false;
+                if (dirtyWrites.size || dirtyDeletes.size) schedulePush();
+            },
+            // Importkor a változatlan helyi értékek is bekerüljenek az új Gistbe.
+            markImportKeysDirty(keys) {
+                for (const key of keys) {
+                    if (!keyShouldSync(key)) continue;
+                    if (localStorage.getItem(key) === null) {
+                        dirtyWrites.delete(key);
+                        dirtyDeletes.add(key);
+                    } else {
+                        dirtyDeletes.delete(key);
+                        dirtyWrites.add(key);
+                    }
+                }
+                schedulePush();
+            },
             async flush() {
                 return cancelTimerAndRun(doPushNow);
             },
@@ -735,26 +1015,93 @@
         return false;
     }
 
+    // A márka elsődleges gombszíne önmagában nem feltétlenül olvasható
+    // sötét felületen (különösen a Mobilaréna kék témáján). Külön token kell
+    // a gombok HÁTTÉRszínéhez és a kis méretű szöveg/ikon KIEMELÉSÉHEZ.
+    // Utóbbit WCAG szerinti, legalább 7:1-es alapkontrasztra korrigáljuk.
+    function phPtParseRgb(value) {
+        const raw = String(value || '').trim();
+        const hex = raw.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+        if (hex) {
+            const h = hex[1].length === 3
+                ? hex[1].split('').map(ch => ch + ch).join('') : hex[1];
+            return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+        }
+        // color-mix() eredménye modern böngészőben color(srgb ...) is lehet.
+        const srgb = raw.match(/^color\(srgb\s+(.+)\)$/i);
+        if (srgb) {
+            const values = srgb[1].trim().split(/[\s,\/]+/).filter(Boolean);
+            if (values.length < 3 || (values[3] && parseFloat(values[3]) <= 0)) return null;
+            const channels = values.slice(0, 3).map(value => parseFloat(value) * 255);
+            if (channels.some(channel => !Number.isFinite(channel))) return null;
+            return channels.map(channel => Math.max(0, Math.min(255, Math.round(channel))));
+        }
+        const rgb = raw.match(/^rgba?\((.+)\)$/i);
+        if (!rgb) return null;
+        const parts = rgb[1].trim().split(/[\s,\/]+/).filter(Boolean);
+        if (parts.length < 3) return null;
+        const channels = parts.slice(0, 3).map(part => part.endsWith('%')
+            ? parseFloat(part) * 2.55 : parseFloat(part));
+        if (channels.some(channel => !Number.isFinite(channel))) return null;
+        if (parts.length >= 4 && parseFloat(parts[3]) <= 0) return null;
+        return channels.map(channel => Math.max(0, Math.min(255, Math.round(channel))));
+    }
+
+    function phPtLuminance(rgb) {
+        const [r, g, b] = rgb.map(v => {
+            const s = v / 255;
+            return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+
+    function phPtContrast(a, b) {
+        const x = phPtLuminance(a);
+        const y = phPtLuminance(b);
+        return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+    }
+
+    function phPtReadableAccent(accent, surface, dark) {
+        const MIN_CONTRAST = 7; // Kis feliratokon, enyhén színezett kártyákon is jól olvasható.
+        if (phPtContrast(accent, surface) >= MIN_CONTRAST) return accent;
+        const goal = dark ? [255, 255, 255] : [0, 0, 0];
+        let lo = 0;
+        let hi = 1;
+        for (let i = 0; i < 20; i++) {
+            const t = (lo + hi) / 2;
+            const mixed = accent.map((v, j) => Math.round(v + (goal[j] - v) * t));
+            if (phPtContrast(mixed, surface) >= MIN_CONTRAST) hi = t;
+            else lo = t;
+        }
+        return accent.map((v, j) => Math.round(v + (goal[j] - v) * hi));
+    }
+
     function phPtSyncSitePalette() {
         if (!document.body) return;
 
-        // A lapcsalád saját gombszíneiből vesszük az accentet, így a Power Tools
-        // automatikusan követi a Prohardver / Mobilarena / Logout / Fototrend témát.
+        // A márka gombszínét továbbra is a weboldal adja, de a rajta lévő
+        // feliratnak és a sötét háttéren álló kiemeléseknek külön kontrasztja van.
         const probe = document.createElement('button');
         probe.type = 'button';
         probe.className = 'btn btn-forum btn-primary';
         probe.setAttribute('aria-hidden', 'true');
         probe.style.cssText = 'position:fixed;left:-10000px;top:-10000px;visibility:hidden;pointer-events:none;';
         document.body.appendChild(probe);
-
-        const cs = getComputedStyle(probe);
-        const accent = cs.backgroundColor;
-        const accentFg = cs.color;
+        const accentSample = getComputedStyle(probe).backgroundColor;
         probe.remove();
 
-        const validColor = value => value && value !== 'transparent' && value !== 'rgba(0, 0, 0, 0)';
-        if (validColor(accent)) document.body.style.setProperty('--ph-ui-accent', accent);
-        if (validColor(accentFg)) document.body.style.setProperty('--ph-ui-accent-fg', accentFg);
+        const dark = document.body.dataset.theme === 'dark';
+        const surface = phPtParseRgb(getComputedStyle(document.body)
+            .getPropertyValue('--ph-ui-bg')) || (dark ? [36, 37, 38] : [255, 255, 255]);
+        const accent = phPtParseRgb(accentSample) || [79, 127, 178];
+        const ink = phPtReadableAccent(accent, surface, dark);
+        const onAccent = phPtContrast(accent, [255, 255, 255]) >=
+            phPtContrast(accent, [0, 0, 0]) ? '#ffffff' : '#000000';
+        const toCss = rgb => `rgb(${rgb.join(', ')})`;
+
+        document.body.style.setProperty('--ph-ui-accent', toCss(accent));
+        document.body.style.setProperty('--ph-ui-accent-fg', onAccent);
+        document.body.style.setProperty('--ph-ui-accent-ink', toCss(ink));
     }
 
     function phPtSyncThemeAttr() {
@@ -840,6 +1187,14 @@
                                 <span class="fas fa-palette"></span>
                             </button>
                         ` : ``}
+
+                        <button type="button"
+                                id="ph-open-backup"
+                                class="ph-icon-btn"
+                                title="Beállítások importálása / exportálása"
+                                aria-label="Beállítások importálása / exportálása">
+                            <span class="fas fa-file-export"></span>
+                        </button>
 
                         <button type="button"
                                 id="ph-open-secrets"
@@ -970,6 +1325,88 @@
             document.body.appendChild(modal);
         }
 
+        // ===== Beállítások biztonsági mentése / visszaállítása =====
+        if (!document.getElementById('ph-backup-modal')) {
+            const backupModal = document.createElement('div');
+            backupModal.id = 'ph-backup-modal';
+            backupModal.className = 'ph-pt-modal';
+            backupModal.innerHTML = `
+                <div class="ph-pt-dialog ph-pt-dialog-wide" role="dialog" aria-modal="true"
+                     aria-labelledby="ph-backup-title">
+                    <div class="ph-dialog-head">
+                        <div class="ph-dialog-title-wrap">
+                            <span class="ph-dialog-mark"><span class="fas fa-file-export"></span></span>
+                            <span>
+                                <strong id="ph-backup-title" class="ph-dialog-title">Beállítások mentése</strong>
+                                <small class="ph-dialog-subtitle">Exportálás és importálás JSON-fájlból</small>
+                            </span>
+                        </div>
+                        <button type="button" class="ph-icon-btn ph-dialog-close" id="ph-backup-close"
+                                title="Bezárás" aria-label="Bezárás"><span class="fas fa-times"></span></button>
+                    </div>
+                    <div class="ph-dialog-body ph-backup-body">
+                        <section class="ph-backup-section">
+                            <strong class="ph-backup-heading"><span class="fas fa-download"></span> Exportálás</strong>
+                            <p>Kapcsolók, egyéni színek, rejtett felhasználók és mentett nézetállapotok letöltése.</p>
+                            <label class="ph-backup-option" data-enabled="false">
+                                <span class="ph-backup-option-copy">Olvasottsági adatok és kek.sh képgaléria mentése is</span>
+                                <span class="ph-backup-option-control">
+                                    <input type="checkbox" id="ph-backup-extra" class="ph-backup-toggle">
+                                    <span class="ph-backup-switch" aria-hidden="true"><span class="ph-backup-switch-knob"></span></span>
+                                    <strong class="ph-backup-option-state" aria-hidden="true">KI</strong>
+                                </span>
+                            </label>
+                            <label class="ph-backup-option" data-enabled="false">
+                                <span class="ph-backup-option-copy">API-kulcsok és Gist-kapcsolati adatok mentése is</span>
+                                <span class="ph-backup-option-control">
+                                    <input type="checkbox" id="ph-backup-secrets" class="ph-backup-toggle">
+                                    <span class="ph-backup-switch" aria-hidden="true"><span class="ph-backup-switch-knob"></span></span>
+                                    <strong class="ph-backup-option-state" aria-hidden="true">KI</strong>
+                                </span>
+                            </label>
+                            <div id="ph-backup-sensitive-warning" class="ph-backup-sensitive-warning" role="note" hidden>
+                                <span class="fas fa-exclamation-triangle" aria-hidden="true"></span>
+                                <span class="ph-backup-sensitive-copy">
+                                    A fájl a GitHub Gist tokent, Gist ID-t, fájlnevet és a kek.sh API-kulcsot
+                                    <strong>titkosítatlanul</strong> tartalmazza. Ne oszd meg, és csak biztonságos helyen tárold!
+                                </span>
+                            </div>
+                            <button type="button" id="ph-backup-export"
+                                    class="btn btn-sm btn-forum btn-primary">
+                                <span class="fas fa-download"></span> Exportálás (.json)
+                            </button>
+                        </section>
+                        <section class="ph-backup-section">
+                            <strong class="ph-backup-heading"><span class="fas fa-upload"></span> Importálás</strong>
+                            <p>Korábban exportált PH Power Tools-fájl betöltése. Az importált beállítások
+                               felülírják a jelenlegieket; előtte megerősítést kérünk.</p>
+                            <input type="file" id="ph-backup-file" accept=".json,.txt,application/json,text/plain" hidden>
+                            <button type="button" id="ph-backup-import"
+                                    class="btn btn-sm btn-forum ph-secondary-btn">
+                                <span class="fas fa-folder-open"></span> Fájl kiválasztása…
+                            </button>
+                        </section>
+                        <div class="ph-backup-hint">
+                            <span class="fas fa-shield-alt"></span>
+                            <span>
+                                Az API-/Gist-kulcsok mentése külön kapcsolható.
+                                A galéria bizalmas tokeneket is tartalmazhat.
+                                Aktív Gist-szinkron esetén az olvasottsági és
+                                galériaadatok összeolvadhatnak a távoli adatokkal.
+                            </span>
+                        </div>
+                    </div>
+                    <div class="ph-dialog-footer">
+                        <span id="ph-backup-status" class="ph-dialog-status ph-backup-status" aria-live="polite"></span>
+                        <div class="ph-dialog-buttons">
+                            <button type="button" id="ph-backup-done" class="btn btn-sm btn-forum ph-secondary-btn">Bezárás</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(backupModal);
+        }
+
         // ===== Colorize Colors modal =====
         if (!document.getElementById('ph-colors-modal')) {
             const modal = document.createElement('div');
@@ -1086,6 +1523,182 @@
         const colorsModal = document.getElementById('ph-colors-modal');
 
         let colorsDraftPalette = null;
+
+        const backupModal = document.getElementById('ph-backup-modal');
+        const openBackupBtn = li.querySelector('#ph-open-backup');
+        const backupStatus = backupModal?.querySelector('#ph-backup-status');
+        const backupFileInput = backupModal?.querySelector('#ph-backup-file');
+        const backupExportBtn = backupModal?.querySelector('#ph-backup-export');
+        const backupImportBtn = backupModal?.querySelector('#ph-backup-import');
+        const backupExtraInput = backupModal?.querySelector('#ph-backup-extra');
+        const backupSecretsInput = backupModal?.querySelector('#ph-backup-secrets');
+        const backupSensitiveWarning = backupModal?.querySelector('#ph-backup-sensitive-warning');
+
+        function refreshBackupOptions() {
+            for (const input of [backupExtraInput, backupSecretsInput]) {
+                if (!input) continue;
+                const row = input.closest('.ph-backup-option');
+                if (!row) continue;
+                row.dataset.enabled = input.checked ? 'true' : 'false';
+                const state = row.querySelector('.ph-backup-option-state');
+                if (state) state.textContent = input.checked ? 'BE' : 'KI';
+            }
+            if (backupSensitiveWarning) backupSensitiveWarning.hidden = !backupSecretsInput?.checked;
+        }
+
+        backupExtraInput?.addEventListener('change', refreshBackupOptions);
+        backupSecretsInput?.addEventListener('change', refreshBackupOptions);
+        refreshBackupOptions();
+
+        function setBackupBusy(busy) {
+            if (backupExportBtn) backupExportBtn.disabled = busy;
+            if (backupImportBtn) backupImportBtn.disabled = busy;
+            if (backupExtraInput) backupExtraInput.disabled = busy;
+            if (backupSecretsInput) backupSecretsInput.disabled = busy;
+        }
+
+        function closeBackupModal() {
+            if (backupModal) backupModal.style.display = 'none';
+            // Bizalmas adatok exportálásához minden alkalommal új döntés szükséges.
+            if (backupSecretsInput) backupSecretsInput.checked = false;
+            refreshBackupOptions();
+        }
+
+        openBackupBtn?.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            li.querySelector('.dropdown-toggle')?.click();
+            setTimeout(() => {
+                phPtSyncThemeAttr();
+                if (backupSecretsInput) backupSecretsInput.checked = false;
+                refreshBackupOptions();
+                if (backupStatus) backupStatus.textContent = '';
+                if (backupModal) backupModal.style.display = 'flex';
+            }, 0);
+        });
+
+        backupModal?.addEventListener('click', event => {
+            if (event.target === backupModal) closeBackupModal();
+        });
+        backupModal?.querySelector('#ph-backup-close')?.addEventListener('click', closeBackupModal);
+        backupModal?.querySelector('#ph-backup-done')?.addEventListener('click', closeBackupModal);
+
+        backupExportBtn?.addEventListener('click', async () => {
+            setBackupBusy(true);
+            try {
+                const includeExtras = !!backupExtraInput?.checked;
+                const includeSecrets = !!backupSecretsInput?.checked;
+                const backup = await makeSettingsBackup(includeExtras, includeSecrets);
+                const json = JSON.stringify(backup, null, 2);
+                const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = `ph-power-tools-${includeSecrets ? 'with-secrets' : 'settings'}-${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                if (backupStatus) backupStatus.textContent = includeSecrets
+                    ? 'A bizalmas adatokat is tartalmazó mentés letöltése elindult.'
+                    : 'A letöltés elindult.';
+            } catch (error) {
+                console.error('[PH Power Tools] Backup export failed:', error);
+                if (backupStatus) backupStatus.textContent = `Exportálási hiba: ${error.message}`;
+            } finally {
+                setBackupBusy(false);
+            }
+        });
+
+        backupImportBtn?.addEventListener('click', () => backupFileInput?.click());
+        backupFileInput?.addEventListener('change', async () => {
+            const file = backupFileInput.files?.[0];
+            backupFileInput.value = ''; // Ugyanazt a fájlt később ismét ki lehessen választani.
+            if (!file) return;
+            setBackupBusy(true);
+            if (backupStatus) backupStatus.textContent = 'A mentés ellenőrzése…';
+            let modified = false;
+            try {
+                if (file.size > 10 * 1024 * 1024) {
+                    throw new Error('A fájl túl nagy (maximum 10 MB).');
+                }
+                const backup = JSON.parse(await file.text());
+                const { updates, includesExtras, includesSecrets, importedSecrets, exportedAt } =
+                    prepareSettingsBackupImport(backup);
+                const date = Date.parse(exportedAt);
+                const displayDate = Number.isFinite(date)
+                    ? new Date(date).toLocaleString('hu-HU') : 'ismeretlen';
+                const extraMessage = includesExtras
+                    ? '\nA mentés képgaléria- és olvasottsági adatokat is tartalmaz.' : '';
+                const secretMessage = includesSecrets
+                    ? '\nA mentés API-/Gist-kulcsokat is tartalmaz; a jelenlegi kapcsolati adatokat felülírja.' : '';
+                const syncMessage = includesSecrets && importedSecrets.gistToken && importedSecrets.gistId
+                    ? '\nA visszaállított Gist-kapcsolatra a beállítások szinkronizálódnak.' : '';
+                const confirmed = window.confirm(
+                    `PH Power Tools beállítások importálása\n\n` +
+                    `Mentés dátuma: ${displayDate}\n` +
+                    `A mentés ${updates.length} tárolási bejegyzést állít vissza, felülírva a jelenlegi értékeket.` +
+                    `${extraMessage}${secretMessage}${syncMessage}\n\nFolytatod?`
+                );
+                if (!confirmed) {
+                    if (backupStatus) backupStatus.textContent = 'Importálás megszakítva.';
+                    return;
+                }
+
+                const previousValues = updates.map(([key]) => [key, storage.getItem(key)]);
+                const previousSecrets = includesSecrets ? await loadSecrets() : null;
+                storage.suspendSync();
+                try {
+                    for (const [key, value] of updates) {
+                        if (value === null) storage.removeItem(key);
+                        else storage.setItem(key, value);
+                    }
+                    if (includesSecrets) {
+                        // A régi Gist-kapcsolattal egyetlen importált adat se menjen ki.
+                        await saveSecrets(importedSecrets);
+                        activateSecrets(importedSecrets);
+                    }
+                    // A Gistbe az importált értékek kerüljenek akkor is, ha a
+                    // helyi gyorsítótárban azonos szöveg szerepelt.
+                    storage.markImportKeysDirty(updates.map(([key]) => key));
+                } catch (writeError) {
+                    // Tárolási hiba esetén állítsuk vissza a korábbi helyi állapotot.
+                    for (const [key, previous] of previousValues) {
+                        try {
+                            if (previous === null) storage.removeItem(key);
+                            else storage.setItem(key, previous);
+                        } catch (rollbackError) {
+                            console.warn('[PH Power Tools] Backup rollback failed:', key, rollbackError);
+                        }
+                    }
+                    if (includesSecrets) {
+                        try {
+                            await saveSecrets(previousSecrets);
+                            activateSecrets(previousSecrets);
+                        } catch (rollbackError) {
+                            console.warn('[PH Power Tools] Secret rollback failed:', rollbackError);
+                        }
+                    }
+                    throw writeError;
+                } finally {
+                    storage.resumeSync();
+                }
+                modified = true;
+                await storage.flush();
+                if (backupStatus) backupStatus.textContent = 'Importálás kész. Az oldal újratöltődik…';
+                location.reload();
+            } catch (error) {
+                console.error('[PH Power Tools] Backup import failed:', error);
+                if (backupStatus) {
+                    backupStatus.textContent = modified
+                        ? `Helyi import kész, de a Gist-szinkron hibázott: ${error.message}. Ellenőrizd a kapcsolatot, majd importálj újra.`
+                        : `Importálási hiba: ${error.message}`;
+                }
+            } finally {
+                setBackupBusy(false);
+            }
+        });
+
 
         function openColorsModal() {
             if (!colorsModal) return;
@@ -1224,6 +1837,12 @@
 
                 const secretsModal = document.getElementById('ph-secrets-modal');
                 const colorsModal  = document.getElementById('ph-colors-modal');
+                const backupModal  = document.getElementById('ph-backup-modal');
+
+                if (backupModal?.style.display === 'flex') {
+                    backupModal.style.display = 'none';
+                    return;
+                }
 
                 // Először a színek modalt zárjuk, ha az van nyitva
                 if (colorsModal?.style.display === 'flex') {
@@ -1423,12 +2042,20 @@
                 --ph-ui-hover: rgba(17, 24, 39, 0.07);
                 --ph-ui-accent: #4f7fb2;
                 --ph-ui-accent-fg: #ffffff;
+                --ph-ui-accent-ink: #245d92;
+                --ph-ui-success: #146a42;
+                --ph-ui-danger: #a72230;
+                --ph-ui-warning: #94520d;
                 --ph-ui-shadow: 0 16px 42px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
             }
             body[data-theme="dark"] {
                 --ph-ui-bg: #242526;
                 --ph-ui-fg: #f1f3f4;
-                --ph-ui-muted: #aeb4bc;
+                --ph-ui-muted: #bdc3cc;
+                --ph-ui-accent-ink: #91c9ff;
+                --ph-ui-success: #79d5a0;
+                --ph-ui-danger: #ff98a2;
+                --ph-ui-warning: #f4bf66;
                 --ph-ui-border: rgba(255, 255, 255, 0.11);
                 --ph-ui-soft: rgba(255, 255, 255, 0.05);
                 --ph-ui-hover: rgba(255, 255, 255, 0.08);
@@ -1443,6 +2070,7 @@
                 --ph-menu-soft: var(--ph-ui-soft);
                 --ph-menu-hover: var(--ph-ui-hover);
                 --ph-menu-accent: var(--ph-ui-accent);
+                --ph-menu-accent-text: var(--ph-ui-accent-ink);
                 --ph-menu-accent-soft: color-mix(in srgb, var(--ph-ui-accent) 16%, transparent);
                 --ph-menu-shadow: var(--ph-ui-shadow);
             }
@@ -1482,7 +2110,7 @@
                 align-items: center;
                 justify-content: center;
                 border-radius: 8px;
-                color: var(--ph-ui-accent);
+                color: var(--ph-ui-accent-ink);
                 background: color-mix(in srgb, var(--ph-ui-accent) 15%, transparent);
             }
             .ph-menu-title,
@@ -1528,7 +2156,7 @@
             }
             .ph-icon-btn:hover,
             .ph-icon-btn:focus-visible {
-                color: var(--ph-ui-accent);
+                color: var(--ph-ui-accent-ink);
                 background: color-mix(in srgb, var(--ph-ui-accent) 14%, transparent);
                 border-color: color-mix(in srgb, var(--ph-ui-accent) 38%, transparent);
                 outline: none;
@@ -1596,8 +2224,8 @@
                 outline: none;
             }
             .ph-acc-header[aria-expanded="true"] {
-                color: var(--ph-menu-accent);
-                background: color-mix(in srgb, var(--ph-menu-accent) 11%, var(--ph-menu-bg));
+                color: var(--ph-menu-fg);
+                background: color-mix(in srgb, var(--ph-ui-accent) 11%, var(--ph-menu-bg));
             }
             .ph-acc-arrow {
                 width: 18px;
@@ -1611,6 +2239,7 @@
                 transition: transform 180ms ease, background 140ms ease;
             }
             .ph-acc-header[aria-expanded="true"] .ph-acc-arrow {
+                color: var(--ph-menu-accent-text);
                 background: color-mix(in srgb, var(--ph-menu-accent) 16%, transparent);
                 transform: rotate(180deg);
             }
@@ -1706,7 +2335,7 @@
                 transition: color 140ms ease;
             }
             .ph-menu-dirty.is-dirty {
-                color: var(--ph-menu-accent);
+                color: var(--ph-menu-accent-text);
                 font-weight: 600;
             }
             .ph-apply-btn,
@@ -1781,7 +2410,7 @@
                 color: var(--ph-ui-muted);
             }
             .ph-dialog-status {
-                color: var(--ph-ui-accent);
+                color: var(--ph-ui-accent-ink);
                 font-weight: 600;
             }
             .ph-dialog-note {
@@ -1806,7 +2435,7 @@
             }
             .ph-secondary-btn:hover,
             .ph-secondary-btn:focus-visible {
-                color: var(--ph-ui-accent) !important;
+                color: var(--ph-ui-accent-ink) !important;
                 background: color-mix(in srgb, var(--ph-ui-accent) 12%, transparent) !important;
                 border-color: color-mix(in srgb, var(--ph-ui-accent) 34%, transparent) !important;
             }
@@ -1852,7 +2481,7 @@
                 letter-spacing: 0.02em;
             }
             .ph-field-help {
-                color: var(--ph-ui-accent) !important;
+                color: var(--ph-ui-accent-ink) !important;
                 font-size: 10px;
                 font-weight: 600;
                 text-decoration: none !important;
@@ -1867,7 +2496,7 @@
                 box-shadow: none;
             }
             .ph-field-input.form-control:focus {
-                border-color: var(--ph-ui-accent);
+                border-color: var(--ph-ui-accent-ink);
                 box-shadow: 0 0 0 2px color-mix(in srgb, var(--ph-ui-accent) 16%, transparent);
             }
             .ph-color-grid {
@@ -1924,6 +2553,175 @@
                 border-radius: 6px;
                 background: transparent;
                 cursor: pointer;
+            }
+
+            /* Beállítások importálása / exportálása. */
+            .ph-backup-body {
+                display: grid;
+                gap: 10px;
+            }
+            .ph-backup-section {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 9px;
+                padding: 12px;
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 10px;
+                background: var(--ph-ui-soft);
+            }
+            .ph-backup-heading {
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                font-size: 12px;
+                color: var(--ph-ui-fg);
+            }
+            .ph-backup-heading .fas {
+                color: var(--ph-ui-accent-ink);
+            }
+            .ph-backup-section p {
+                margin: 0;
+                font-size: 11.5px;
+                line-height: 1.45;
+                color: var(--ph-ui-muted);
+            }
+            /* Látható, billentyűzettel is vezérelhető BE/KI kapcsolók. */
+            .ph-backup-option {
+                width: 100%;
+                min-height: 43px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                margin: 0;
+                padding: 8px 10px;
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 9px;
+                background: var(--ph-ui-bg);
+                color: var(--ph-ui-fg);
+                cursor: pointer;
+                box-sizing: border-box;
+            }
+            .ph-backup-option[data-enabled="true"] {
+                border-color: color-mix(in srgb, var(--ph-ui-accent) 65%, var(--ph-ui-border));
+                background: color-mix(in srgb, var(--ph-ui-accent) 8%, var(--ph-ui-bg));
+            }
+            .ph-backup-option-copy {
+                flex: 1 1 auto;
+                font-size: 11.5px;
+                font-weight: 600;
+                line-height: 1.35;
+            }
+            .ph-backup-option-control {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                flex: 0 0 auto;
+            }
+            .ph-backup-toggle {
+                position: absolute !important;
+                inset: 0;
+                opacity: 0 !important;
+                width: 100%;
+                height: 100%;
+                margin: 0 !important;
+                cursor: pointer;
+                z-index: 1;
+            }
+            .ph-backup-switch {
+                width: 34px;
+                height: 20px;
+                display: inline-flex;
+                align-items: center;
+                padding: 3px;
+                border-radius: 999px;
+                box-sizing: border-box;
+                background: color-mix(in srgb, var(--ph-ui-muted) 55%, var(--ph-ui-bg));
+                transition: background 160ms ease;
+                pointer-events: none;
+            }
+            .ph-backup-switch-knob {
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                background: #fff;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.24);
+                transform: translateX(0);
+                transition: transform 160ms ease;
+            }
+            .ph-backup-toggle:checked + .ph-backup-switch {
+                background: var(--ph-ui-accent);
+            }
+            .ph-backup-toggle:checked + .ph-backup-switch .ph-backup-switch-knob {
+                transform: translateX(14px);
+            }
+            .ph-backup-toggle:focus-visible + .ph-backup-switch {
+                outline: 2px solid var(--ph-ui-accent-ink);
+                outline-offset: 3px;
+            }
+            .ph-backup-option-state {
+                min-width: 22px;
+                font-size: 11px;
+                font-weight: 800;
+                text-align: center;
+                color: var(--ph-ui-muted);
+                letter-spacing: .03em;
+            }
+            .ph-backup-option[data-enabled="true"] .ph-backup-option-state {
+                color: var(--ph-ui-accent-ink);
+            }
+            .ph-backup-option:has(.ph-backup-toggle:disabled) {
+                opacity: .55;
+                cursor: default;
+            }
+            .ph-backup-sensitive-warning {
+                display: flex;
+                align-items: flex-start;
+                gap: 7px;
+                padding: 9px 10px;
+                border: 1px solid color-mix(in srgb, #c9811b 45%, var(--ph-ui-border));
+                border-radius: 9px;
+                background: color-mix(in srgb, #c9811b 9%, var(--ph-ui-bg));
+                color: var(--ph-ui-fg);
+                font-size: 11px;
+                line-height: 1.45;
+            }
+            .ph-backup-sensitive-warning[hidden] {
+                display: none !important;
+            }
+            .ph-backup-sensitive-warning .fas {
+                flex: 0 0 auto;
+                color: var(--ph-ui-warning);
+                margin-top: 2px;
+            }
+            .ph-backup-sensitive-copy {
+                flex: 1 1 auto;
+                min-width: 0;
+                overflow-wrap: break-word;
+            }
+            .ph-backup-section .btn {
+                min-height: 30px;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .ph-backup-hint {
+                display: flex;
+                align-items: flex-start;
+                gap: 7px;
+                font-size: 10.5px;
+                line-height: 1.4;
+                color: var(--ph-ui-muted);
+            }
+            .ph-backup-hint .fas {
+                margin-top: 2px;
+            }
+            .ph-backup-status {
+                flex: 1 1 auto;
+                min-width: 0;
+                overflow-wrap: anywhere;
             }
 
             /* Rejtett felhasználók szerkesztő. */
@@ -2078,6 +2876,19 @@
                     top: 44px !important;
                     max-height: calc(100dvh - 56px) !important;
                     z-index: 2000 !important;
+                }
+                .ph-pt-modal { z-index: 100050 !important; }
+                .ph-tooltip { z-index: 100060 !important; }
+                #header-sticky:has(#ph-power-tools-dropdown .ph-power-menu.show) {
+                    z-index: 100030 !important;
+                    overflow: visible !important;
+                }
+                #header-sticky:has(#ph-power-tools-dropdown .ph-power-menu.show) .navbar-buttons {
+                    overflow: visible !important;
+                }
+                #header-sticky #ph-power-tools-dropdown:has(> .ph-power-menu.show) {
+                    position: relative !important;
+                    z-index: 100031 !important;
                 }
                 .ph-accordion {
                     max-height: calc(100dvh - 150px);
@@ -2500,6 +3311,8 @@
                 wrapper.className = "ph-pt-chain-link message-btn";
                 wrapper.href = "javascript:;";
                 wrapper.role = "button";
+                wrapper.title = 'Hozzászólás-lánc kiemelése';
+                wrapper.setAttribute('aria-label', 'Hozzászólás-lánc kiemelése');
 
                 wrapper.innerHTML = `
                     <span class="fas fa-link fa-fw"></span>
@@ -2872,13 +3685,17 @@
                     }
                 }
             });
+            // Inform the thread layer after the OFF transition classes are updated.
+            // These callbacks run after the per-post requestAnimationFrame updates.
+            requestAnimationFrame(() => {
+                document.dispatchEvent(new Event('ph-pt-off-visibility-changed'));
+            });
         }
 
         function createToggleButton() {
             const btn = document.createElement('a');
             btn.href = 'javascript:;';
             btn.className = 'btn btn-forum';
-            btn.style.marginLeft = '5px';
             btn.innerHTML = `<span class="fas fa-ban fa-fw"></span> OFF elrejtése`;
 
             function updateAppearance() {
@@ -3269,7 +4086,6 @@
             const btn = document.createElement('a');
             btn.href = 'javascript:;';
             btn.className = 'btn btn-forum';
-            btn.style.marginLeft = '5px';
             btn.innerHTML = `<span class="fas fa-expand-arrows-alt fa-fw"></span> Széles nézet`;
 
             function updateUI() {
@@ -3321,283 +4137,1468 @@
     }
 
     function threadView() {
-        const INDENT       = 10;
-        const LINE_COLOR   = "#C1BFB6";
-        const LINE_OPACITY = 1;
-        const LINE_THICK   = 1;
-        const STORAGE_KEY  = KEYS.STATE.THREAD_VIEW;
-        const STATUS       = { ON: 'enabled', OFF: 'disabled' };
+        // A hozzászólások az eredeti UL közvetlen LI elemei maradnak.
+        // A kapcsolatok egyetlen, pozíciók alapján rajzolt SVG-rétegen futnak:
+        // így a hozzászólások közti margó/padding sem szakíthatja meg a vonalakat.
+        const STORAGE_KEY = KEYS.STATE.THREAD_VIEW;
+        const STATUS = { ON: 'enabled', OFF: 'disabled' };
+        const FOLD_KEY = 'ph_pt_thread_fold_v1:' + location.host + location.pathname + location.search;
+        const mobileQuery = window.matchMedia('(max-width: 640px)');
+        const SVG_NS = 'http://www.w3.org/2000/svg';
 
-        let threadContainerHeader = null;
+        let ul = null;
+        let svg = null;
         let threadActive = false;
-        const buttons = [];
+        let originalOrder = [];
+        let entries = [];
+        let postMap = new Map();
+        let parentMap = new Map();
+        let updateTimer = null;
+        let drawFrame = null;
+        let hoveredBranch = null;
+        let sizeObserver = null;
+        let lastListWidth = 0;
+        let connectorSignature = null;
+        const controls = [];
+        const collapsedIds = new Set();
+        // A gyakran használt indexek és SVG-elemek csak faújraépítéskor változnak.
+        const entryIndexById = new Map();
+        const depthById = new Map();
+        const indentCache = new Map();
+        const connectorCache = new Map();
+        let highlightedIds = new Set();
 
-        injectStyleOnce("ph-pt-thread-view-style", `
-            li[data-id] {
-                transition: transform 300ms ease, opacity 200ms ease;
+        // A böngészőfülön belül a korábbi összehajtások megmaradnak.
+        try {
+            const saved = JSON.parse(sessionStorage.getItem(FOLD_KEY) || '[]');
+            if (Array.isArray(saved)) {
+                for (const id of saved) {
+                    if (/^\d+$/.test(String(id))) collapsedIds.add(String(id));
+                }
             }
-            .thread-lines {
-                position: absolute;
-                top: 0;
-                bottom: 0;
-                pointer-events: none;
-                left: 0;
+        } catch (error) {
+            console.warn('[PH Power Tools] Thread-állapot beolvasása sikertelen:', error);
+        }
+
+        injectStyleOnce('ph-pt-thread-view-style', `
+            ul.ph-tv-active {
+                position: relative !important;
+                --ph-tv-line: color-mix(in srgb, var(--ph-ui-muted, #818995) 51%, transparent);
+                --ph-tv-line-hover: var(--ph-ui-accent-ink, #477baa);
+                --ph-tv-surface: var(--ph-ui-bg, #fff);
+                --ph-tv-text: var(--ph-ui-fg, #252525);
+                --ph-tv-muted: var(--ph-ui-muted, #74777b);
             }
-            .thread-line-vert {
-                position: absolute;
-                top: 0;
-                bottom: 0;
-                width: ${LINE_THICK}px;
-                background: ${LINE_COLOR};
-                opacity: ${LINE_OPACITY};
-                border-radius: ${LINE_THICK}px;
-            }
-            .thread-line-horiz {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: ${INDENT}px;
-                height: 50%;
-                border-left: ${LINE_THICK}px solid ${LINE_COLOR};
-                border-bottom: ${LINE_THICK}px solid ${LINE_COLOR};
-                border-bottom-left-radius: ${INDENT}px;
-                opacity: ${LINE_OPACITY};
+            ul.ph-tv-active > li.ph-thread {
+                position: relative !important;
                 box-sizing: border-box;
+                min-width: 0;
+                margin-left: 0 !important;
+                padding-left: var(--ph-tv-indent, 26px) !important;
+            }
+            /* A vonalakat nem daraboljuk hozzászólásonként: az SVG az egész UL-t lefedi. */
+            ul.ph-tv-active > .ph-tv-connections {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                overflow: visible;
+                pointer-events: none;
+                z-index: 2;
+            }
+            .ph-tv-connections .ph-tv-path {
+                fill: none;
+                stroke: var(--ph-tv-line);
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                pointer-events: none;
+                transition: stroke 140ms ease, stroke-width 140ms ease;
+            }
+            .ph-tv-connections .ph-tv-path-hit {
+                fill: none;
+                stroke: transparent;
+                stroke-width: 16;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                pointer-events: stroke;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+            }
+            /* Chromium az SVG kattinthato, attetszo hit-pathjara kulon fokuszkeretet
+               rajzol. Ez a vastag kek kontur nem a Reddit-szeru agkiemeles resze. */
+            .ph-tv-connections .ph-tv-path-hit:focus,
+            .ph-tv-connections .ph-tv-path-hit:focus-visible {
+                outline: none !important;
+            }
+            .ph-tv-connections .ph-tv-branch.is-highlighted > .ph-tv-path {
+                stroke: var(--ph-tv-line-hover);
+                stroke-width: 3;
+            }
+            ul.ph-tv-active > li.ph-thread > .ph-tv-collapse {
+                position: absolute;
+                z-index: 5;
+                top: 10px;
+                left: calc(var(--ph-tv-rail-x, 13px) - 9px);
+                width: 18px;
+                height: 18px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid var(--ph-tv-line);
+                border-radius: 50%;
+                background: var(--ph-tv-surface);
+                color: var(--ph-tv-muted);
+                font-size: 16px;
+                font-family: Arial, sans-serif;
+                line-height: 1;
+                padding: 0;
+                cursor: pointer;
+                transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+            }
+            ul.ph-tv-active > li.ph-thread > .ph-tv-collapse:hover,
+            ul.ph-tv-active > li.ph-thread > .ph-tv-collapse:focus-visible,
+            ul.ph-tv-active > li.ph-thread.ph-tv-branch-hover > .ph-tv-collapse {
+                border-color: var(--ph-tv-line-hover);
+                background: color-mix(in srgb, var(--ph-tv-line-hover) 12%, var(--ph-tv-surface));
+                color: var(--ph-tv-line-hover);
+                outline-offset: 2px;
+            }
+            /* Összecsukáskor a +/- kapcsoló is látható marad, és az SVG ehhez köt. */
+            ul.ph-tv-active > li.ph-tv-collapsed > :not(.ph-tv-collapse):not(.ph-tv-summary) {
+                display: none !important;
+            }
+            ul.ph-tv-active > li.ph-thread > .ph-tv-summary {
+                display: none;
+                width: 100%;
+                min-width: 0;
+                align-items: center;
+                gap: 7px;
+                min-height: 38px;
+                margin: 1px 0 5px;
+                padding: 7px 11px;
+                box-sizing: border-box;
+                text-align: left;
+                border: 1px solid var(--ph-tv-line);
+                border-radius: 9px;
+                background: color-mix(in srgb, var(--ph-tv-text) 5%, var(--ph-tv-surface));
+                color: var(--ph-tv-text);
+                cursor: pointer;
+            }
+            ul.ph-tv-active > li.ph-thread.ph-tv-collapsed > .ph-tv-summary {
+                display: flex;
+            }
+            ul.ph-tv-active > li.ph-thread > .ph-tv-summary:hover,
+            ul.ph-tv-active > li.ph-thread > .ph-tv-summary:focus-visible {
+                border-color: var(--ph-tv-line-hover);
+                background: color-mix(in srgb, var(--ph-tv-line-hover) 10%, var(--ph-tv-surface));
+                outline-offset: 2px;
+            }
+            .ph-tv-summary-icon {
+                flex: 0 0 auto;
+                width: 19px;
+                height: 19px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 50%;
+                background: color-mix(in srgb, var(--ph-tv-line-hover) 15%, var(--ph-tv-surface));
+                color: var(--ph-tv-line-hover);
+                font-size: 15px;
+                font-weight: 700;
+            }
+            .ph-tv-summary-author {
+                font-size: 12px;
+                font-weight: 700;
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+            }
+            .ph-tv-summary-meta {
+                min-width: 0;
+                font-size: 11px;
+                color: var(--ph-tv-muted);
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+            }
+            ul.ph-tv-active > li.ph-tv-branch-hidden {
+                display: none !important;
+            }
+            /* An OFF-hidden message must not leave a +/- button or an empty LI. */
+            ul.ph-tv-active > li.ph-tv-off-hidden {
+                display: none !important;
+            }
+            /* Az összes művelet a Thread nézet osztott gombjának menüjében van. */
+            .ph-tv-control {
+                position: relative;
+                display: inline-flex;
+                align-items: stretch;
+                vertical-align: middle;
+            }
+            .ph-tv-control > .ph-tv-toggle {
+                margin-left: 0 !important;
+            }
+            .ph-tv-control.ph-tv-enabled > .ph-tv-toggle {
+                border-top-right-radius: 0 !important;
+                border-bottom-right-radius: 0 !important;
+            }
+            .ph-tv-control > .ph-tv-menu-trigger {
+                min-width: 26px;
+                margin-left: -1px;
+                padding: 0 7px;
+                border-top-left-radius: 0 !important;
+                border-bottom-left-radius: 0 !important;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+            }
+            .ph-tv-control > .ph-tv-menu-trigger[hidden],
+            .ph-tv-menu[hidden] { display: none !important; }
+            .ph-tv-menu {
+                position: absolute;
+                z-index: 1000;
+                top: calc(100% + 5px);
+                right: 0;
+                min-width: 180px;
+                padding: 5px;
+                box-sizing: border-box;
+                border: 1px solid var(--ph-ui-border, #ccc);
+                border-radius: 9px;
+                background: var(--ph-ui-bg, #fff);
+                color: var(--ph-ui-fg, #222);
+                box-shadow: var(--ph-ui-shadow, 0 5px 18px rgba(0,0,0,.18));
+            }
+            .ph-tv-menu .ph-tv-menu-item {
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                width: 100%;
+                min-height: 32px;
+                padding: 7px 9px;
+                border: 0;
+                border-radius: 6px;
+                background: transparent;
+                color: inherit;
+                font: inherit;
+                font-size: 12px;
+                text-align: left;
+                white-space: nowrap;
+                cursor: pointer;
+            }
+            .ph-tv-menu .ph-tv-menu-item:hover,
+            .ph-tv-menu .ph-tv-menu-item:focus-visible {
+                background: var(--ph-ui-hover, rgba(127,127,127,.12));
+                color: var(--ph-ui-accent-ink, #477baa);
+                outline-offset: -2px;
+            }
+            .ph-tv-menu .ph-tv-menu-item + .ph-tv-menu-item {
+                margin-top: 2px;
+            }
+            @media (max-width: 640px) {
+                ul.ph-tv-active > li.ph-thread > .ph-tv-summary { min-height: 34px; padding: 6px 7px; }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .ph-tv-connections .ph-tv-path,
+                ul.ph-tv-active > li.ph-thread > .ph-tv-collapse { transition: none !important; }
             }
         `);
 
-        function saveState(active) {
+        // A kártyák kizárólag az aktív Thread nézetben kapják meg az új külsőt.
+        // A meglévő hivatkozásokat, dropdownokat és eseménykezelőket nem mozgatjuk:
+        // a gombsor saját, konténerfüggő tördelése az extra műveletekkel is működik.
+        injectStyleOnce('ph-pt-thread-card-style', `
+            ul.ph-tv-active {
+                box-sizing: border-box;
+                width: 100%;
+                min-width: 0;
+                max-width: 100%;
+                margin-inline: 0 !important;
+                padding: 0 !important;
+                list-style: none !important;
+                --ph-tv-card-edge: color-mix(in srgb, var(--ph-ui-muted) 28%, transparent);
+                --ph-tv-card-head: color-mix(in srgb, var(--ph-ui-bg) 91%, var(--ph-ui-muted) 9%);
+                --ph-tv-card-body: color-mix(in srgb, var(--ph-ui-bg) 55%, #b4aa81 45%);
+            }
+            body[data-theme="dark"] ul.ph-tv-active {
+                --ph-tv-card-head: color-mix(in srgb, var(--ph-ui-bg) 94%, var(--ph-ui-muted) 6%);
+                --ph-tv-card-body: color-mix(in srgb, var(--ph-ui-bg) 90%, #a3977a 10%);
+            }
+            ul.ph-tv-active > li.ph-thread {
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                list-style: none !important;
+                margin-bottom: 9px !important;
+            }
+            ul.ph-tv-active > li.ph-thread > :is(.message, .message-off) {
+                display: flex;
+                flex-direction: column;
+                box-sizing: border-box;
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                margin: 0 !important;
+                border: 1px solid var(--ph-tv-card-edge);
+                border-radius: 11px;
+                background: var(--ph-ui-bg);
+                box-shadow: 0 2px 9px rgba(0, 0, 0, .05);
+                overflow: visible; /* A fórum hárompontos menüje ne vágódjon le. */
+                container: ph-tv-card / inline-size;
+            }
+            /* A felhasználó-rejtés a .message max-height-ját 0-ra állítja.
+               A Thread kártya overflow:visible értéke különben felülírja a
+               .ph-collapsible[data-collapsed] overflow:hidden szabályát, ezért
+               a "rejtett" tartalom átlóg a következő válaszkártyára. */
+            ul.ph-tv-active > li.ph-thread > .message.ph-collapsible[data-collapsed="true"] {
+                max-height: 0 !important;
+                overflow: hidden !important;
+                border-width: 0 !important;
+                box-shadow: none !important;
+                pointer-events: none !important;
+            }
+            /* A saját, kattintható rejtéssáv azonos behúzással és szélességgel
+               jelenjen meg, mint a Thread nézet többi kártyája. */
+            ul.ph-tv-active > li.ph-thread > .hidden-bar {
+                position: relative;
+                z-index: 3;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-sizing: border-box;
+                width: 100%;
+                min-width: 0;
+                min-height: 35px;
+                margin: 0;
+                padding: 7px 10px;
+                border: 1px solid var(--ph-tv-card-edge);
+                border-radius: 10px;
+                background: color-mix(in srgb, var(--ph-ui-fg) 85%, var(--ph-ui-bg)) !important;
+                color: var(--ph-ui-bg) !important;
+                font-size: 12px;
+                font-weight: 600;
+                line-height: 1.25;
+                text-align: center;
+                overflow-wrap: anywhere;
+            }
+            ul.ph-tv-active > li.ph-thread > .hidden-bar:hover {
+                background: color-mix(in srgb, var(--ph-ui-fg) 72%, var(--ph-ui-bg)) !important;
+            }
+            /* A fórum az AJAX-os válaszszerkesztőt külön LI-ként beszúrja az UL-be.
+               Ez nem "ph-thread", ezért külön igazítjuk a célhozzászólás gyermekének
+               behúzásához. A bal oldali válaszág-sín így nem megy át a szerkesztőn. */
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor {
+                position: relative;
+                box-sizing: border-box;
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0;
+                margin: 0 0 9px !important;
+                padding: 0 0 0 var(--ph-tv-editor-indent, 26px) !important;
+                list-style: none !important;
+            }
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor > .message {
+                box-sizing: border-box;
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0;
+                border: 1px solid var(--ph-tv-card-edge);
+                border-radius: 11px;
+                background: var(--ph-ui-bg);
+                overflow: visible;
+            }
+            /* Az űrlap saját fejlécét és eszköztárát megtartjuk, csak a
+               tördelést és az azonosító/válasz feliratot rendezzük. */
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor > .message > .message-head {
+                display: flex !important;
+                flex-wrap: wrap !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                gap: 5px 9px !important;
+                min-height: 0 !important;
+                height: auto !important;
+                padding: 7px 10px !important;
+                border-radius: 10px 10px 0 0;
+                background: var(--ph-tv-card-head);
+                border-bottom: 1px solid var(--ph-tv-card-edge);
+            }
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .message-head > .message-head-infos > .message-reply {
+                display: none !important;
+            }
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .message-head > .message-head-user {
+                display: flex !important;
+                align-items: center !important;
+                gap: 7px;
+                min-width: 0;
+                margin: 0 !important;
+            }
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .message-head-user .user-face {
+                flex: 0 0 34px;
+                width: 34px;
+                height: 34px;
+                min-width: 34px;
+                min-height: 34px;
+            }
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor > .message > .message-body,
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .message-body-main,
+            ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .msg-editor-wrapper {
+                box-sizing: border-box;
+                min-width: 0;
+                max-width: 100%;
+            }
+            @media (max-width: 640px) {
+                ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor > .message > .message-head {
+                    padding: 6px 8px !important;
+                }
+                ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor .message-head-user .user-face {
+                    flex-basis: 29px;
+                    min-width: 29px;
+                    width: 29px;
+                    min-height: 29px;
+                    height: 29px;
+                }
+            }
+            /* Egységes KÉTSOROS fejléc valamennyi képernyőméreten.
+               A korábbi flex-wrap a három fejlécblokkot széles kijelzőn is
+               szétdobhatta, ami jelentős üres függőleges helyet okozott. */
+            ul.ph-tv-active > li.ph-thread > .message > .message-head {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) minmax(0, max-content) !important;
+                grid-template-rows: auto auto !important;
+                grid-template-areas: 'author info' 'actions actions' !important;
+                align-items: center !important;
+                align-content: start !important;
+                justify-content: stretch !important;
+                gap: 3px 9px !important;
+                box-sizing: border-box;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                margin: 0 !important;
+                padding: 7px 11px 6px !important;
+                border: 0;
+                border-bottom: 1px solid var(--ph-tv-card-edge);
+                border-radius: 10px 10px 0 0;
+                color: var(--ph-ui-fg);
+                background: var(--ph-tv-card-head);
+                overflow: visible;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head > .message-head-user {
+                grid-area: author;
+                display: flex !important;
+                position: static !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                gap: 8px !important;
+                float: none !important;
+                flex: initial !important;
+                justify-self: stretch;
+                align-self: center;
+                box-sizing: border-box;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-user .user-face {
+                display: inline-flex !important;
+                flex: 0 0 34px !important;
+                align-items: center;
+                justify-content: center;
+                box-sizing: border-box;
+                width: 34px !important;
+                height: 34px !important;
+                min-width: 34px !important;
+                max-width: 34px !important;
+                min-height: 34px !important;
+                max-height: 34px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden;
+                border: 1px solid var(--ph-tv-card-edge);
+                border-radius: 50%;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-user .user-face img {
+                display: block;
+                width: 100% !important;
+                height: 100% !important;
+                max-width: 100% !important;
+                object-fit: cover;
+                border-radius: 50%;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-user .user-title {
+                display: flex !important;
+                flex: 1 1 auto;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 1px 6px;
+                min-width: 0;
+                max-width: 100%;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                line-height: 1.25 !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-user .user-link {
+                display: inline-block;
+                min-width: 0;
+                max-width: 100%;
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+                color: var(--ph-ui-fg) !important;
+                font-weight: 700;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-user .user-title > :not(.user-link) {
+                color: var(--ph-ui-muted);
+            }
+            /* Szám FELÜL, dátum ALATTA; közös, jobbra igazított oszlop. */
+            ul.ph-tv-active > li.ph-thread .message-head > .message-head-infos {
+                grid-area: info;
+                display: flex !important;
+                position: static !important;
+                flex: initial !important;
+                flex-direction: column !important;
+                flex-wrap: nowrap !important;
+                align-items: flex-end !important;
+                justify-content: center !important;
+                justify-self: end !important;
+                align-self: center !important;
+                gap: 1px !important;
+                box-sizing: border-box;
+                float: none !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                color: var(--ph-ui-muted);
+                font-size: 12px;
+                line-height: 1.25 !important;
+                text-align: right !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-infos > :not(.message-reply) {
+                position: static !important;
+                display: block !important;
+                flex: none !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                float: none !important;
+                text-align: right !important;
+                line-height: inherit !important;
+                overflow-wrap: anywhere;
+            }
+            /* A válasz címzettje a message-body-infos részben már szerepel.
+               A fejlécbeli példányt kizárólag Thread nézetben rejtjük el:
+               a DOM-ban marad, így a szálfa parent-ID kiolvasása tovább működik. */
+            ul.ph-tv-active > li.ph-thread .message-head > .message-head-infos > .message-reply {
+                display: none !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-infos > .message-id {
+                order: -1 !important;
+                color: var(--ph-ui-fg) !important;
+                font-weight: 650;
+            }
+            /* Gombsor: kizárólag a fejléc második sora. Több gombnál törik,
+               de a gombok nem préselődnek össze és nem lógnak túl. */
+            ul.ph-tv-active > li.ph-thread .message-head > .message-head-btns {
+                grid-area: actions;
+                display: flex !important;
+                position: relative !important;
+                flex: initial !important;
+                flex-wrap: wrap !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                align-content: center;
+                gap: 2px 3px !important;
+                box-sizing: border-box;
+                float: none !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 3px 0 0 !important;
+                border-top: 1px solid var(--ph-ui-border);
+                white-space: normal !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-btns > :is(a, button, .dropdown, .btn-group) {
+                flex: 0 0 auto !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-btns :is(a.message-btn, button.message-btn),
+            ul.ph-tv-active > li.ph-thread .message-head-btns > :is(a, button) {
+                display: inline-flex !important;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
+                box-sizing: border-box;
+                min-height: 25px !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 2px 6px !important;
+                border: 1px solid transparent !important;
+                border-radius: 6px;
+                background: transparent !important;
+                color: var(--ph-ui-fg) !important;
+                font-size: 12px;
+                font-weight: 600;
+                line-height: 1.25;
+                text-decoration: none !important;
+                white-space: normal !important;
+                overflow-wrap: anywhere;
+                cursor: pointer;
+            }
+            ul.ph-tv-active > li.ph-thread .message-head-btns :is(a.message-btn, button.message-btn):is(:hover, :focus-visible),
+            ul.ph-tv-active > li.ph-thread .message-head-btns > :is(a, button):is(:hover, :focus-visible) {
+                background: var(--ph-ui-hover) !important;
+                border-color: var(--ph-ui-border) !important;
+                color: var(--ph-ui-accent-ink) !important;
+                outline-offset: 2px;
+            }
+            ul.ph-tv-active > li.ph-thread > .message > .message-body {
+                box-sizing: border-box;
+                width: 100%;
+                min-width: 0;
+                max-width: 100%;
+                margin: 0 !important;
+                border-radius: 0 0 10px 10px;
+                color: var(--ph-ui-fg);
+                line-height: 1.5;
+                overflow-wrap: anywhere;
+            }
+            /* A fórum 992px felett a kompakt nézetben nagyobb oldalsó margót ad.
+               Thread nézetben minden képernyőszélességnél egységes értéket használunk. */
+            ul.ph-tv-active > li.ph-thread > .message .message-body-main {
+                margin: .5rem .5rem 1rem;
+            }
+            /* A felhasználó saját színei, a lánc és a #msg-kiemelés elsőbbséget élveznek. */
+            ul.ph-tv-active > li.ph-thread > .message > .message-body:not(
+                .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author,
+                .ph-pt-focus-reply, .ph-pt-chain, .hash-highlight
+            ) {
+                background-color: var(--ph-tv-card-body) !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-content,
+            ul.ph-tv-active > li.ph-thread .message-content-replied {
+                min-width: 0;
+                max-width: 100%;
+                overflow-wrap: anywhere;
+            }
+            ul.ph-tv-active > li.ph-thread .message-content-replied {
+                margin-bottom: 9px;
+            }
+            ul.ph-tv-active > li.ph-thread .message-body img,
+            ul.ph-tv-active > li.ph-thread .message-body video,
+            ul.ph-tv-active > li.ph-thread .message-body iframe {
+                max-width: 100% !important;
+            }
+            ul.ph-tv-active > li.ph-thread .message-body :is(pre, table) {
+                max-width: 100%;
+                overflow-x: auto;
+            }
+        `);
+
+        function saveEnabled(active) {
             storage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
         }
 
-        function shouldBeActive() {
-            return storage.getItem(STORAGE_KEY) === STATUS.ON;
+        function saveFolds() {
+            try {
+                sessionStorage.setItem(FOLD_KEY, JSON.stringify([...collapsedIds]));
+            } catch (error) {
+                console.warn('[PH Power Tools] Thread-állapot mentése sikertelen:', error);
+            }
         }
 
-        function renderThreading() {
-            if (threadActive) return;
-            if (!threadContainerHeader) return;
-
-            let ul = threadContainerHeader.nextElementSibling;
-            while (ul && !(ul.tagName === 'UL' && ul.classList.length === 0)) {
-                ul = ul.nextElementSibling;
+        function getMessageList(header) {
+            let list = header?.nextElementSibling;
+            while (list && !(list.tagName === 'UL' && list.classList.length === 0)) {
+                list = list.nextElementSibling;
             }
-            if (!ul) return;
-
-            // Adatgyűjtés
-            const allMedia = [...ul.querySelectorAll('li[data-id]')];
-            const items = allMedia.filter(li => li.dataset.id);
-
-            if (!items.length) return;
-
-            const postMap = {}, childrenMap = {}, allIds = new Set();
-            items.forEach(li => {
-                allIds.add(li.dataset.id);
-                postMap[li.dataset.id] = li;
-            });
-
-            items.forEach(li => {
-                const id = li.dataset.id;
-                let parent = li.dataset.rplid || null;
-                if (parent && !allIds.has(parent)) parent = null;
-                if (!childrenMap[parent]) childrenMap[parent] = [];
-                childrenMap[parent].push(id);
-            });
-
-            // Ürítés és újraépítés
-            animateReorder(ul, () => {
-                ul.innerHTML = '';
-                (childrenMap[null] || []).forEach(id =>
-                    renderThread(id, 0, [])
-                );
-            });
-
-            // Rekurzív renderelő
-            function renderThread(id, depth, ancestorPath = []) {
-                const el = postMap[id];
-                if (!el) return;
-
-                el.classList.add('ph-thread');
-                const currentIndent = depth * INDENT;
-                el.style.setProperty('--indent', currentIndent + 'px');
-                el.style.marginLeft = "0px";
-                el.style.paddingLeft = currentIndent + "px";
-
-                if (depth > 0) {
-                    let box = el.querySelector('.thread-lines');
-                    if (!box) {
-                        box = document.createElement('div');
-                        box.className = 'thread-lines';
-                        el.appendChild(box);
-                    }
-                    box.innerHTML = '';
-
-                    for (let d = 0; d < depth - 1; d++) {
-                        if (ancestorPath[d]) continue;
-                        const vert = document.createElement('div');
-                        vert.className = 'thread-line-vert';
-                        vert.style.left = (d * INDENT) + 'px';
-                        box.appendChild(vert);
-                    }
-
-                    if (!ancestorPath[depth - 1]) {
-                        const vert = document.createElement('div');
-                        vert.className = 'thread-line-vert';
-                        vert.style.left = ((depth - 1) * INDENT) + 'px';
-                        box.appendChild(vert);
-                    }
-
-                    // Könyök az aktuális elemhez
-                    const elbow = document.createElement('div');
-                    elbow.className = 'thread-line-horiz';
-                    elbow.style.left = ((depth - 1) * INDENT) + 'px';
-                    box.appendChild(elbow);
-                }
-
-                ul.appendChild(el);
-
-                const children = childrenMap[id] || [];
-                children.forEach((childId, i) => {
-                    const isLastChild = (i === children.length - 1);
-                    renderThread(childId, depth + 1, [...ancestorPath, isLastChild]);
-                });
-            }
-
-            // Indítás a gyökér szintű elemekkel
-            (childrenMap[null] || []).forEach(id => renderThread(id, 0, []));
-
-            threadActive = true;
-            saveState(true);
+            return list;
         }
 
-        let originalOrder = [];
-
-        function initOriginalOrder() {
-            if (!threadContainerHeader) return;
-            let ul = threadContainerHeader.nextElementSibling;
-            while (ul && !(ul.tagName === 'UL' && ul.classList.length === 0)) {
-                ul = ul.nextElementSibling;
-            }
-            if (!ul) return;
-
-            originalOrder = [...ul.querySelectorAll('li[data-id]')];
+        function getPostsInDom() {
+            return ul ? [...ul.children].filter(el => el.matches('li[data-id]') && el.dataset.id) : [];
         }
 
-        function restoreOriginalOrder() {
-            if (!threadContainerHeader) return;
-
-            let ul = threadContainerHeader.nextElementSibling;
-            while (ul && !(ul.tagName === 'UL' && ul.classList.length === 0)) {
-                ul = ul.nextElementSibling;
-            }
-            if (!ul) return;
-
-            // A teljes folyamatot az animateReorder-re bízzuk
-            animateReorder(ul, () => {
-                // 1. Töröljük a threading-hez kapcsolódó stílusokat és elemeket
-                originalOrder.forEach(li => {
-                    li.classList.remove('ph-thread');
-                    li.style.marginLeft = '';
-                    li.style.paddingLeft = '';
-                    li.style.setProperty('--indent', '0px');
-                    const box = li.querySelector('.thread-lines');
-                    if (box) box.remove();
-                });
-
-                // 2. Visszahelyezzük őket az eredeti sorrendbe
-                ul.innerHTML = '';
-                originalOrder.forEach(li => ul.appendChild(li));
+        // Az UL más gyermekei a helyükön maradnak (reklám, lapozó stb.).
+        function reorder(posts) {
+            const current = getPostsInDom();
+            if (current.length !== posts.length) return;
+            if (current.every((li, i) => li === posts[i])) return;
+            const slots = current.map(li => {
+                const slot = document.createComment('ph-thread-position');
+                li.replaceWith(slot);
+                return slot;
             });
-
-            threadActive = false;
-            saveState(false);
+            slots.forEach((slot, i) => slot.replaceWith(posts[i]));
         }
 
-        function createToggleButton() {
-            const btn = document.createElement('a');
-            btn.href = 'javascript:;';
-            btn.className = 'btn btn-forum';
-            btn.style.marginLeft = '5px';
-            btn.innerHTML = `<span class="fas fa-project-diagram fa-fw"></span> Thread nézet`;
+        function getAuthor(li) {
+            return li.querySelector(
+                '.message-head-user .user-title .user-link, ' +
+                '.message-head-user .user-link, ' +
+                '.message-body-user .user-title .user-link'
+            )?.textContent?.trim() || `#${li.dataset.id}`;
+        }
 
-            function updateButtonUI() {
-                btn.classList.toggle('btn-primary', threadActive);
-                btn.title = threadActive ? 'Thread nézet kikapcsolása' : 'Thread nézet bekapcsolása';
-            }
-
-            btn.addEventListener('click', e => {
-                e.preventDefault();
-                if (threadActive) restoreOriginalOrder();
-                else renderThreading();
-                updateAllButtons();
+        function makeButton(className, label, callback) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = className;
+            btn.setAttribute('aria-label', label);
+            btn.title = label;
+            btn.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                callback();
             });
-
-            btn._update = updateButtonUI;
-            updateButtonUI();
-
             return btn;
         }
 
-        function updateAllButtons() {
-            buttons.forEach(btn => btn._update());
+        // A mélységi sorrendben egy ág összes eleme összefüggő tartomány.
+        // A pozíció és a leszármazottak száma alapján nincs teljes lista-keresés.
+        function branchIds(rootId) {
+            const start = entryIndexById.get(rootId);
+            if (start === undefined) return [];
+            const ids = [];
+            const end = start + entries[start].descendants + 1;
+            for (let i = start; i < end; i++) ids.push(entries[i].id);
+            return ids;
+        }
+
+        function setHoveredBranch(id) {
+            if (hoveredBranch === id) return;
+            const selected = id ? new Set(branchIds(id)) : new Set();
+            // Csak az előző és az új ág eltérő elemeihez nyúlunk, nem az
+            // oldal összes hozzászólásához és az összes SVG-vonalhoz.
+            for (const oldId of highlightedIds) {
+                if (selected.has(oldId)) continue;
+                postMap.get(oldId)?.classList.remove('ph-tv-branch-hover');
+                connectorCache.get(oldId)?.group.classList.remove('is-highlighted');
+            }
+            for (const newId of selected) {
+                if (highlightedIds.has(newId)) continue;
+                postMap.get(newId)?.classList.add('ph-tv-branch-hover');
+                connectorCache.get(newId)?.group.classList.add('is-highlighted');
+            }
+            hoveredBranch = id;
+            highlightedIds = selected;
+        }
+
+        function toggleFold(id) {
+            if (!threadActive || !postMap.has(id)) return;
+            setHoveredBranch(null);
+            if (collapsedIds.has(id)) collapsedIds.delete(id);
+            else collapsedIds.add(id);
+            applyFolds();
+            saveFolds();
+        }
+
+        function createPostControls(li, id) {
+            const collapse = makeButton('ph-tv-collapse', 'Hozzászólás és válaszág összecsukása', () => toggleFold(id));
+            collapse.textContent = '−';
+            collapse.addEventListener('mouseenter', () => setHoveredBranch(id));
+            collapse.addEventListener('mouseleave', () => setHoveredBranch(null));
+            // Egeres kattintas utan ne ragadjon be a fokusz miatti agakijeloles.
+            // Billentyuzetes fokusznal az agak vizualis visszajelzese megmarad.
+            collapse.addEventListener('focus', () => {
+                if (collapse.matches(':focus-visible')) setHoveredBranch(id);
+            });
+            collapse.addEventListener('blur', () => setHoveredBranch(null));
+
+            const summary = makeButton('ph-tv-summary', 'Hozzászólás kibontása', () => toggleFold(id));
+            summary.setAttribute('aria-expanded', 'false');
+            const icon = document.createElement('span');
+            icon.className = 'ph-tv-summary-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = '+';
+            const author = document.createElement('span');
+            author.className = 'ph-tv-summary-author';
+            author.textContent = getAuthor(li);
+            const meta = document.createElement('span');
+            meta.className = 'ph-tv-summary-meta';
+            summary.append(icon, author, meta);
+            li.append(collapse, summary);
+        }
+
+        // offHider hides the .message/.message-off element, not necessarily its LI.
+        // Hide the entire row only while thread view is active, to avoid orphan
+        // collapse buttons and connectors pointing at invisible OFF posts.
+        function isOffPostHidden(li) {
+            return li.classList.contains('off-post-hidden') ||
+                !!li.querySelector('.message.off-post-hidden, .message-off.off-post-hidden');
+        }
+
+        function syncOffVisibility() {
+            if (!threadActive) return;
+            let changed = false;
+            for (const entry of entries) {
+                if (entry.li.classList.toggle('ph-tv-off-hidden', isOffPostHidden(entry.li))) {
+                    changed = true;
+                }
+            }
+            if (changed) setHoveredBranch(null);
+            scheduleConnectorDraw();
+        }
+
+        function threadIndentForDepth(depth) {
+            const isMobile = mobileQuery.matches;
+            const visualDepth = Math.min(Math.max(0, depth), isMobile ? 5 : 11);
+            if (indentCache.has(visualDepth)) return indentCache.get(visualDepth);
+            // A szélességet egyetlen alkalommal mérjük ki faépítéskor/resize-nál:
+            // a soronkénti CSS-írás után végzett clientWidth-olvasás reflow-t okozhat.
+            const listWidth = lastListWidth || document.documentElement.clientWidth;
+            const readableWidth = Math.min(310, Math.max(170, listWidth * .76));
+            const maxIndent = Math.max(24, Math.floor(listWidth - readableWidth));
+            const indent = Math.min(26 + visualDepth * (isMobile ? 16 : 22), maxIndent);
+            indentCache.set(visualDepth, indent);
+            return indent;
+        }
+
+        // Nem mozgathatjuk át az AJAX-os szerkesztőt: a fórum eseménykezelői
+        // és TinyMCE-állapota a helyén marad. CSS-behúzással tesszük pontosan
+        // a megválaszolt hozzászólás gyermekével egy szintre.
+        function syncInlineEditors() {
+            if (!threadActive || !ul) return;
+            for (const editor of ul.querySelectorAll(':scope > li.msg-editor')) {
+                const action = editor.querySelector('.msg-form')?.getAttribute('action') || '';
+                const targetInAction = action.match(/[?&]rtoid=(\d+)(?:&|$)/)?.[1];
+                const replyText = editor.querySelector('.message-head-infos > .message-reply .message-id')?.textContent || '';
+                const targetId = targetInAction || replyText.match(/#(\d+)/)?.[1];
+                const targetDepth = targetId ? depthById.get(targetId) : undefined;
+                const depth = targetDepth === undefined ? 0 : targetDepth + 1;
+                const indent = `${threadIndentForDepth(depth)}px`;
+                editor.classList.add('ph-tv-inline-editor');
+                if (editor.style.getPropertyValue('--ph-tv-editor-indent') !== indent) {
+                    editor.style.setProperty('--ph-tv-editor-indent', indent);
+                }
+            }
+        }
+
+        function syncPostUi(entry) {
+            const li = entry.li;
+            li.classList.add('ph-thread');
+            li.classList.toggle('ph-tv-off-hidden', isOffPostHidden(li));
+            li.classList.toggle('ph-tv-has-children', entry.descendants > 0);
+            // Egy adott LI vezérlőit csak egyszer keressük meg. AJAX-os
+            // elemcsere esetén a rebuildTree új entry objektumokat készít.
+            if (!entry.ui || entry.ui.button?.parentElement !== li) {
+                if (!li.querySelector(':scope > .ph-tv-collapse')) createPostControls(li, entry.id);
+                entry.ui = {
+                    button: li.querySelector(':scope > .ph-tv-collapse'),
+                    meta: li.querySelector(':scope > .ph-tv-summary .ph-tv-summary-meta'),
+                    author: li.querySelector(':scope > .ph-tv-summary .ph-tv-summary-author')
+                };
+            }
+            // A változatlan CSS-értékek és szövegek újbóli írása felesleges
+            // DOM-módosításokat, megfigyelő-értesítéseket és újrarajzolást okoz.
+            const indent = threadIndentForDepth(entry.depth);
+            const indentValue = `${indent}px`;
+            const railValue = `${indent - 13}px`;
+            if (li.style.getPropertyValue('--ph-tv-indent') !== indentValue) {
+                li.style.setProperty('--ph-tv-indent', indentValue);
+            }
+            if (li.style.getPropertyValue('--ph-tv-rail-x') !== railValue) {
+                li.style.setProperty('--ph-tv-rail-x', railValue);
+            }
+            const metaText = entry.descendants > 0
+                ? `#${entry.id} · ${entry.descendants} válasz elrejtve`
+                : `#${entry.id} · hozzászólás elrejtve`;
+            if (entry.ui.meta && entry.ui.meta.textContent !== metaText) {
+                entry.ui.meta.textContent = metaText;
+            }
+            if (entry.ui.author) {
+                const authorText = getAuthor(li);
+                if (entry.ui.author.textContent !== authorText) entry.ui.author.textContent = authorText;
+            }
+        }
+
+        function makeSvgNode(tag, attrs) {
+            const element = document.createElementNS(SVG_NS, tag);
+            for (const [key, value] of Object.entries(attrs || {})) {
+                element.setAttribute(key, String(value));
+            }
+            return element;
+        }
+
+        function syncResponsiveWidth(force = false) {
+            if (!threadActive || !ul) return;
+            const currentWidth = ul.clientWidth;
+            if (force || currentWidth !== lastListWidth) {
+                lastListWidth = currentWidth;
+                indentCache.clear();
+                entries.forEach(syncPostUi);
+            }
+            scheduleConnectorDraw();
+        }
+
+        function scheduleConnectorDraw() {
+            if (!threadActive || !svg || drawFrame !== null) return;
+            drawFrame = requestAnimationFrame(() => {
+                drawFrame = null;
+                drawConnectors();
+            });
+        }
+
+        // Az űrlap az UL külön LI-gyermeke. A teljes szerkesztőkártyát
+        // vesszük figyelembe, nem csupán a belső contenteditable mezőt:
+        // így az avatar/fejléc és a gombsáv sem kerül ágvonal alá.
+        function getEditorOcclusions(offsetX, offsetY, width, height) {
+            const areas = [];
+            const editors = new Set();
+            // Az összes lehetséges szerkesztő egyetlen DOM-keresésből jön.
+            // A közvetlen LI-szerkesztő mellett az AJAX-os beágyazott is számít.
+            for (const editor of ul.querySelectorAll(':scope > li.msg-editor > .message, .msg-editor-wrapper')) {
+                if (!editor.matches('.msg-editor-wrapper') || !editor.closest('li.msg-editor')) {
+                    editors.add(editor);
+                }
+            }
+            for (const editor of editors) {
+                const rect = editor.getBoundingClientRect();
+                if (rect.width < 24 || rect.height < 24) continue;
+                // A szerkesztő ELŐTTI, bal oldali ágakat nem takarjuk el.
+                // A 4px ráhagyás az avatar/border széleit is védi.
+                const x1 = Math.max(0, rect.left - offsetX - 4);
+                const y1 = Math.max(0, rect.top - offsetY - 4);
+                const x2 = Math.min(width, rect.right - offsetX + 4);
+                const y2 = Math.min(height, rect.bottom - offsetY + 4);
+                if (x2 > x1 && y2 > y1) {
+                    areas.push({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
+                }
+            }
+            return areas;
+        }
+
+        function drawConnectors() {
+            if (!threadActive || !svg || !ul) return;
+            // Ekkorra a dinamikusan beszúrt űrlap a válasza mélységéhez
+            // igazodik; a méreteket már az új elrendezésben mérjük.
+            syncInlineEditors();
+            const listRect = ul.getBoundingClientRect();
+            const width = Math.max(1, ul.clientWidth);
+            const height = Math.max(1, ul.clientHeight);
+            const viewBox = `0 0 ${width} ${height}`;
+            if (svg.getAttribute('viewBox') !== viewBox) svg.setAttribute('viewBox', viewBox);
+            const offsetX = listRect.left + ul.clientLeft;
+            const offsetY = listRect.top + ul.clientTop;
+            const points = new Map();
+            const visible = new Set();
+
+            for (const entry of entries) {
+                if (entry.li.classList.contains('ph-tv-branch-hidden') ||
+                    entry.li.classList.contains('ph-tv-off-hidden')) continue;
+                const button = entry.ui?.button;
+                if (!button) continue;
+                const rect = button.getBoundingClientRect();
+                if (!rect.width || !rect.height) continue;
+                points.set(entry.id, {
+                    x: rect.left + rect.width / 2 - offsetX,
+                    y: rect.top + rect.height / 2 - offsetY,
+                    radius: rect.width / 2
+                });
+                visible.add(entry.id);
+            }
+
+            // Egyetlen összefüggő, elágazó útvonal jut minden szülő hozzászólásnak.
+            // A valós képernyőkoordináták miatt a margókon át is pontos az illesztés.
+            const children = new Map();
+            for (const entry of entries) {
+                if (!visible.has(entry.id)) continue;
+                const parentId = parentMap.get(entry.id);
+                if (!parentId || !visible.has(parentId)) continue;
+                if (!children.has(parentId)) children.set(parentId, []);
+                children.get(parentId).push(entry.id);
+            }
+
+            const branches = [];
+            for (const [parentId, childIds] of children) {
+                const p = points.get(parentId);
+                const childPoints = childIds.map(id => points.get(id)).filter(Boolean);
+                if (!p || !childPoints.length) continue;
+                const last = childPoints[childPoints.length - 1];
+                const parts = [];
+                const dx = last.x - p.x;
+                const startY = p.y + p.radius;
+                if (dx >= 10) {
+                    // A törzs az utolsó gyermek kerekített könyökénél ér véget;
+                    // az összes testvér ehhez a közös, megszakítás nélküli ághoz köt.
+                    const endY = last.y - Math.min(10, dx / 2);
+                    if (endY > startY) parts.push(`M ${p.x} ${startY} V ${endY}`);
+                    for (const child of childPoints) {
+                        const corner = Math.min(10, (child.x - p.x) / 2);
+                        const endX = child.x - child.radius + 0.7;
+                        parts.push(`M ${p.x} ${child.y - corner} Q ${p.x} ${child.y} ` +
+                            `${p.x + corner} ${child.y} H ${endX}`);
+                    }
+                } else {
+                    // Maximális behúzásnál a gyermekek X-koordinátája megegyezik
+                    // a szülőével. A körgombokat ekkor nem szeli át a törzsvonal.
+                    let nextStart = startY;
+                    for (const child of childPoints) {
+                        const stop = child.y - child.radius;
+                        if (stop > nextStart) parts.push(`M ${p.x} ${nextStart} V ${stop}`);
+                        nextStart = child.y + child.radius;
+                    }
+                }
+                branches.push({ parentId, d: parts.join(' ') });
+            }
+            const covered = getEditorOcclusions(offsetX, offsetY, width, height);
+            // Méret- és editorváltozás nélkül az új SVG pontosan ugyanaz lenne.
+            // Ilyenkor sem a DOM-ot, sem az eseménykezelőket nem építjük újra.
+            const signature = JSON.stringify([width, height, branches, covered]);
+            if (signature === connectorSignature) return;
+            connectorSignature = signature;
+
+            const fragment = document.createDocumentFragment();
+            const usedParents = new Set();
+            for (const { parentId, d } of branches) {
+                let cached = connectorCache.get(parentId);
+                if (!cached) {
+                    const group = makeSvgNode('g', { 'class': 'ph-tv-branch', 'data-branch-id': parentId });
+                    const path = makeSvgNode('path', { 'class': 'ph-tv-path', d });
+                    const hit = makeSvgNode('path', {
+                        'class': 'ph-tv-path-hit', d, 'role': 'button', 'tabindex': '0',
+                        'aria-label': 'Válaszág összecsukása'
+                    });
+                    const title = makeSvgNode('title');
+                    title.textContent = 'Válaszág összecsukása';
+                    hit.appendChild(title);
+                    hit.addEventListener('mouseenter', () => setHoveredBranch(parentId));
+                    hit.addEventListener('mouseleave', () => setHoveredBranch(null));
+                    hit.addEventListener('focus', () => {
+                        if (hit.matches(':focus-visible')) setHoveredBranch(parentId);
+                    });
+                    hit.addEventListener('blur', () => setHoveredBranch(null));
+                    hit.addEventListener('click', event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        toggleFold(parentId);
+                    });
+                    hit.addEventListener('keydown', event => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        toggleFold(parentId);
+                    });
+                    group.append(path, hit);
+                    cached = { group, path, hit, d };
+                    connectorCache.set(parentId, cached);
+                } else if (cached.d !== d) {
+                    cached.path.setAttribute('d', d);
+                    cached.hit.setAttribute('d', d);
+                    cached.d = d;
+                }
+                cached.group.classList.toggle('is-highlighted', highlightedIds.has(parentId));
+                fragment.appendChild(cached.group);
+                usedParents.add(parentId);
+            }
+            for (const parentId of connectorCache.keys()) {
+                if (!usedParents.has(parentId)) connectorCache.delete(parentId);
+            }
+            if (!covered.length) {
+                svg.replaceChildren(fragment);
+            } else {
+                // Az SVG-maszk csak a rajzolást rejti el, a láthatatlan
+                // kattintható "hit-path" azonban továbbra is elkapná az
+                // egérkattintást. A clipPath mindkettőt kizárja.
+                const defs = makeSvgNode('defs');
+                let visibleLines = makeSvgNode('g');
+                visibleLines.appendChild(fragment);
+                covered.forEach((area, index) => {
+                    const clipId = `ph-tv-editor-clip-${index}`;
+                    const clip = makeSvgNode('clipPath', {
+                        id: clipId, clipPathUnits: 'userSpaceOnUse'
+                    });
+                    const { x, y, width: cutWidth, height: cutHeight } = area;
+                    // A második téglalap lyuk a teljes SVG területén;
+                    // több szerkesztő esetén a clip-ek metszete érvényesül.
+                    const d = `M 0 0 H ${width} V ${height} H 0 Z ` +
+                        `M ${x} ${y} H ${x + cutWidth} V ${y + cutHeight} H ${x} Z`;
+                    clip.appendChild(makeSvgNode('path', { d, 'clip-rule': 'evenodd' }));
+                    defs.appendChild(clip);
+                    const layer = makeSvgNode('g', { 'clip-path': `url(#${clipId})` });
+                    layer.appendChild(visibleLines);
+                    visibleLines = layer;
+                });
+                svg.replaceChildren(defs, visibleLines);
+            }
+        }
+
+        // Az eredeti (lapos) LI-sorrendet eltároljuk; a hibás vagy körkörös
+        // hivatkozások sem tudnak végtelen fa-bejárást előidézni.
+        function rebuildTree() {
+            // A DOM-ból érkező új hozzászólások esetén megőrizzük a hover-ágat,
+            // de a régi elemekről előbb levesszük a hozzá tartozó osztályokat.
+            const previousHover = hoveredBranch;
+            if (previousHover) setHoveredBranch(null);
+            const current = getPostsInDom();
+            const currentSet = new Set(current);
+            originalOrder = originalOrder.filter(li => currentSet.has(li));
+            const known = new Set(originalOrder);
+            for (const li of current) {
+                if (!known.has(li)) {
+                    originalOrder.push(li);
+                    known.add(li);
+                }
+            }
+            postMap = new Map();
+            for (const li of originalOrder) {
+                if (!postMap.has(li.dataset.id)) postMap.set(li.dataset.id, li);
+            }
+            if (!postMap.size) return;
+
+            const children = new Map();
+            const roots = [];
+            for (const li of originalOrder) {
+                const id = li.dataset.id;
+                const parent = li.dataset.rplid;
+                if (parent && parent !== id && postMap.has(parent)) {
+                    if (!children.has(parent)) children.set(parent, []);
+                    children.get(parent).push(id);
+                } else {
+                    roots.push(id);
+                }
+            }
+
+            const nextEntries = [];
+            const nextParentMap = new Map();
+            const visited = new Set();
+            function walk(id, depth, parentId) {
+                if (visited.has(id)) return;
+                const li = postMap.get(id);
+                if (!li) return;
+                visited.add(id);
+                nextParentMap.set(id, parentId);
+                nextEntries.push({ id, li, depth, descendants: 0 });
+                for (const child of children.get(id) || []) walk(child, depth + 1, id);
+            }
+            roots.forEach(id => walk(id, 0, null));
+            for (const li of originalOrder) {
+                if (!visited.has(li.dataset.id)) walk(li.dataset.id, 0, null);
+            }
+
+            const stack = [];
+            for (let i = nextEntries.length - 1; i >= 0; i--) {
+                const item = nextEntries[i];
+                while (stack.length && stack[stack.length - 1].depth > item.depth) {
+                    const child = stack.pop();
+                    item.descendants += 1 + child.descendants;
+                }
+                stack.push(item);
+            }
+
+            entries = nextEntries;
+            parentMap = nextParentMap;
+            entryIndexById.clear();
+            depthById.clear();
+            entries.forEach((entry, i) => {
+                entryIndexById.set(entry.id, i);
+                depthById.set(entry.id, entry.depth);
+            });
+            lastListWidth = ul.clientWidth;
+            indentCache.clear();
+            entries.forEach(syncPostUi);
+            reorder(entries.map(entry => entry.li));
+            syncInlineEditors();
+            if (sizeObserver) {
+                sizeObserver.disconnect();
+                sizeObserver.observe(ul);
+                entries.forEach(entry => sizeObserver.observe(entry.li));
+            }
+            applyFolds();
+            if (previousHover) setHoveredBranch(previousHover);
+        }
+
+        function applyFolds() {
+            // A gyerekek UL-testvérek maradnak, ezért az aktuális mélységet
+            // használjuk a rejtett ágak megállapításához.
+            const hiddenBy = [];
+            for (const entry of entries) {
+                while (hiddenBy.length && hiddenBy[hiddenBy.length - 1] >= entry.depth) {
+                    hiddenBy.pop();
+                }
+                const folded = collapsedIds.has(entry.id);
+                entry.li.classList.toggle('ph-tv-branch-hidden', hiddenBy.length > 0);
+                entry.li.classList.toggle('ph-tv-collapsed', folded);
+                const button = entry.ui?.button;
+                if (button) {
+                    const expanded = String(!folded);
+                    const label = folded
+                        ? 'Hozzászólás és válaszág kibontása'
+                        : 'Hozzászólás és válaszág összecsukása';
+                    const title = folded ? 'Válaszág kibontása' : 'Válaszág összecsukása';
+                    const symbol = folded ? '+' : '−';
+                    if (button.getAttribute('aria-expanded') !== expanded) button.setAttribute('aria-expanded', expanded);
+                    if (button.getAttribute('aria-label') !== label) button.setAttribute('aria-label', label);
+                    if (button.title !== title) button.title = title;
+                    if (button.textContent !== symbol) button.textContent = symbol;
+                }
+
+                if (folded) hiddenBy.push(entry.depth);
+            }
+            scheduleConnectorDraw();
+        }
+
+        function revealById(id) {
+            if (!threadActive) return false;
+            const key = String(id).replace(/^msg/, '');
+            if (!postMap.has(key)) return false;
+            const seen = new Set();
+            let parent = parentMap.get(key);
+            let changed = false;
+            while (parent && !seen.has(parent)) {
+                seen.add(parent);
+                if (collapsedIds.delete(parent)) changed = true;
+                parent = parentMap.get(parent);
+            }
+            if (changed) {
+                applyFolds();
+                saveFolds();
+            }
+            return true;
+        }
+
+        function revealHashTarget() {
+            const m = location.hash.match(/^#msg(\d+)$/);
+            if (m) revealById(m[1]);
+        }
+
+        function setAllFolded(fold) {
+            if (!threadActive) return;
+            setHoveredBranch(null);
+            if (fold) {
+                for (const entry of entries) {
+                    if (entry.depth === 0 && entry.descendants) collapsedIds.add(entry.id);
+                }
+            } else {
+                collapsedIds.clear();
+            }
+            applyFolds();
+            saveFolds();
+            if (!fold) revealHashTarget();
+        }
+
+        function closeMenus() {
+            for (const control of controls) {
+                control.menu.hidden = true;
+                control.trigger.setAttribute('aria-expanded', 'false');
+            }
+        }
+
+        function updateButtons() {
+            for (const control of controls) {
+                const { toggle, trigger, wrapper } = control;
+                toggle.classList.toggle('btn-primary', threadActive);
+                toggle.title = threadActive
+                    ? 'Reddit-szerű thread nézet kikapcsolása'
+                    : 'Reddit-szerű thread nézet bekapcsolása';
+                toggle.setAttribute('aria-pressed', String(threadActive));
+                wrapper.classList.toggle('ph-tv-enabled', threadActive);
+                trigger.hidden = !threadActive;
+            }
+            if (!threadActive) closeMenus();
+        }
+
+        function renderThreading() {
+            if (threadActive || !ul) return;
+            originalOrder = getPostsInDom();
+            if (!originalOrder.length) return;
+            threadActive = true;
+            ul.classList.add('ph-tv-active');
+            svg = makeSvgNode('svg', { 'class': 'ph-tv-connections', 'aria-hidden': 'false' });
+            svg.setAttribute('aria-label', 'Összecsukható válaszágak');
+            connectorSignature = null;
+            connectorCache.clear();
+            ul.appendChild(svg);
+            rebuildTree();
+            revealHashTarget();
+            saveEnabled(true);
+            updateButtons();
+        }
+
+        function restoreOriginalOrder() {
+            if (!threadActive || !ul) return;
+            threadActive = false;
+            setHoveredBranch(null);
+            if (drawFrame !== null) cancelAnimationFrame(drawFrame);
+            drawFrame = null;
+            sizeObserver?.disconnect();
+            svg?.remove();
+            svg = null;
+            connectorSignature = null;
+            connectorCache.clear();
+            indentCache.clear();
+            entryIndexById.clear();
+            depthById.clear();
+            highlightedIds.clear();
+            lastListWidth = 0;
+            for (const editor of ul.querySelectorAll(':scope > li.msg-editor.ph-tv-inline-editor')) {
+                editor.classList.remove('ph-tv-inline-editor');
+                editor.style.removeProperty('--ph-tv-editor-indent');
+            }
+            for (const li of originalOrder) {
+                li.classList.remove('ph-thread', 'ph-tv-collapsed', 'ph-tv-branch-hidden',
+                    'ph-tv-off-hidden', 'ph-tv-has-children', 'ph-tv-branch-hover');
+                li.style.removeProperty('--ph-tv-indent');
+                li.style.removeProperty('--ph-tv-rail-x');
+                li.querySelectorAll(':scope > .ph-tv-collapse, :scope > .ph-tv-summary')
+                    .forEach(node => node.remove());
+            }
+            ul.classList.remove('ph-tv-active');
+            reorder(originalOrder);
+            entries = [];
+            postMap.clear();
+            parentMap.clear();
+            saveEnabled(false);
+            updateButtons();
+        }
+
+        function createControls() {
+            const wrapper = document.createElement('span');
+            wrapper.className = 'ph-tv-control';
+            const toggle = document.createElement('a');
+            toggle.href = 'javascript:;';
+            toggle.className = 'btn btn-forum ph-tv-toggle';
+            toggle.innerHTML = '<span class="fas fa-code-branch fa-fw"></span> Thread nézet';
+            toggle.addEventListener('click', event => {
+                event.preventDefault();
+                closeMenus();
+                if (threadActive) restoreOriginalOrder();
+                else renderThreading();
+            });
+            const trigger = document.createElement('button');
+            trigger.type = 'button';
+            trigger.className = 'btn btn-forum ph-tv-menu-trigger';
+            trigger.innerHTML = '<span class="fas fa-chevron-down fa-fw"></span>';
+            trigger.title = 'Thread nézet – válaszág műveletek';
+            trigger.setAttribute('aria-label', 'Thread nézet műveletek');
+            trigger.setAttribute('aria-haspopup', 'true');
+            trigger.setAttribute('aria-expanded', 'false');
+            trigger.hidden = true;
+            const menu = document.createElement('div');
+            menu.className = 'ph-tv-menu';
+            menu.setAttribute('role', 'menu');
+            menu.hidden = true;
+            const fold = makeButton('ph-tv-menu-item', 'Összes válaszág összecsukása', () => {
+                setAllFolded(true);
+                closeMenus();
+            });
+            fold.innerHTML = '<span class="fas fa-minus-circle fa-fw"></span> Összecsuk mind';
+            fold.setAttribute('role', 'menuitem');
+            const unfold = makeButton('ph-tv-menu-item', 'Összes válaszág kibontása', () => {
+                setAllFolded(false);
+                closeMenus();
+            });
+            unfold.innerHTML = '<span class="fas fa-plus-circle fa-fw"></span> Kibont mind';
+            unfold.setAttribute('role', 'menuitem');
+            menu.append(fold, unfold);
+            trigger.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                const opening = menu.hidden;
+                closeMenus();
+                if (threadActive && opening) {
+                    menu.hidden = false;
+                    trigger.setAttribute('aria-expanded', 'true');
+                }
+            });
+            wrapper.append(toggle, trigger, menu);
+            controls.push({ wrapper, toggle, trigger, menu });
+            return wrapper;
         }
 
         function init() {
             const headers = document.querySelectorAll('h4.list-message');
-            if (!headers.length || buttons.length > 0) return false;
+            if (!headers.length || controls.length) return false;
+            ul = getMessageList(headers[0]);
+            if (!ul || !getPostsInDom().length) return false;
+            headers.forEach(header => header.append(createControls()));
+            originalOrder = getPostsInDom();
+            updateButtons();
 
-            threadContainerHeader = headers[0];
-            initOriginalOrder();
-
-            headers.forEach(header => {
-                const btn = createToggleButton();
-                buttons.push(btn);
-                header.appendChild(btn);
-            });
-
-            if (shouldBeActive()) {
-                renderThreading();
-                updateAllButtons();
+            // Az utólag betöltődő képek, OFF-összecsukások és a szövegtörések
+            // is változtathatják a hozzászólások magasságát.
+            if (typeof ResizeObserver === 'function') {
+                sizeObserver = new ResizeObserver(syncResponsiveWidth);
             }
+            window.addEventListener('resize', () => syncResponsiveWidth(), { passive: true });
+            if (mobileQuery.addEventListener) {
+                mobileQuery.addEventListener('change', () => syncResponsiveWidth(true));
+            } else if (mobileQuery.addListener) {
+                mobileQuery.addListener(() => syncResponsiveWidth(true));
+            }
+            document.fonts?.ready?.then(scheduleConnectorDraw);
+            document.addEventListener('ph-pt-off-visibility-changed', syncOffVisibility);
 
-            return true;
-        }
-
-        function animateReorder(ul, reorderFn) {
-            const items = [...ul.querySelectorAll('li[data-id]')];
-
-            // FIRST – pozíció mentése
-            const firstRects = new Map();
-            items.forEach(el => {
-                firstRects.set(el, el.getBoundingClientRect());
-                // Ideiglenesen kikapcsoljuk az átmenetet, hogy ne zavarja a mérést
-                el.style.transition = 'none';
+            // Az UL közvetlen LI-gyermekeinek AJAX-os cseréjét is követjük.
+            const listObserver = new MutationObserver(() => {
+                if (!threadActive) return;
+                const live = getPostsInDom();
+                if (live.length === postMap.size &&
+                    live.every(li => postMap.get(li.dataset.id) === li)) return;
+                clearTimeout(updateTimer);
+                updateTimer = setTimeout(() => {
+                    updateTimer = null;
+                    if (threadActive) rebuildTree();
+                }, 50);
             });
+            listObserver.observe(ul, { childList: true });
 
-            // DOM átrendezés (ezt te adod át a reorderFn-ben)
-            reorderFn();
-
-            // LAST – új pozíció
-            items.forEach(el => {
-                const first = firstRects.get(el);
-                const last = el.getBoundingClientRect();
-
-                const dx = first.left - last.left;
-                const dy = first.top  - last.top;
-
-                if (dx || dy) {
-                    el.style.transform = `translate(${dx}px, ${dy}px)`;
-                }
-            });
-
-            // PLAY – kényszerített reflow után visszaengedjük az animációt
-            requestAnimationFrame(() => {
-                items.forEach(el => {
-                    // Visszaadjuk a CSS-ben definiált transition-t
-                    el.style.transition = '';
-                    el.style.transform = '';
+            // A válaszszerkesztő AJAX-szal jelenik meg / tűnik el. A megnyitás
+            // és bezárás után a kitakarás frissüljön azonnal, ne csak resize-ra.
+            const editorSelector = 'li.msg-editor, .msg-editor-wrapper, .rtif-content[contenteditable="true"]';
+            const editorObserver = new MutationObserver(changes => {
+                if (!threadActive) return;
+                const changed = changes.some(change => {
+                    if (svg?.contains(change.target)) return false;
+                    if (change.type === 'attributes') {
+                        return change.target.matches?.(editorSelector) ||
+                            !!change.target.closest?.('.msg-editor-wrapper');
+                    }
+                    return [...change.addedNodes, ...change.removedNodes].some(node =>
+                        node.nodeType === 1 &&
+                        (node.matches?.(editorSelector) || node.querySelector?.(editorSelector)));
                 });
+                if (changed) scheduleConnectorDraw();
             });
+            editorObserver.observe(document.body, {
+                childList: true, subtree: true, attributes: true,
+                attributeFilter: ['class', 'style', 'hidden']
+            });
+
+            document.addEventListener('click', event => {
+                if (!event.target.closest('.ph-tv-control')) closeMenus();
+            }, true);
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape') closeMenus();
+            });
+            window.phPtThreadView = { revealById };
+            window.addEventListener('hashchange', revealHashTarget);
+
+            if (storage.getItem(STORAGE_KEY) === STATUS.ON) renderThreading();
+            return true;
         }
 
         if (!init()) {
@@ -3643,11 +5644,13 @@
         }
 
         function scrollToMsgId(msgId) {
-            const el = document.getElementById(
-                String(msgId).startsWith('msg') ? msgId : 'msg' + msgId
-            );
-
-            return scrollToEl(el);
+            const id = String(msgId).replace(/^msg/, '');
+            // Az összecsukott ágban lévő célhoz először nyissuk ki az őseit.
+            window.phPtThreadView?.revealById?.(id);
+            const el = document.getElementById('msg' + id);
+            const row = el?.closest('li[data-id]');
+            // A saját maga összecsukott kommentet a rövid, látható sorához görgetjük.
+            return scrollToEl(row?.classList.contains('ph-tv-collapsed') ? row : el);
         }
 
         window.phPtMessageScroller = {
@@ -3930,13 +5933,17 @@
                 return;
             }
 
-            let currentIndex = getSafeCurrentIndex(posts);
+            const visiblePosts = posts.filter(li =>
+                !li.classList.contains('ph-tv-branch-hidden') &&
+                !li.classList.contains('ph-tv-off-hidden'));
+            if (!visiblePosts.length) return;
+            let currentIndex = getSafeCurrentIndex(visiblePosts);
 
-            // SHIFT + ↑ / ↓ : következő létező msgId (ID sorrendben)
+            // SHIFT + ↑ / ↓ : következő látható msgId (ID sorrendben)
             if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
                 e.preventDefault();
 
-                const sortedIds = getSortedPostIds(posts);
+                const sortedIds = getSortedPostIds(visiblePosts);
                 if (!sortedIds.length) return;
 
                 let idx = getCurrentIdIndex(sortedIds);
@@ -3969,22 +5976,22 @@
             switch (e.key) {
                 case 'ArrowUp':
                     e.preventDefault();
-                    jumpToIndex(posts, Math.max(0, currentIndex - 1));
+                    jumpToIndex(visiblePosts, Math.max(0, currentIndex - 1));
                     break;
 
                 case 'ArrowDown':
                     e.preventDefault();
-                    jumpToIndex(posts, Math.min(posts.length - 1, currentIndex + 1));
+                    jumpToIndex(visiblePosts, Math.min(visiblePosts.length - 1, currentIndex + 1));
                     break;
 
                 case 'ArrowLeft':
                     e.preventDefault();
-                    jumpToIndex(posts, 0);
+                    jumpToIndex(visiblePosts, 0);
                     break;
 
                 case 'ArrowRight':
                     e.preventDefault();
-                    jumpToIndex(posts, posts.length - 1);
+                    jumpToIndex(visiblePosts, visiblePosts.length - 1);
                     break;
             }
         });
@@ -4172,7 +6179,6 @@
             const editBtn = document.createElement("a");
             editBtn.href = "javascript:;";
             editBtn.className = "btn btn-forum";
-            editBtn.style.marginLeft = "5px";
             editBtn.title = "Rejtett felhasználók szerkesztése";
 
             function refreshButton(btn) {
@@ -4460,7 +6466,7 @@
                 .pager-navbar a.ph-pt-jump-first-unread[aria-disabled="true"] {
                     opacity: 0.3;
                     cursor: not-allowed;
-                    pointer-events: none;
+                    pointer-events: auto !important;
                 }
             `);
         }
@@ -4515,6 +6521,7 @@
 
         function updateUnreadJumpButtons() {
             const first = findFirstUnreadPost();
+            const siteJQuery = typeof unsafeWindow !== 'undefined' ? unsafeWindow.jQuery : window.jQuery;
 
             document.querySelectorAll('.ph-pt-jump-first-unread').forEach(link => {
                 const enabled = !!first;
@@ -4524,10 +6531,19 @@
 
                 if (enabled) {
                     link.href = `#msg${first.id}`;
-                    link.title = `Ugrás az első olvasatlan hozzászólásra (#${first.id})`;
                 } else {
                     link.removeAttribute('href');
-                    link.title = 'Nincs jelölt olvasatlan hozzászólás ezen az oldalon';
+                }
+
+                const tooltipText = enabled
+                    ? `Ugrás az első olvasatlan hozzászólásra (#${first.id})`
+                    : 'Nincs jelölt olvasatlan hozzászólás ezen az oldalon';
+                link.setAttribute('data-original-title', tooltipText);
+                if (typeof siteJQuery?.fn?.tooltip === 'function') {
+                    link.title = '';
+                    siteJQuery(link).tooltip();
+                } else {
+                    link.title = tooltipText;
                 }
             });
         }
@@ -4549,11 +6565,20 @@
                 link.className = 'btn ph-pt-jump-first-unread disabled';
                 link.setAttribute('role', 'button');
                 link.setAttribute('aria-label', 'Ugrás az első olvasatlan hozzászólásra');
+                link.setAttribute('data-toggle', 'tooltip');
                 link.setAttribute('aria-disabled', 'true');
                 link.tabIndex = -1;
                 link.innerHTML = '<span class="ph-pt-unread-icon" aria-hidden="true"><span class="fas fa-comment fa-fw"></span></span>';
 
                 link.addEventListener('click', event => {
+                    const $site = typeof unsafeWindow !== 'undefined'
+                        ? unsafeWindow.jQuery : window.jQuery;
+
+                    if (typeof $site?.fn?.tooltip === 'function') {
+                        $site(link).tooltip('hide');
+                    }
+                    link.blur();
+
                     const first = findFirstUnreadPost();
                     if (!first) {
                         event.preventDefault();
@@ -4868,7 +6893,7 @@
 
             const label = document.createElement('div');
             label.textContent = ''; // ha kell felirat, ide írd
-            label.style.cssText = 'font-size: 10px; color: #888; margin-bottom: 4px;';
+            label.style.cssText = 'font-size: 10px; color: var(--ph-ui-muted); margin-bottom: 4px;';
             extraRow.appendChild(label);
 
             EXTRA_SMILIES.forEach(smiley => {
@@ -4926,8 +6951,7 @@
         const MAX_ITEMS = 120;
 
         // UI
-        const GALLERY_MAX_HEIGHT_PX = 420;
-        const GRID_THUMB_SIZE_PX = 120;
+        const GALLERY_MAX_HEIGHT_PX = 480;
 
         /* ================= GM REQUEST ================= */
 
@@ -5033,63 +7057,327 @@
 
         function injectCssOnce() {
             injectStyleOnce("ph-pt-kek-sh-uploader-style", `
-                #ph-kek-upload .ph-kek-cell { position: relative; }
-                #ph-kek-upload .ph-kek-overlay { opacity: 0; pointer-events: none; }
-                #ph-kek-upload .ph-kek-cell:hover .ph-kek-overlay {
-                    opacity: 1 !important;
-                    pointer-events: auto !important;
+                #ph-kek-upload {
+                    width: 100%; min-width: 0; margin: 16px 0 4px; overflow: hidden;
+                    box-sizing: border-box; border: 1px solid var(--ph-ui-border, rgba(0,0,0,.12));
+                    border-radius: 12px; color: var(--ph-ui-fg, #202124);
+                    background: var(--ph-ui-bg, #fff);
+                    font: inherit; font-size: 12px;
                 }
-                #ph-kek-upload .ph-kek-overlay button.btn {
-                    padding: 2px 6px;
-                    line-height: 1.1;
-                    font-size: 11px;
+                #ph-kek-upload, #ph-kek-upload * { box-sizing: border-box; }
+                #ph-kek-upload button, #ph-kek-upload input { font: inherit; }
+                #ph-kek-upload button { cursor: pointer; }
+                #ph-kek-upload button:disabled { opacity: .55; cursor: not-allowed; }
+                #ph-kek-upload button:focus-visible,
+                #ph-kek-upload a:focus-visible { outline: 2px solid var(--ph-ui-accent, #4f7fb2); outline-offset: 2px; }
+                #ph-kek-upload [hidden] { display: none !important; }
+
+                #ph-kek-upload .ph-kek-top {
+                    display: flex; align-items: center; gap: 10px; min-width: 0;
+                    padding: 11px 13px; border-bottom: 1px solid var(--ph-ui-border, rgba(0,0,0,.12));
+                    background: color-mix(in srgb, var(--ph-ui-bg, #fff) 94%, var(--ph-ui-fg, #222));
                 }
-                #ph-kek-upload #ph-kek-sync-badge {
-                    font-size: 12px;
-                    padding: 2px 6px;
-                    border-radius: 10px;
-                    background: rgba(0,0,0,0.06);
+                #ph-kek-upload .ph-kek-brand-mark {
+                    flex: 0 0 32px; width: 32px; height: 32px; display: grid; place-items: center;
+                    color: var(--ph-ui-accent-ink, #4f7fb2);
+                    background: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 14%, transparent);
+                    border-radius: 9px; font-size: 15px;
                 }
-                #ph-kek-sync-badge:empty { display: none; }
+                #ph-kek-upload .ph-kek-top-copy { min-width: 0; flex: 1 1 auto; }
+                #ph-kek-upload .ph-kek-title {
+                    display: block; margin: 0; font-size: 13px; line-height: 1.25;
+                    font-weight: 750; color: var(--ph-ui-fg, #202124);
+                }
+                #ph-kek-upload .ph-kek-subtitle {
+                    display: block; margin-top: 3px; color: var(--ph-ui-muted, #6b7280);
+                    font-size: 10.5px; line-height: 1.35;
+                }
+                #ph-kek-upload .ph-kek-section-body { padding: 12px 13px; }
+                #ph-kek-upload .ph-kek-upload-row {
+                    position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+                    align-items: stretch; gap: 9px;
+                }
+                #ph-kek-upload .ph-kek-drop {
+                    position: relative; width: 100%; min-width: 0; min-height: 66px;
+                    margin: 0 !important; padding: 10px;
+                    display: flex; align-items: center; gap: 10px; text-align: left;
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                    border: 1px dashed color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 42%, var(--ph-ui-border, #ddd));
+                    border-radius: 9px; cursor: pointer; touch-action: manipulation;
+                    transition: background 150ms ease, border-color 150ms ease;
+                }
+                #ph-kek-upload .ph-kek-drop:hover,
+                #ph-kek-upload .ph-kek-drop:focus-within,
+                #ph-kek-upload .ph-kek-drop.is-dragover {
+                    background: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 9%, var(--ph-ui-bg, #fff));
+                    border-color: var(--ph-ui-accent-ink, #245d92);
+                }
+                #ph-kek-upload .ph-kek-drop:focus-within { outline: 2px solid var(--ph-ui-accent, #4f7fb2); outline-offset: 2px; }
+                #ph-kek-upload .ph-kek-drop.is-busy { opacity: .65; }
+                /* Valódi, közvetlenül megnyomható fájlválasztó a dropzóna felett.
+                   Nincs showPicker()/programozott click(): Brave-ben is natív kattintás. */
+                #ph-kek-upload .ph-kek-file-input {
+                    position: absolute !important; inset: 0 !important; z-index: 2;
+                    display: block !important; width: 100% !important; height: 100% !important;
+                    padding: 0 !important; margin: 0 !important; border: 0 !important;
+                    opacity: 0 !important; cursor: pointer; pointer-events: auto !important;
+                }
+                #ph-kek-upload .ph-kek-pick-icon {
+                    flex: 0 0 36px; width: 36px; height: 36px; display: grid; place-items: center;
+                    border: 1px solid var(--ph-ui-border, #ddd); border-radius: 9px;
+                    background: var(--ph-ui-bg, #fff); color: var(--ph-ui-accent-ink, #4f7fb2); font-size: 15px;
+                }
+                #ph-kek-upload .ph-kek-file-copy { display: block; min-width: 0; flex: 1 1 auto; }
+                #ph-kek-upload .ph-kek-file-label {
+                    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                    font-size: 12px; font-weight: 700; color: var(--ph-ui-fg, #202124);
+                }
+                #ph-kek-upload .ph-kek-file-hint {
+                    display: block; margin-top: 3px; font-size: 10.5px;
+                    color: var(--ph-ui-muted, #6b7280); line-height: 1.35;
+                }
+                #ph-kek-upload .ph-kek-primary {
+                    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+                    min-height: 40px; min-width: 118px; padding: 9px 12px;
+                    border: 1px solid var(--ph-ui-accent, #4f7fb2); border-radius: 8px;
+                    color: var(--ph-ui-accent-fg, #fff); background: var(--ph-ui-accent, #4f7fb2);
+                    font-size: 11.5px; font-weight: 700; line-height: 1.3;
+                    transition: filter 140ms ease, transform 140ms ease;
+                }
+                #ph-kek-upload .ph-kek-primary:not(:disabled):hover { filter: brightness(1.08); }
+                #ph-kek-upload .ph-kek-primary:not(:disabled):active { transform: scale(.985); }
+                #ph-kek-upload .ph-kek-status {
+                    margin-top: 9px; padding: 8px 10px; border-radius: 8px;
+                    border: 1px solid var(--ph-ui-border, #ddd);
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                    color: var(--ph-ui-muted, #6b7280); font-size: 11px;
+                    line-height: 1.4; overflow-wrap: anywhere;
+                }
+                #ph-kek-upload .ph-kek-status:empty { display: none; }
+                #ph-kek-upload .ph-kek-status[data-tone="success"] {
+                    color: var(--ph-ui-success); background: color-mix(in srgb, var(--ph-ui-success) 9%, var(--ph-ui-bg, #fff));
+                    border-color: color-mix(in srgb, var(--ph-ui-success) 27%, var(--ph-ui-border, #ddd));
+                }
+                #ph-kek-upload .ph-kek-status[data-tone="error"] {
+                    color: var(--ph-ui-danger); background: color-mix(in srgb, var(--ph-ui-danger) 9%, var(--ph-ui-bg, #fff));
+                    border-color: color-mix(in srgb, var(--ph-ui-danger) 28%, var(--ph-ui-border, #ddd));
+                }
+                #ph-kek-upload .ph-kek-gallery-section {
+                    border-top: 1px solid var(--ph-ui-border, #ddd);
+                }
+                #ph-kek-upload .ph-kek-gallery-head {
+                    display: flex; flex-wrap: wrap; align-items: center;
+                    justify-content: space-between; gap: 8px; padding: 10px 13px;
+                    border-bottom: 1px solid var(--ph-ui-border, #ddd);
+                    background: color-mix(in srgb, var(--ph-ui-bg, #fff) 96%, var(--ph-ui-fg, #222));
+                }
+                #ph-kek-upload .ph-kek-gallery-heading { display: flex; align-items: center; gap: 7px; min-width: 0; }
+                #ph-kek-upload .ph-kek-gallery-heading strong {
+                    font-size: 12px; color: var(--ph-ui-fg, #202124);
+                }
+                #ph-kek-upload .ph-kek-count {
+                    min-width: 24px; padding: 2px 6px; border-radius: 99px; text-align: center;
+                    color: var(--ph-ui-accent-ink, #4f7fb2);
+                    background: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 13%, transparent);
+                    font-weight: 750; font-size: 10.5px;
+                }
+                #ph-kek-upload .ph-kek-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+                #ph-kek-upload .ph-kek-tabs {
+                    display: flex; align-items: center; gap: 2px; padding: 3px;
+                    border: 1px solid var(--ph-ui-border, #ddd);
+                    border-radius: 8px; background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                }
+                #ph-kek-upload .ph-kek-tab {
+                    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+                    min-height: 29px; padding: 5px 9px; border: 0; border-radius: 6px;
+                    background: transparent; color: var(--ph-ui-muted, #6b7280);
+                    font-size: 11px; font-weight: 650; line-height: 1.2;
+                }
+                #ph-kek-upload .ph-kek-tab[aria-pressed="true"] {
+                    background: var(--ph-ui-accent, #4f7fb2);
+                    color: var(--ph-ui-accent-fg, #fff);
+                }
+                #ph-kek-upload .ph-kek-sync-badge {
+                    display: inline-flex; align-items: center; gap: 5px;
+                    padding: 5px 7px; border: 1px solid var(--ph-ui-border, #ddd);
+                    border-radius: 7px; color: var(--ph-ui-fg, #202124);
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                    font-size: 10.5px; font-weight: 650; white-space: nowrap;
+                }
+                #ph-kek-upload .ph-kek-sync-badge[data-mode="cloud"] {
+                    color: var(--ph-ui-fg, #202124);
+                    background: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 9%, var(--ph-ui-bg, #fff));
+                    border-color: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 23%, var(--ph-ui-border, #ddd));
+                }
+                #ph-kek-upload .ph-kek-sync-badge[data-mode="cloud"] .fas {
+                    color: var(--ph-ui-accent-ink, #245d92);
+                }
+                #ph-kek-upload .ph-kek-toolbar-btn {
+                    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+                    min-height: 35px; padding: 6px 9px;
+                    border: 1px solid var(--ph-ui-border, #ddd); border-radius: 8px;
+                    color: var(--ph-ui-fg, #202124);
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                    font-size: 11px; font-weight: 650;
+                }
+                #ph-kek-upload .ph-kek-toolbar-btn:hover { color: var(--ph-ui-accent-ink, #4f7fb2); border-color: var(--ph-ui-accent, #4f7fb2); }
+                #ph-kek-upload .ph-kek-toolbar-btn.is-danger:hover {
+                    color: var(--ph-ui-danger); border-color: var(--ph-ui-danger);
+                }
+                #ph-kek-upload .ph-kek-grid {
+                    display: grid; grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
+                    align-content: start; gap: 9px; max-height: ${GALLERY_MAX_HEIGHT_PX}px;
+                    padding: 12px; overflow-y: auto; overscroll-behavior-y: auto;
+                    scrollbar-width: thin;
+                }
+                #ph-kek-upload .ph-kek-cell {
+                    min-width: 0; overflow: hidden;
+                    border: 1px solid var(--ph-ui-border, #ddd); border-radius: 9px;
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                }
+                #ph-kek-upload .ph-kek-thumb-link {
+                    display: block; width: 100%; aspect-ratio: 1 / 1; overflow: hidden;
+                    background: color-mix(in srgb, var(--ph-ui-muted, #777) 10%, var(--ph-ui-bg, #fff));
+                }
+                #ph-kek-upload .ph-kek-thumb-link img {
+                    display: block; width: 100%; height: 100%; object-fit: cover;
+                    transition: transform 170ms ease;
+                }
+                #ph-kek-upload .ph-kek-cell:hover .ph-kek-thumb-link img { transform: scale(1.035); }
+                #ph-kek-upload .ph-kek-card-name {
+                    display: block; padding: 5px 6px 4px;
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                    color: var(--ph-ui-muted, #6b7280); font-size: 10px;
+                }
+                #ph-kek-upload .ph-kek-actions {
+                    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+                    gap: 3px; padding: 4px; border-top: 1px solid var(--ph-ui-border, #ddd);
+                }
+                #ph-kek-upload .ph-kek-action-btn {
+                    display: inline-flex; align-items: center; justify-content: center;
+                    width: 100%; min-width: 0; height: 32px; padding: 0;
+                    border: 1px solid transparent; border-radius: 6px;
+                    color: var(--ph-ui-muted, #6b7280);
+                    background: var(--ph-ui-bg, #fff); font-size: 12px;
+                }
+                #ph-kek-upload .ph-kek-action-btn:hover,
+                #ph-kek-upload .ph-kek-action-btn:focus-visible {
+                    color: var(--ph-ui-accent-ink, #4f7fb2);
+                    border-color: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 33%, transparent);
+                    background: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 12%, var(--ph-ui-bg, #fff));
+                }
+                #ph-kek-upload .ph-kek-action-btn.is-danger:hover,
+                #ph-kek-upload .ph-kek-action-btn.is-danger:focus-visible {
+                    color: var(--ph-ui-danger); border-color: color-mix(in srgb, var(--ph-ui-danger) 40%, transparent);
+                    background: color-mix(in srgb, var(--ph-ui-danger) 10%, var(--ph-ui-bg, #fff));
+                }
+                #ph-kek-upload .ph-kek-list {
+                    display: grid; gap: 6px; align-content: start;
+                    max-height: ${GALLERY_MAX_HEIGHT_PX}px; overflow-y: auto;
+                    padding: 10px 12px; overscroll-behavior-y: auto; scrollbar-width: thin;
+                }
+                #ph-kek-upload .ph-kek-list-row {
+                    display: grid; grid-template-columns: 54px minmax(0, 1fr) auto;
+                    align-items: center; gap: 9px; padding: 7px;
+                    border: 1px solid var(--ph-ui-border, #ddd); border-radius: 9px;
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045)); min-width: 0;
+                }
+                #ph-kek-upload .ph-kek-list-thumb { display: block; width: 54px; height: 54px; border-radius: 6px; overflow: hidden; }
+                #ph-kek-upload .ph-kek-list-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
+                #ph-kek-upload .ph-kek-list-meta { min-width: 0; }
+                #ph-kek-upload .ph-kek-list-name {
+                    display: block; font-size: 11.5px; font-weight: 700;
+                    color: var(--ph-ui-fg, #202124);
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                }
+                #ph-kek-upload .ph-kek-list-url,
+                #ph-kek-upload .ph-kek-list-extra {
+                    display: block; margin-top: 3px; font-size: 10.5px;
+                    color: var(--ph-ui-muted, #6b7280);
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                }
+                #ph-kek-upload .ph-kek-list-actions { display: flex; align-items: center; gap: 4px; }
+                #ph-kek-upload .ph-kek-list-actions .ph-kek-action-btn { width: 34px; height: 34px; }
+                #ph-kek-upload .ph-kek-empty {
+                    margin: 12px; padding: 20px 10px; text-align: center;
+                    border: 1px dashed var(--ph-ui-border, #ddd); border-radius: 9px;
+                    color: var(--ph-ui-muted, #6b7280);
+                    background: var(--ph-ui-soft, rgba(0,0,0,.045));
+                    font-size: 11px; line-height: 1.55;
+                }
+                #ph-kek-upload .ph-kek-empty .fas {
+                    display: block; margin-bottom: 8px; font-size: 20px;
+                    color: var(--ph-ui-accent-ink, #245d92);
+                }
+                #ph-kek-upload .ph-kek-empty strong { display: block; color: var(--ph-ui-fg, #202124); font-size: 12px; }
+                #ph-kek-upload .ph-kek-key-guide {
+                    padding: 13px; color: var(--ph-ui-fg, #202124);
+                    font-size: 11.5px; line-height: 1.65;
+                }
+                #ph-kek-upload .ph-kek-key-guide p { margin: 0 0 9px; }
+                #ph-kek-upload .ph-kek-key-guide ol { margin: 0; padding-left: 20px; }
+                #ph-kek-upload .ph-kek-key-guide a { color: var(--ph-ui-accent-ink, #4f7fb2); }
+                #ph-kek-upload .ph-kek-key-guide .ph-kek-guide-tip {
+                    display: block; margin-top: 10px; color: var(--ph-ui-muted, #6b7280);
+                }
+                @media (max-width: 640px) {
+                    #ph-kek-upload .ph-kek-grid {
+                        grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding: 9px;
+                    }
+                    #ph-kek-upload .ph-kek-gallery-head { padding: 9px; }
+                    #ph-kek-upload .ph-kek-section-body { padding: 10px; }
+                    #ph-kek-upload .ph-kek-list { padding: 8px; }
+                }
+                @media (max-width: 520px) {
+                    #ph-kek-upload .ph-kek-upload-row { grid-template-columns: minmax(0, 1fr); }
+                    #ph-kek-upload .ph-kek-primary { width: 100%; min-height: 39px; }
+                    #ph-kek-upload .ph-kek-tools { width: 100%; justify-content: space-between; }
+                    #ph-kek-upload .ph-kek-tab { min-width: 37px; padding-inline: 7px; }
+                    #ph-kek-upload .ph-kek-tab-label,
+                    #ph-kek-upload .ph-kek-toolbar-label { display: none; }
+                    #ph-kek-upload .ph-kek-toolbar-btn { width: 36px; min-width: 36px; padding: 0; }
+                    #ph-kek-upload .ph-kek-sync-badge { margin-left: auto; }
+                    #ph-kek-upload .ph-kek-toolbar-btn { min-height: 35px; }
+                    #ph-kek-upload .ph-kek-list-row { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 6px; padding: 6px; }
+                    #ph-kek-upload .ph-kek-list-thumb { width: 44px; height: 44px; }
+                    #ph-kek-upload .ph-kek-list-actions { gap: 2px; }
+                    #ph-kek-upload .ph-kek-list-actions .ph-kek-action-btn { width: 29px; height: 34px; }
+                }
+                @media (max-width: 360px) {
+                    #ph-kek-upload .ph-kek-grid { gap: 5px; padding: 6px; }
+                    #ph-kek-upload .ph-kek-actions { padding: 3px; gap: 2px; }
+                    #ph-kek-upload .ph-kek-action-btn { height: 31px; }
+                    #ph-kek-upload .ph-kek-top { padding: 9px; }
+                    #ph-kek-upload .ph-kek-subtitle { font-size: 10px; }
+                    #ph-kek-upload .ph-kek-list-extra { display: none; }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    #ph-kek-upload .ph-kek-thumb-link img,
+                    #ph-kek-upload .ph-kek-primary,
+                    #ph-kek-upload .ph-kek-drop { transition: none; }
+                }
             `);
         }
 
-        function updateSyncBadge() {
-            const el = document.getElementById("ph-kek-sync-badge");
+        function updateSyncBadge(wrapper = document) {
+            const el = wrapper.querySelector("#ph-kek-sync-badge");
             if (!el) return;
-
-            if (ENABLE_GIST_SYNC) {
-                el.textContent = "☁️ Cloud";
-                el.style.color = "green";
-            } else {
-                el.textContent = "💾 Local";
-                el.style.color = "gray";
-            }
+            el.dataset.mode = ENABLE_GIST_SYNC ? "cloud" : "local";
+            el.innerHTML = ENABLE_GIST_SYNC
+                ? '<span class="fas fa-cloud" aria-hidden="true"></span><span>Gist aktív</span>'
+                : '<span class="fas fa-save" aria-hidden="true"></span><span>Helyi mentés</span>';
+            el.title = ENABLE_GIST_SYNC ? "Gist-szinkronizálás bekapcsolva" : "A galéria ezen az eszközön tárolódik";
         }
 
         function setActiveTab(wrapper, tab) {
-            const btnGrid = wrapper.querySelector("#ph-kek-tab-grid");
-            const btnList = wrapper.querySelector("#ph-kek-tab-list");
+            const isGrid = tab !== "list";
+            wrapper.dataset.activeTab = isGrid ? "grid" : "list";
+            wrapper.querySelector("#ph-kek-tab-grid")?.setAttribute("aria-pressed", String(isGrid));
+            wrapper.querySelector("#ph-kek-tab-list")?.setAttribute("aria-pressed", String(!isGrid));
             const viewGrid = wrapper.querySelector("#ph-kek-view-grid");
             const viewList = wrapper.querySelector("#ph-kek-view-list");
-
-            wrapper.dataset.activeTab = tab;
-
-            if (tab === "grid") {
-                btnGrid.classList.add("btn-secondary");
-                btnGrid.classList.remove("btn-light");
-                btnList.classList.add("btn-light");
-                btnList.classList.remove("btn-secondary");
-                viewGrid.style.display = "block";
-                viewList.style.display = "none";
-            } else {
-                btnList.classList.add("btn-secondary");
-                btnList.classList.remove("btn-light");
-                btnGrid.classList.add("btn-light");
-                btnGrid.classList.remove("btn-secondary");
-                viewList.style.display = "block";
-                viewGrid.style.display = "none";
-            }
+            if (viewGrid) viewGrid.hidden = !isGrid;
+            if (viewList) viewList.hidden = isGrid;
         }
 
         const RESET_KEY = KEYS.KEK.GALLERY_RESET_TS;
@@ -5119,283 +7407,380 @@
             }
         }
 
+        function formatKekFileSize(bytes) {
+            const size = Number(bytes);
+            if (!Number.isFinite(size) || size < 0) return "";
+            if (size < 1024) return `${Math.round(size)} B`;
+            if (size < 1024 * 1024) return `${(size / 1024).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} KB`;
+            return `${(size / (1024 * 1024)).toLocaleString("hu-HU", { maximumFractionDigits: 1 })} MB`;
+        }
+
+        function makeKekAction(item, action, icon, label) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `ph-kek-action-btn${action === "delete" ? " is-danger" : ""}`;
+            button.dataset.action = action;
+            button.dataset.url = item.url;
+            button.title = label;
+            button.setAttribute("aria-label", `${label}: ${item.originalName || item.filename || "kép"}`);
+            button.innerHTML = `<span class="fas ${icon}" aria-hidden="true"></span>`;
+            return button;
+        }
+
         function renderGallery(wrapper) {
             applyGalleryResetIfNeeded();
             if (!wrapper) return;
 
             const items = loadGallery();
-
-            const emptyGrid = wrapper.querySelector("#ph-kek-empty-grid");
-            const emptyList = wrapper.querySelector("#ph-kek-empty-list");
             const gridEl = wrapper.querySelector("#ph-kek-grid");
             const listEl = wrapper.querySelector("#ph-kek-list");
+            const emptyGrid = wrapper.querySelector("#ph-kek-empty-grid");
+            const emptyList = wrapper.querySelector("#ph-kek-empty-list");
+            const count = wrapper.querySelector("#ph-kek-count");
+            if (!gridEl || !listEl) return;
 
-            gridEl.innerHTML = "";
-            listEl.innerHTML = "";
+            gridEl.replaceChildren();
+            listEl.replaceChildren();
+            if (count) count.textContent = String(items.length);
+            if (emptyGrid) emptyGrid.hidden = items.length > 0;
+            if (emptyList) emptyList.hidden = items.length > 0;
+            if (!items.length) return;
 
-            if (!items.length) {
-                emptyGrid.style.display = "block";
-                emptyList.style.display = "block";
-                return;
-            }
-            emptyGrid.style.display = "none";
-            emptyList.style.display = "none";
+            const gridFragment = document.createDocumentFragment();
+            const listFragment = document.createDocumentFragment();
 
-            // GRID
-            for (const it of items) {
-                const cell = document.createElement("div");
+            for (const item of items) {
+                if (!item || typeof item.url !== "string" || !/^https?:\/\//i.test(item.url)) continue;
+                const name = item.originalName || item.filename || item.url.split("/").pop() || "Kép";
+
+                const cell = document.createElement("article");
                 cell.className = "ph-kek-cell";
-                cell.style.width = `${GRID_THUMB_SIZE_PX}px`;
-                cell.style.height = `${GRID_THUMB_SIZE_PX}px`;
-                cell.style.borderRadius = "8px";
-                cell.style.overflow = "hidden";
-                cell.style.border = "1px solid rgba(0,0,0,0.15)";
-                cell.style.background = "rgba(0,0,0,0.02)";
-
-                const a = document.createElement("a");
-                a.href = it.url;
-                a.target = "_blank";
-                a.rel = "noopener";
-                a.title = "Megnyitás új lapon";
-                a.style.display = "block";
-                a.style.width = "100%";
-                a.style.height = "100%";
-                a.style.position = "absolute";
-                a.style.inset = "0";
-                a.style.zIndex = "1";
+                const link = document.createElement("a");
+                link.className = "ph-kek-thumb-link";
+                link.href = item.url;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+                link.title = "Kép megnyitása új lapon";
 
                 const img = document.createElement("img");
-                img.src = it.url;
-                img.alt = it.filename || "";
+                img.src = item.url;
+                img.alt = name;
                 img.loading = "lazy";
-                img.style.width = "100%";
-                img.style.height = "100%";
-                img.style.objectFit = "cover";
-                a.appendChild(img);
+                img.decoding = "async";
+                link.appendChild(img);
 
-                const overlay = document.createElement("div");
-                overlay.className = "ph-kek-overlay";
-                overlay.style.position = "absolute";
-                overlay.style.left = "0";
-                overlay.style.right = "0";
-                overlay.style.bottom = "0";
-                overlay.style.padding = "8px";
-                overlay.style.display = "flex";
-                overlay.style.gap = "8px";
-                overlay.style.justifyContent = "center";
-                overlay.style.background = "rgba(0,0,0,0.55)";
-                overlay.style.transition = "opacity 120ms ease";
-                overlay.style.zIndex = "2";
+                const caption = document.createElement("span");
+                caption.className = "ph-kek-card-name";
+                caption.textContent = name;
+                caption.title = name;
 
-                const makeMiniBtn = (action, title, innerHtml, className) => {
-                    const b = document.createElement("button");
-                    b.type = "button";
-                    b.className = className;
-                    b.dataset.action = action;
-                    b.dataset.url = it.url;
-                    b.title = title;
-                    b.innerHTML = innerHtml;
-                    return b;
-                };
+                const actions = document.createElement("div");
+                actions.className = "ph-kek-actions";
+                actions.append(
+                    makeKekAction(item, "insert-image", "fa-image", "Kép beszúrása"),
+                    makeKekAction(item, "insert-link", "fa-link", "Képlink beszúrása"),
+                    makeKekAction(item, "delete", "fa-trash", "Kép törlése")
+                );
+                cell.append(link, caption, actions);
+                gridFragment.appendChild(cell);
 
-                overlay.appendChild(makeMiniBtn("insert-image", "Kép beszúrás", `<span class="fas fa-image"></span>`, "btn btn-light btn-xs"));
-                overlay.appendChild(makeMiniBtn("insert-link", "Link beszúrás ([kép])", `<span class="fas fa-link"></span>`, "btn btn-light btn-xs"));
-                overlay.appendChild(makeMiniBtn("delete", "Törlés", `<span class="fas fa-trash"></span>`, "btn btn-light btn-xs"));
-
-                cell.appendChild(a);
-                cell.appendChild(overlay);
-                gridEl.appendChild(cell);
-            }
-
-            // LISTA
-            for (const it of items) {
-                const row = document.createElement("div");
-                row.style.display = "flex";
-                row.style.alignItems = "center";
-                row.style.gap = "10px";
-                row.style.padding = "6px 0";
-                row.style.borderTop = "1px solid rgba(0,0,0,0.08)";
-
+                const row = document.createElement("article");
+                row.className = "ph-kek-list-row";
                 const thumbLink = document.createElement("a");
-                thumbLink.href = it.url;
+                thumbLink.className = "ph-kek-list-thumb";
+                thumbLink.href = item.url;
                 thumbLink.target = "_blank";
-                thumbLink.rel = "noopener";
-                thumbLink.title = "Megnyitás új lapon";
-
+                thumbLink.rel = "noopener noreferrer";
+                thumbLink.title = "Kép megnyitása új lapon";
                 const thumb = document.createElement("img");
-                thumb.src = it.url;
-                thumb.alt = it.filename || "";
+                thumb.src = item.url;
+                thumb.alt = name;
                 thumb.loading = "lazy";
-                thumb.style.width = "56px";
-                thumb.style.height = "56px";
-                thumb.style.objectFit = "cover";
-                thumb.style.borderRadius = "4px";
-                thumb.style.border = "1px solid rgba(0,0,0,0.15)";
+                thumb.decoding = "async";
                 thumbLink.appendChild(thumb);
 
                 const meta = document.createElement("div");
-                meta.style.flex = "1";
-                meta.style.minWidth = "0";
+                meta.className = "ph-kek-list-meta";
+                const rowName = document.createElement("span");
+                rowName.className = "ph-kek-list-name";
+                rowName.textContent = name;
+                rowName.title = name;
+                const rowUrl = document.createElement("span");
+                rowUrl.className = "ph-kek-list-url";
+                rowUrl.textContent = item.url;
+                rowUrl.title = item.url;
+                meta.append(rowName, rowUrl);
 
-                const title = document.createElement("div");
-                title.textContent = it.originalName || it.filename || it.url.split("/").pop();
-                title.style.fontSize = "12px";
-                title.style.fontWeight = "600";
-                title.style.whiteSpace = "nowrap";
-                title.style.overflow = "hidden";
-                title.style.textOverflow = "ellipsis";
-                title.title = it.url;
+                const details = [formatKekFileSize(item.size)];
+                const createdDate = Date.parse(item.createdAt || "");
+                if (Number.isFinite(createdDate)) details.push(new Date(createdDate).toLocaleDateString("hu-HU"));
+                if (details.filter(Boolean).length) {
+                    const extra = document.createElement("span");
+                    extra.className = "ph-kek-list-extra";
+                    extra.textContent = details.filter(Boolean).join(" · ");
+                    meta.appendChild(extra);
+                }
 
-                const urlLine = document.createElement("div");
-                urlLine.textContent = it.url;
-                urlLine.style.fontSize = "11px";
-                urlLine.style.color = "#666";
-                urlLine.style.whiteSpace = "nowrap";
-                urlLine.style.overflow = "hidden";
-                urlLine.style.textOverflow = "ellipsis";
-                urlLine.title = it.url;
+                const rowActions = document.createElement("div");
+                rowActions.className = "ph-kek-list-actions";
+                rowActions.append(
+                    makeKekAction(item, "insert-image", "fa-image", "Kép beszúrása"),
+                    makeKekAction(item, "insert-link", "fa-link", "Képlink beszúrása"),
+                    makeKekAction(item, "delete", "fa-trash", "Kép törlése")
+                );
+                row.append(thumbLink, meta, rowActions);
+                listFragment.appendChild(row);
+            }
 
-                meta.appendChild(title);
-                meta.appendChild(urlLine);
+            gridEl.appendChild(gridFragment);
+            listEl.appendChild(listFragment);
+        }
 
-                const actions = document.createElement("div");
-                actions.style.display = "flex";
-                actions.style.gap = "6px";
-                actions.style.flexWrap = "wrap";
-                actions.style.justifyContent = "flex-end";
+        const selectedKekFiles = new WeakMap();
 
-                const mkBtn = (action, icon, label) => {
-                    const b = document.createElement("button");
-                    b.type = "button";
-                    b.className = "btn btn-light btn-xs my-1";
-                    b.dataset.action = action;
-                    b.dataset.url = it.url;
-                    b.innerHTML = `<span class="fas ${icon}"></span> <span class="d-none d-md-inline-block">${label}</span>`;
-                    return b;
-                };
+        function getKekSelectedFile(wrapper) {
+            return (wrapper && selectedKekFiles.get(wrapper)) || null;
+        }
 
-                actions.appendChild(mkBtn("insert-image", "fa-image", "Beszúrás"));
-                actions.appendChild(mkBtn("insert-link", "fa-link", "Link beszúrás"));
-                actions.appendChild(mkBtn("delete", "fa-trash", "Törlés"));
+        function refreshKekFileSelection(wrapper) {
+            if (!wrapper) return;
+            const file = getKekSelectedFile(wrapper);
+            const label = wrapper.querySelector("#ph-kek-file-label");
+            const hint = wrapper.querySelector("#ph-kek-file-hint");
+            const button = wrapper.querySelector("#ph-kek-upload-btn");
+            const drop = wrapper.querySelector(".ph-kek-drop");
+            const busy = wrapper.dataset.uploading === "true";
+            if (label) { label.textContent = file ? file.name : "Kép kiválasztása"; label.title = file?.name || ""; }
+            if (hint) hint.textContent = file
+                ? [formatKekFileSize(file.size), "Kattints a cseréhez"].filter(Boolean).join(" · ")
+                : "Kattints ide vagy húzz ide egy képet · max. 5 MB";
+            if (button) button.disabled = busy || !file;
+            if (drop) { drop.classList.toggle("is-busy", busy); drop.dataset.hasFile = file ? "true" : "false"; }
+        }
 
-                row.appendChild(thumbLink);
-                row.appendChild(meta);
-                row.appendChild(actions);
+        function setKekUploading(wrapper, busy) {
+            if (!wrapper) return;
+            wrapper.dataset.uploading = busy ? "true" : "false";
+            const input = wrapper.querySelector("#ph-kek-file");
+            if (input) input.disabled = busy;
+            const buttonText = wrapper.querySelector("#ph-kek-upload-btn .ph-kek-upload-button-label");
+            const buttonIcon = wrapper.querySelector("#ph-kek-upload-btn .fas");
+            if (buttonText) buttonText.textContent = busy ? "Feltöltés…" : "Feltöltés";
+            if (buttonIcon) buttonIcon.className = busy ? "fas fa-spinner fa-spin" : "fas fa-cloud-upload-alt";
+            refreshKekFileSelection(wrapper);
+        }
 
-                listEl.appendChild(row);
+        function bindKekPickerGlobalEvents() {
+            const isKekFileInput = target => !!target?.matches?.("#ph-kek-upload #ph-kek-file");
+
+            window.addEventListener("click", e => {
+                const drop = e.target?.closest?.("#ph-kek-upload .ph-kek-drop");
+                if (!drop) return;
+                // A label/input natív kattintás marad: nincs preventDefault,
+                // input.click vagy showPicker, tehát nincs elvesző aktiváció.
+                e.stopPropagation();
+            }, true);
+
+            const rememberPickedFile = e => {
+                if (!isKekFileInput(e.target)) return;
+                e.stopPropagation();
+                const input = e.target;
+                const wrapper = input.closest("#ph-kek-upload");
+                if (!wrapper || wrapper.dataset.uploading === "true") return;
+                const file = input.files?.[0];
+                if (!file) return; // Még nincs fájl, vagy a választást megszakították.
+
+                selectedKekFiles.set(wrapper, file);
+                input.value = "";
+                refreshKekFileSelection(wrapper);
+                setStatus(wrapper, "");
+            };
+            for (const type of ["input", "change"]) {
+                window.addEventListener(type, rememberPickedFile, true);
+            }
+
+            const handleDrag = e => {
+                const drop = e.target?.closest?.("#ph-kek-upload .ph-kek-drop");
+                if (!drop) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const wrapper = drop.closest("#ph-kek-upload");
+                if (!wrapper) return;
+                const busy = wrapper.dataset.uploading === "true";
+                if (e.type === "dragleave") {
+                    if (!drop.contains(e.relatedTarget)) drop.classList.remove("is-dragover");
+                    return;
+                }
+                if (e.type === "dragenter" || e.type === "dragover") {
+                    if (!busy) {
+                        drop.classList.add("is-dragover");
+                        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+                    }
+                    return;
+                }
+                if (e.type !== "drop") return;
+                drop.classList.remove("is-dragover");
+                if (busy) return;
+
+                const file = Array.from(e.dataTransfer?.files || []).find(f =>
+                    f.type?.startsWith("image/") || (!f.type && /\.(jpe?g|png|gif|webp|avif|bmp|svg|heic|heif|tiff?)$/i.test(f.name || ""))
+                );
+                if (!file) {
+                    setStatus(wrapper, "Húzz ide egy képfájlt a fájlkezelőből (például JPG, PNG vagy WebP).", "error");
+                    return;
+                }
+                selectedKekFiles.set(wrapper, file);
+                const input = wrapper.querySelector("#ph-kek-file");
+                if (input) input.value = "";
+                refreshKekFileSelection(wrapper);
+                setStatus(wrapper, "");
+            };
+            for (const type of ["dragenter", "dragover", "dragleave", "drop"]) {
+                window.addEventListener(type, handleDrag, true);
             }
         }
+
+        function bindKekFilePicker(wrapper) {
+            // A file input fölött teljes felületű, natívan kattintható overlay van.
+            // A change/input feldolgozás központilag, capture szakaszban történik.
+            refreshKekFileSelection(wrapper);
+        }
+
+        bindKekPickerGlobalEvents();
 
         function ensureUi(target) {
             if (!target) return null;
             if (target.querySelector("#ph-kek-upload")) return target.querySelector("#ph-kek-upload");
 
             injectCssOnce();
-
-            const wrapper = document.createElement("div");
+            const wrapper = document.createElement("section");
             wrapper.id = "ph-kek-upload";
-            wrapper.style.marginTop = "20px";
-            wrapper.style.paddingTop = "15px";
-            wrapper.style.borderTop = "1px dashed #aaa";
             wrapper.dataset.activeTab = "grid";
+            wrapper.innerHTML = `
+                <header class="ph-kek-top">
+                    <span class="ph-kek-brand-mark" aria-hidden="true"><span class="fas fa-images"></span></span>
+                    <div class="ph-kek-top-copy">
+                        <strong class="ph-kek-title">kek.sh képfeltöltő</strong>
+                        <span class="ph-kek-subtitle">PH Power Tools · Képek feltöltése és beszúrása</span>
+                    </div>
+                </header>
+            `;
 
             if (!hasKekKey()) {
-                wrapper.innerHTML = `
-                    <h6 style="margin-bottom:10px;">Képfeltöltés (kek.sh)</h6>
-                    <div style="
-                        padding: 12px 14px;
-                        border: 1px solid rgba(0,0,0,0.12);
-                        border-radius: 10px;
-                        background: rgba(0,0,0,0.03);
-                        font-size: 13px;
-                        line-height: 1.45;">
-                        <div style="font-weight:700; margin-bottom:6px;">Nincs beállítva kek.sh API kulcs</div>
-                        <div style="margin-bottom:8px;">
-                            1) Regisztrálj itt: 
-                            <a href="https://kek.sh/" target="_blank" rel="noopener noreferrer">kek.sh</a><br>
-                            2) API kulcs: 
-                            <a href="https://kek.sh/settings/api" target="_blank" rel="noopener noreferrer">kek.sh/settings/api</a><br>
-                            3) Állítsd be: <b>PH Power Tools <span class="fas fa-cog"></span> Kulcsok / Szinkron</b> (kek.sh API key)
-                        </div>
-                        <div style="opacity:0.9;">
-                            Ingyenes csomag: <b>5 GB</b> tárhely, <b>1000</b> kép, <b>5 MB/kép</b>.
-                        </div>
+                wrapper.insertAdjacentHTML("beforeend", `
+                    <div class="ph-kek-key-guide">
+                        <p><strong>A képfeltöltéshez kek.sh API-kulcs szükséges.</strong></p>
+                        <ol>
+                            <li>Jelentkezz be a <a href="https://kek.sh/" target="_blank" rel="noopener noreferrer">kek.sh</a> oldalra.</li>
+                            <li>Másold ki az <a href="https://kek.sh/settings/api" target="_blank" rel="noopener noreferrer">API-kulcsodat</a>.</li>
+                            <li>Add meg a <strong>PH Power Tools → Kulcsok és szinkron</strong> ablakban.</li>
+                        </ol>
+                        
+                        </ol>
+                        <span class="ph-kek-guide-tip">
+                            Ingyenes csomag:
+                            <b>5 GB</b> tárhely ·
+                            <b>1000</b> kép ·
+                            <b>5 MB/kép</b>.
+                            <a href="https://kek.sh/pricing"
+                               target="_blank"
+                               rel="noopener noreferrer">
+                                Részletek
+                            </a>
+                        </span>
+                        
+                        <span class="ph-kek-guide-tip">
+                            A kulcs mentése után az oldal újratöltődik,
+                            és megjelenik a feltöltő.
+                        </span>
                     </div>
-                `;
-
+                `);
                 target.appendChild(wrapper);
                 return wrapper;
             }
 
-            wrapper.innerHTML = `
-                <h6 style="margin-bottom:10px;">Külső feltöltés (kek.sh)</h6>
-                <div id="ph-kek-upload-row" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                    <input type="file" id="ph-kek-file" accept="image/*" style="flex: 1 1 260px; min-width: 220px;">
-                    <button id="ph-kek-upload-btn" class="btn btn-secondary btn-sm" type="button" style="flex: 0 0 auto;">
-                        Feltöltés
-                    </button>
-                    <span id="ph-kek-status" style="flex: 1 1 200px; min-width: 180px; font-size:0.8rem;"></span>
-                </div>
-        
-                <div style="margin-top:14px; padding-top:12px; border-top:1px dashed #aaa;">
-                    <div id="ph-kek-gallery-head" style="position: sticky; top: 0; z-index: 2;
-                                padding: 6px 0; display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
-                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                            <h6 style="margin:0;">Képeim (kek.sh)</h6>
-                            <div style="display:flex; gap:6px; align-items:center;">
-                                <button type="button" id="ph-kek-tab-grid" class="btn btn-secondary btn-sm">Rács</button>
-                                <button type="button" id="ph-kek-tab-list" class="btn btn-light btn-sm">Lista</button>
-                            </div>
-                        </div>
-        
-                        <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
-                            <div style="display:flex; align-items:center;">
-                                <span id="ph-kek-sync-badge"></span>
-                            </div>
-                            ${ENABLE_GIST_SYNC ? `<button id="ph-kek-sync-now" class="btn btn-light btn-sm">Szinkronizálás</button>` : ``}
-                            <button type="button" class="btn btn-light btn-sm" id="ph-kek-clear">Mind törlése</button>
-                        </div>
+            wrapper.insertAdjacentHTML("beforeend", `
+                <div class="ph-kek-section-body">
+                    <div class="ph-kek-upload-row" id="ph-kek-upload-row">
+                        <label class="ph-kek-drop" title="Válassz egy képfájlt, vagy húzd ide">
+                            <input id="ph-kek-file" class="ph-kek-file-input" type="file" accept="image/*"
+                                   aria-label="Képfájl kiválasztása">
+                            <span class="ph-kek-pick-icon" aria-hidden="true"><span class="fas fa-plus"></span></span>
+                            <span class="ph-kek-file-copy">
+                                <span id="ph-kek-file-label" class="ph-kek-file-label">Kép kiválasztása</span>
+                                <span id="ph-kek-file-hint" class="ph-kek-file-hint">Kattints ide vagy húzz ide egy képet</span>
+                            </span>
+                        </label>
+                        <button id="ph-kek-upload-btn" type="button" class="ph-kek-primary" disabled>
+                            <span class="fas fa-cloud-upload-alt" aria-hidden="true"></span>
+                            <span class="ph-kek-upload-button-label">Feltöltés</span>
+                        </button>
                     </div>
-        
+                    <div id="ph-kek-status" class="ph-kek-status" role="status" aria-live="polite"></div>
+                </div>
+                <section class="ph-kek-gallery-section" aria-label="Feltöltött képek">
+                    <header id="ph-kek-gallery-head" class="ph-kek-gallery-head">
+                        <div class="ph-kek-gallery-heading">
+                            <span class="fas fa-images" aria-hidden="true"></span>
+                            <strong>Képeim</strong>
+                            <span id="ph-kek-count" class="ph-kek-count" aria-label="Képek száma">0</span>
+                        </div>
+                        <div class="ph-kek-tools">
+                            <div class="ph-kek-tabs" role="group" aria-label="Galéria nézet">
+                                <button type="button" id="ph-kek-tab-grid" class="ph-kek-tab" aria-pressed="true" title="Rácsnézet">
+                                    <span class="fas fa-th-large" aria-hidden="true"></span><span class="ph-kek-tab-label">Rács</span>
+                                </button>
+                                <button type="button" id="ph-kek-tab-list" class="ph-kek-tab" aria-pressed="false" title="Listanézet">
+                                    <span class="fas fa-list" aria-hidden="true"></span><span class="ph-kek-tab-label">Lista</span>
+                                </button>
+                            </div>
+                            <span id="ph-kek-sync-badge" class="ph-kek-sync-badge"></span>
+                            ${ENABLE_GIST_SYNC ? `
+                                <button type="button" id="ph-kek-sync-now" class="ph-kek-toolbar-btn" title="Galéria szinkronizálása" aria-label="Galéria szinkronizálása">
+                                    <span class="fas fa-sync-alt" aria-hidden="true"></span><span class="ph-kek-toolbar-label">Szinkron</span>
+                                </button>
+                            ` : ``}
+                            <button type="button" id="ph-kek-clear" class="ph-kek-toolbar-btn is-danger"
+                                    title="Összes kép törlése a szerverről és a galériából" aria-label="Összes kép törlése">
+                                <span class="fas fa-trash" aria-hidden="true"></span><span class="ph-kek-toolbar-label">Mind törlése</span>
+                            </button>
+                        </div>
+                    </header>
                     <div id="ph-kek-view-grid">
-                        <div id="ph-kek-empty-grid" style="font-size:12px; color:#666; display:none;">
-                            Nincs elmentett kép. Feltöltés után itt fognak megjelenni.
+                        <div id="ph-kek-empty-grid" class="ph-kek-empty" hidden>
+                            <span class="fas fa-images" aria-hidden="true"></span>
+                            <strong>Még nincs feltöltött kép</strong>
+                            Feltöltés után itt jelennek meg a képeid.
                         </div>
-                        <div id="ph-kek-grid"
-                            style="display:flex; flex-wrap:wrap; gap:12px;
-                                    max-height:${GALLERY_MAX_HEIGHT_PX}px; overflow-y:auto;
-                                    padding-right:6px;">
-                        </div>
+                        <div id="ph-kek-grid" class="ph-kek-grid" aria-label="Képek rácsnézetben"></div>
                     </div>
-        
-                    <div id="ph-kek-view-list" style="display:none;">
-                        <div id="ph-kek-empty-list" style="font-size:12px; color:#666; display:none;">
-                            Nincs elmentett kép. Feltöltés után itt fognak megjelenni.
+                    <div id="ph-kek-view-list" hidden>
+                        <div id="ph-kek-empty-list" class="ph-kek-empty" hidden>
+                            <span class="fas fa-images" aria-hidden="true"></span>
+                            <strong>Még nincs feltöltött kép</strong>
+                            Feltöltés után itt jelennek meg a képeid.
                         </div>
-                        <div id="ph-kek-list"
-                            style="max-height:${GALLERY_MAX_HEIGHT_PX}px; overflow-y:auto; padding-right:6px;">
-                        </div>
+                        <div id="ph-kek-list" class="ph-kek-list" aria-label="Képek listanézetben"></div>
                     </div>
-                </div>
-            `;
+                </section>
+            `);
 
             target.appendChild(wrapper);
-
-            wrapper.querySelector("#ph-kek-tab-grid").addEventListener("click", () => setActiveTab(wrapper, "grid"));
-            wrapper.querySelector("#ph-kek-tab-list").addEventListener("click", () => setActiveTab(wrapper, "list"));
+            bindKekFilePicker(wrapper);
             setActiveTab(wrapper, "grid");
-
             renderGallery(wrapper);
-            updateSyncBadge();
-
+            updateSyncBadge(wrapper);
             return wrapper;
         }
 
-        function setStatus(wrapperOrDoc, text) {
+        function setStatus(wrapperOrDoc, message, tone = "info") {
             const status = (wrapperOrDoc instanceof HTMLElement)
                 ? wrapperOrDoc.querySelector("#ph-kek-status")
                 : document.getElementById("ph-kek-status");
-            if (status) status.textContent = text || "";
+            if (!status) return;
+            status.textContent = message || "";
+            if (message) status.dataset.tone = tone;
+            else status.removeAttribute("data-tone");
         }
 
         function getWrapperFromEvent(e) {
@@ -5407,87 +7792,118 @@
         function handleUpload(e) {
             applyGalleryResetIfNeeded();
             const wrapper = getWrapperFromEvent(e);
-            const fileInput = wrapper?.querySelector("#ph-kek-file");
-
-            if (!fileInput?.files?.length) {
-                alert("Nincs kiválasztott fájl.");
+            if (!wrapper || wrapper.dataset.uploading === "true") return;
+            const fileInput = wrapper.querySelector("#ph-kek-file");
+            const file = getKekSelectedFile(wrapper);
+            if (!file) {
+                setStatus(wrapper, "Előbb válassz ki egy képet.", "error");
+                return;
+            }
+            if (file.type && !file.type.startsWith("image/")) {
+                setStatus(wrapper, "Csak képfájlt lehet feltölteni.", "error");
                 return;
             }
 
-            const file = fileInput.files[0];
-            setStatus(wrapper, "Feltöltés...");
-
             const formData = new FormData();
             formData.append("file", file);
+            setKekUploading(wrapper, true);
+            setStatus(wrapper, "Feltöltés folyamatban…");
 
-            gmRequest({
-                method: "POST",
-                url: "https://kek.sh/api/v1/posts",
-                headers: { "x-kek-auth": KEK_SH_API_KEY },
-                data: formData,
-                onload: async function (res) {
-                    if (res.status < 200 || res.status >= 300) {
-                        setStatus(wrapper, `❌ HTTP ${res.status}`);
-                        return;
-                    }
-
-                    const json = safeJsonParse(res.responseText, null);
-                    if (!json) {
-                        setStatus(wrapper, "❌ JSON parse hiba");
-                        return;
-                    }
-
-                    const url = buildImageUrlFromApi(json);
-                    if (!url) {
-                        setStatus(wrapper, "❌ Nem sikerült URL-t találni");
-                        return;
-                    }
-
-                    await addToGallery({
-                        id: json.id,
-                        token: json.token,
-                        url,
-                        filename: json.filename,
-                        originalName: file.name,
-                        createdAt: json.createdAt || new Date().toISOString(),
-                        size: json.size || file.size || null
-                    });
-
-                    if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
-                        try {
-                            await storage.flush();
-                            setStatus(wrapper, "✅ Feltöltve és Gistbe szinkronizálva");
-                        } catch (err) {
-                            console.error('[PH Power Tools] Gallery upload sync failed:', err);
-                            setStatus(wrapper, `⚠️ Feltöltve, de a Gist-szinkron hibázott: ${err?.message || 'ismeretlen hiba'}`);
+            try {
+                gmRequest({
+                    method: "POST",
+                    url: "https://kek.sh/api/v1/posts",
+                    headers: { "x-kek-auth": KEK_SH_API_KEY },
+                    data: formData,
+                    timeout: 120000,
+                    onprogress: event => {
+                        if (event.lengthComputable && event.total > 0) {
+                            const percent = Math.min(99, Math.round(event.loaded / event.total * 100));
+                            setStatus(wrapper, `Feltöltés: ${percent}%`);
                         }
-                    } else {
-                        setStatus(wrapper, "✅ Feltöltve (helyileg elmentve)");
-                    }
+                    },
+                    onload: async res => {
+                        try {
+                            if (res.status < 200 || res.status >= 300) {
+                                setStatus(wrapper, `Feltöltési hiba (HTTP ${res.status}).`, "error");
+                                return;
+                            }
+                            const json = safeJsonParse(res.responseText, null);
+                            if (!json) {
+                                setStatus(wrapper, "A szerver válasza nem érvényes JSON.", "error");
+                                return;
+                            }
+                            const url = buildImageUrlFromApi(json);
+                            if (!url) {
+                                setStatus(wrapper, "A szerver válaszából hiányzik a kép URL-je.", "error");
+                                return;
+                            }
 
-                    renderGallery(wrapper);
-                    updateSyncBadge();
-                    fileInput.value = "";
-                },
-                onerror: function () {
-                    setStatus(wrapper, "❌ Feltöltési hiba");
-                }
-            });
+                            await addToGallery({
+                                id: json.id,
+                                token: json.token,
+                                url,
+                                filename: json.filename,
+                                originalName: file.name,
+                                createdAt: json.createdAt || new Date().toISOString(),
+                                size: json.size || file.size || null
+                            });
+
+                            if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                                try {
+                                    await storage.flush();
+                                    setStatus(wrapper, "Kép feltöltve, galériába mentve és Gistbe szinkronizálva.", "success");
+                                } catch (error) {
+                                    console.error("[PH Power Tools] Gallery upload sync failed:", error);
+                                    setStatus(wrapper, `A kép feltöltve, de a Gist-szinkron hibázott: ${error?.message || "ismeretlen hiba"}`, "error");
+                                }
+                            } else {
+                                setStatus(wrapper, "Kép sikeresen feltöltve és a galériába mentve.", "success");
+                            }
+
+                            renderGallery(wrapper);
+                            updateSyncBadge(wrapper);
+                            selectedKekFiles.delete(wrapper);
+                            if (fileInput) fileInput.value = "";
+                        } catch (error) {
+                            console.error("[PH Power Tools] kek.sh upload failed:", error);
+                            setStatus(wrapper, `Feltöltési vagy mentési hiba: ${error?.message || "ismeretlen hiba"}`, "error");
+                        } finally {
+                            setKekUploading(wrapper, false);
+                        }
+                    },
+                    onerror: () => {
+                        setStatus(wrapper, "Hálózati hiba történt feltöltés közben.", "error");
+                        setKekUploading(wrapper, false);
+                    },
+                    ontimeout: () => {
+                        setStatus(wrapper, "A feltöltés időtúllépés miatt megszakadt.", "error");
+                        setKekUploading(wrapper, false);
+                    },
+                    onabort: () => {
+                        setStatus(wrapper, "A feltöltés megszakadt.", "error");
+                        setKekUploading(wrapper, false);
+                    }
+                });
+            } catch (error) {
+                console.error("[PH Power Tools] kek.sh upload request failed:", error);
+                setStatus(wrapper, `Nem sikerült elindítani a feltöltést: ${error?.message || "ismeretlen hiba"}`, "error");
+                setKekUploading(wrapper, false);
+            }
         }
 
         /* ================= EVENTS ================= */
 
-        document.addEventListener("click", async (e) => {
+        document.addEventListener("click", async e => {
             const wrapper = getWrapperFromEvent(e);
-            if (!wrapper) return;
+            if (!wrapper || !wrapper.contains(e.target)) return;
 
-            const uploadBtn = e.target?.closest?.("#ph-kek-upload-btn");
-            const clearBtn = e.target?.closest?.("#ph-kek-clear");
-            const tabGrid = e.target?.closest?.("#ph-kek-tab-grid");
-            const tabList = e.target?.closest?.("#ph-kek-tab-list");
-            const syncNowBtn = e.target?.closest?.("#ph-kek-sync-now");
-
-            const actionBtn = e.target?.closest?.("#ph-kek-upload button[data-action], #ph-kek-grid button[data-action], #ph-kek-list button[data-action]");
+            const uploadBtn = e.target.closest("#ph-kek-upload-btn");
+            const clearBtn = e.target.closest("#ph-kek-clear");
+            const tabGrid = e.target.closest("#ph-kek-tab-grid");
+            const tabList = e.target.closest("#ph-kek-tab-list");
+            const syncNowBtn = e.target.closest("#ph-kek-sync-now");
+            const actionBtn = e.target.closest("#ph-kek-upload button[data-action]");
 
             if (uploadBtn) {
                 e.preventDefault();
@@ -5496,129 +7912,135 @@
                 return;
             }
 
+            if (tabGrid || tabList) {
+                e.preventDefault();
+                e.stopPropagation();
+                setActiveTab(wrapper, tabGrid ? "grid" : "list");
+                return;
+            }
+
             if (clearBtn) {
-                if (!confirm("Biztos törlöd az ÖSSZES kek.sh képed a szerverről is?")) {
-                    return;
-                }
                 e.preventDefault();
                 e.stopPropagation();
+                if (!confirm("Biztos törlöd az ÖSSZES kek.sh képed a szerverről is?")) return;
+                clearBtn.disabled = true;
+                setStatus(wrapper, "Összes kép törlése a szerverről…");
+                try {
+                    const response = await deleteAllRemotePosts();
+                    if (!response.ok) {
+                        setStatus(wrapper, `Nem sikerült mindent törölni a szerveren (HTTP ${response.status}).`, "error");
+                        return;
+                    }
 
-                setStatus(wrapper, "🗑️ Minden törlése a szerveren...");
-                const r = await deleteAllRemotePosts();
+                    storage.setItem(KEYS.KEK.GALLERY_RESET_TS, String(Date.now()));
+                    storage.removeItem(KEYS.KEK.GALLERY_DELETED);
+                    await clearGallery();
+                    renderGallery(wrapper);
 
-                if (!r.ok) {
-                    setStatus(wrapper, `❌ Nem sikerült mindent törölni a szerveren (HTTP ${r.status}).`);
-                    return;
+                    if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
+                        try {
+                            await storage.flush();
+                            setStatus(wrapper, "Minden kép törölve a szerverről, a galériából és a Gistből.", "success");
+                        } catch (error) {
+                            setStatus(wrapper, `A szerver és a helyi galéria ürítve, de a Gist-szinkron hibázott: ${error?.message || "ismeretlen hiba"}`, "error");
+                        }
+                    } else {
+                        setStatus(wrapper, "Minden kép törölve a szerverről és a galériából.", "success");
+                    }
+                    updateSyncBadge(wrapper);
+                } catch (error) {
+                    console.error("[PH Power Tools] kek.sh gallery clear failed:", error);
+                    setStatus(wrapper, `Törlési hiba: ${error?.message || "ismeretlen hiba"}`, "error");
+                } finally {
+                    clearBtn.disabled = false;
                 }
-
-                storage.setItem(KEYS.KEK.GALLERY_RESET_TS, String(Date.now()));
-                storage.removeItem(KEYS.KEK.GALLERY_DELETED);
-                await clearGallery();
-
-                if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
-                    await storage.flush(); // ✅ gist azonnal ürül
-                }
-
-                renderGallery(wrapper);
-                setStatus(wrapper, "🗑️ Mind törölve (szerver + galéria)");
-                updateSyncBadge();
-                return;
-            }
-
-            if (tabGrid) {
-                e.preventDefault();
-                e.stopPropagation();
-                setActiveTab(wrapper, "grid");
-                return;
-            }
-
-            if (tabList) {
-                e.preventDefault();
-                e.stopPropagation();
-                setActiveTab(wrapper, "list");
                 return;
             }
 
             if (syncNowBtn) {
                 e.preventDefault();
                 e.stopPropagation();
-
-                // Valódi kétirányú kézi sync: előbb pull + merge, utána push.
                 if (ENABLE_GIST_SYNC && typeof storage.syncNow === "function") {
                     syncNowBtn.disabled = true;
-                    setStatus(wrapper, "☁️ Szinkronizálás a Gisttel...");
-
+                    setStatus(wrapper, "Galéria szinkronizálása a Gisttel…");
                     try {
                         await storage.syncNow();
                         applyGalleryResetIfNeeded();
                         renderGallery(wrapper);
-                        setStatus(wrapper, `☁️ Szinkron kész (${loadGallery().length} kép)`);
-                    } catch (err) {
-                        console.error('[PH Power Tools] Manual Gist sync failed:', err);
-                        setStatus(wrapper, `❌ Szinkron hiba: ${err?.message || 'ismeretlen hiba'}`);
+                        setStatus(wrapper, `Szinkron kész (${loadGallery().length} kép).`, "success");
+                    } catch (error) {
+                        console.error("[PH Power Tools] Manual Gist sync failed:", error);
+                        setStatus(wrapper, `Szinkronizálási hiba: ${error?.message || "ismeretlen hiba"}`, "error");
                     } finally {
                         syncNowBtn.disabled = false;
-                        updateSyncBadge();
+                        updateSyncBadge(wrapper);
                     }
                 }
                 return;
             }
 
-            if (actionBtn) {
-                e.preventDefault();
-                e.stopPropagation();
+            if (!actionBtn) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const action = actionBtn.dataset.action;
+            const url = actionBtn.dataset.url;
+            if (!url) return;
+            const editor = findEditorNear(wrapper);
 
-                const action = actionBtn.dataset.action;
-                const url = actionBtn.dataset.url;
-                if (!url) return;
+            if (action === "insert-image") {
+                const ok = insertHtmlIntoEditor(editor, `<img src="${escapeHtml(url)}" alt="">`);
+                setStatus(wrapper, ok ? "Kép beszúrva a hozzászólásba." : "Nem található a szerkesztő.", ok ? "success" : "error");
+                return;
+            }
 
-                const editor = findEditorNear(wrapper);
+            if (action === "insert-link") {
+                const ok = insertHtmlIntoEditor(editor, buildLinkHtml(url));
+                setStatus(wrapper, ok ? "Képlink beszúrva a hozzászólásba." : "Nem található a szerkesztő.", ok ? "success" : "error");
+                return;
+            }
 
-                if (action === "insert-image") {
-                    const ok = insertHtmlIntoEditor(editor, `<img src="${escapeHtml(url)}" alt="">`);
-                    setStatus(wrapper, ok ? "✅ Kép beszúrva" : "❌ Nem találom az editort");
-                    return;
-                }
+            if (action === "delete") {
+                const item = loadGallery().find(x => x.url === url);
+                const hasRemoteId = !!item?.id;
+                const question = hasRemoteId
+                    ? "Biztos törlöd ezt a képet a kek.sh szerverről is?"
+                    : "Ehhez a képhez nincs szerverazonosító. Csak a helyi galériából törlöd. Folytatod?";
+                if (!confirm(question)) return;
 
-                if (action === "insert-link") {
-                    const ok = insertHtmlIntoEditor(editor, buildLinkHtml(url));
-                    setStatus(wrapper, ok ? "✅ Link beszúrva" : "❌ Nem találom az editort");
-                    return;
-                }
-
-                if (action === "delete") {
-                    if (!confirm("Biztos törlöd ezt a képet a szerverről is?")) {
-                        return;
-                    }
-                    const items = loadGallery();
-                    const item = items.find(x => x.url === url);
-
-                    if (item?.id) {
-                        setStatus(wrapper, "🗑️ Törlés a szerveren...");
-                        const r = await deleteRemotePost(item.id);
-
-                        if (!r.ok) {
-                            setStatus(wrapper, `❌ Nem sikerült törölni a szerveren (HTTP ${r.status}).`);
-                            return; // ✅ ne törölj lokálból, hogy ne vesszen el a nyoma
+                actionBtn.disabled = true;
+                try {
+                    if (hasRemoteId) {
+                        setStatus(wrapper, "Kép törlése a szerverről…");
+                        const response = await deleteRemotePost(item.id);
+                        if (!response.ok) {
+                            setStatus(wrapper, `Nem sikerült törölni a képet a szerverről (HTTP ${response.status}).`, "error");
+                            return;
                         }
-                    } else {
-                        setStatus(wrapper, "❌ Nincs id (régi elem) – csak lokál törlés.");
                     }
 
                     const deleted = loadDeletedMap();
                     deleted[url] = Date.now();
                     saveDeletedMap(deleted);
-
                     await removeFromGallery(url);
+                    renderGallery(wrapper);
 
                     if (ENABLE_GIST_SYNC && typeof storage.flush === "function") {
-                        await storage.flush();
+                        try {
+                            await storage.flush();
+                        } catch (error) {
+                            setStatus(wrapper, `A kép törölve, de a Gist-szinkron hibázott: ${error?.message || "ismeretlen hiba"}`, "error");
+                            return;
+                        }
                     }
-
-                    renderGallery(wrapper);
-                    setStatus(wrapper, "🗑️ Törölve (szerver + galéria)");
-                    updateSyncBadge();
-                    return;
+                    setStatus(wrapper, hasRemoteId
+                        ? "Kép törölve a szerverről és a galériából."
+                        : "A régi kép törölve a helyi galériából.", "success");
+                    updateSyncBadge(wrapper);
+                } catch (error) {
+                    console.error("[PH Power Tools] kek.sh image delete failed:", error);
+                    setStatus(wrapper, `Törlési hiba: ${error?.message || "ismeretlen hiba"}`, "error");
+                } finally {
+                    actionBtn.disabled = false;
                 }
             }
         }, true);
@@ -5882,23 +8304,11 @@
 
     function stickySidebar() {
         injectStyleOnce('ph-sticky-sidebar-style', `
-            #right.slotSingleColumn {
-                padding-left: 4px;
-                margin-left: -4px;
-                overflow-y: auto;
-                overscroll-behavior-y: contain;
-                overscroll-behavior-x: auto;
-            }
-            #right.slotSingleColumn::-webkit-scrollbar {
-                width: 4px;
-            }
-            #right.slotSingleColumn::-webkit-scrollbar-thumb {
-                background-color: #ccc;
-                border-radius: 10px;
-            }
+            #right.slotSingleColumn::-webkit-scrollbar,
             #left::-webkit-scrollbar {
                 width: 4px;
             }
+            #right.slotSingleColumn::-webkit-scrollbar-thumb,
             #left::-webkit-scrollbar-thumb {
                 background-color: #ccc;
                 border-radius: 10px;
@@ -5917,7 +8327,7 @@
                 box-shadow: inset 5px 0px 0 0 #e0e0e0;
             }
             body[data-theme="dark"] .active-topic-sidebar a {
-                color: inherit !important;
+                color: var(--ph-ui-fg) !important;
             }
             .active-topic-header {
                 background-color: #e9e0c9 !important;
@@ -5932,39 +8342,67 @@
                 box-shadow: inset 5px 0px 0 0 #e0e0e0;
             }
             body[data-theme="dark"] .active-topic-header a {
-                color: inherit !important;
+                color: var(--ph-ui-fg) !important;
             }
-            #right.slotSingleColumn,
-            #left {
-                position: sticky;
-                top: 85px;
-                max-height: calc(100vh - 55px);
-                overflow-y: auto;
-                overscroll-behavior-y: contain;
-                overscroll-behavior-x: auto;
-                transition: top 0.3s ease, max-height 0.3s ease;
-            }
-            html.scroll-down #right.slotSingleColumn,
-            html.scroll-down #left {
-                top: 45px;
-                max-height: calc(100vh - 10px);
-            }
-            @media (max-width: 991px) {
+            /* Asztalon megmarad a sticky oldalsav es a kulon gorgetes. */
+            @media (min-width: 992px) {
                 #right.slotSingleColumn {
-                    top: 53px;
+                    padding-left: 4px;
+                    margin-left: -4px;
                 }
-                html.scroll-down #right.slotSingleColumn{
-                    top: 5px;
+                #right.slotSingleColumn,
+                #left {
+                    position: sticky;
+                    top: 85px;
+                    max-height: calc(100vh - 55px);
+                    overflow-y: auto;
+                    overscroll-behavior-y: contain;
+                    overscroll-behavior-x: auto;
+                    transition: top 0.3s ease, max-height 0.3s ease;
+                }
+                html.scroll-down #right.slotSingleColumn,
+                html.scroll-down #left {
+                    top: 45px;
                     max-height: calc(100vh - 10px);
                 }
             }
-            @media (max-width: 768px) {
+            /* Mobilon es tableten a dokumentum az egyetlen fuggoleges scroller.
+               A webhely sajat magassagi/overflow beallitasait is felulirjuk. */
+            @media (max-width: 991.98px) {
+                #right.slotSingleColumn,
+                #left {
+                    position: static !important;
+                    top: auto !important;
+                    bottom: auto !important;
+                    height: auto !important;
+                    max-height: none !important;
+                    overflow: visible !important;
+                    overscroll-behavior: auto !important;
+                    transition: none !important;
+                }
                 #right.slotSingleColumn {
-                    overflow-y: visible;
-                    max-height: none;
+                    padding-left: 0 !important;
+                    margin-left: 0 !important;
                 }
             }
         `);
+
+        const desktopSidebarQuery = window.matchMedia('(min-width: 992px)');
+
+        // Szelesbol mobilnezetbe valtaskor a desktop sidebar korabbi
+        // belso scroll pozicioja sem tarthatja vissza a tartalmat.
+        function resetMobileSidebarScroll() {
+            if (desktopSidebarQuery.matches) return;
+            for (const sidebar of document.querySelectorAll('#right.slotSingleColumn, #left')) {
+                if (sidebar.scrollTop !== 0) sidebar.scrollTop = 0;
+            }
+        }
+        resetMobileSidebarScroll();
+        if (desktopSidebarQuery.addEventListener) {
+            desktopSidebarQuery.addEventListener('change', resetMobileSidebarScroll);
+        } else if (desktopSidebarQuery.addListener) {
+            desktopSidebarQuery.addListener(resetMobileSidebarScroll);
+        }
 
         const currentMatch = window.location.pathname.match(/\/tema\/[^/]+\//);
         if (!currentMatch) return;
@@ -5979,7 +8417,7 @@
                 if (li) {
                     li.classList.add('active-topic-sidebar');
                     const sidebar = document.querySelector('#right.slotSingleColumn');
-                    if (sidebar) {
+                    if (sidebar && desktopSidebarQuery.matches) {
                         const liRect = li.getBoundingClientRect();
                         const sidebarRect = sidebar.getBoundingClientRect();
                         const scrollTarget = sidebar.scrollTop
@@ -6397,7 +8835,7 @@
                 justify-content: center;
                 cursor: grab;
                 flex-shrink: 0;
-                color: rgba(255,255,255,0.65);
+                color: rgba(255,255,255,0.84);
                 font-size: 10px;
                 transition: background 0.2s, color 0.2s;
                 touch-action: none;
@@ -6454,7 +8892,7 @@
                 font-size: 10px;
                 line-height: 1.15;
                 font-weight: 500;
-                color: rgba(255,255,255,0.55);
+                color: rgba(255,255,255,0.86);
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -6468,7 +8906,7 @@
             #ph-scroll-counter {
                 font-size: 10px;
                 font-weight: 400;
-                color: rgba(255,255,255,0.4);
+                color: rgba(255,255,255,0.8);
                 letter-spacing: 0.3px;
                 text-transform: uppercase;
             }
@@ -6495,7 +8933,7 @@
                 flex: 1;
                 background: none;
                 border: none;
-                color: rgba(255,255,255,0.8);
+                color: rgba(255,255,255,0.9);
                 font-size: 15px;
                 padding: 8px 0;
                 cursor: pointer;

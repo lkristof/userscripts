@@ -6,130 +6,160 @@
 
 ### ⚡ Előnyök
 
-- 📦 egyetlen telepítés
-- 🔄 frissítéskor csak **egy** scriptet kell karbantartani
-- ⚙️ külön menü, funkciónként ki-/bekapcsolható
-- 🧠 egységes működés
+- 📦 egyetlen telepítés, egyetlen frissítendő script
+- ⚙️ külön menü, funkciónként ki-/bekapcsolható modulokkal
+- 🎨 testreszabható színezés világos és sötét témához
+- 💾 JSON-alapú beállításmentés és visszaállítás
+- 🔄 opcionális GitHub Gist-szinkronizáció több eszköz között
 
 ### 🎯 Fókusz
 
-- jobb olvashatóság
-- hasznos vizuális kiemelések
-- kényelmesebb fórumhasználat
+- jobb olvashatóság és vizuális kiemelések
+- kényelmesebb hozzászólás- és témakezelés
+- gyorsabb navigáció és egyszerűbb képfeltöltés
 
 > 👉 **Telepítés:**  
-https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
+> https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
+
+A script a következő domaineken töltődik be: **prohardver.hu**, **mobilarena.hu**, **logout.hu**, **fototrend.hu** és **hardverapro.hu**. Az egyes modulok csak a megfelelő oldalakon működnek, például fórumtémában (`/tema/`), privát üzenetnél (`/privat/`), nyereményjátéknál (`/nyeremenyjatek/`) vagy témalistán.
 
 ---
 
 ### 🧰 Szükséges eszköz
 
-A scriptek futtatásához kell egy userscript kezelő:
+A futtatáshoz userscript-kezelő szükséges, például:
 
 - **Tampermonkey** (Chrome / Edge / Firefox / Safari / Opera)
-- **Violentmonkey** (Firefox / Edge)
-- **Greasemonkey** (Firefox)
+- **Violentmonkey** (Firefox / Chromium-alapú böngészők)
+- **Userscripts** (iOS)
+
+A script többek között a `GM_xmlhttpRequest` API-t is használja, ezért az ezt nem biztosító userscript-kezelőkben (például egyes Greasemonkey-verziókban) a feltöltés vagy a szinkronizáció nem feltétlenül működik teljes körűen.
 
 ---
 
 ### 🚀 Telepítés
 
-1. Telepíts egy userscript kezelőt
-2. Kattints az adott script **Install** linkjére
-3. A megnyíló oldalon a bővítmény felajánlja a telepítést (vagy imádkozz 😇)
+1. Telepíts egy támogatott userscript-kezelőt.
+2. Nyisd meg a fenti **Telepítés** linket.
+3. Hagyd jóvá a script telepítését a bővítményben.
 
 ---
 
 ### 📦 PH Power Tools összetevői
 
 > [!NOTE]
-> A **PH Power Tools** egyesíti az alábbi funkciókat, egy beállítási panellel.
+> A modulok a fejlécben lévő **PH Power Tools** menüből kapcsolhatók. A kapcsolók módosítása **Mentés** után, az oldal újratöltésével lép életbe. A széles, az OFF és a Thread nézetnek a témán belül külön állapotkapcsolója is van.
 
-| Funkció                             | Rövid leírás                                                                                                                                                                  |
-|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Hozzászólás színezés**            | saját, rád válaszoló és `#akció` / `#akcio` jelölésű hozzászólások + avatar fókusz + hozzászólás-lánc kiemelés                                                                |
-| **Link átirányítás**                | PH! lapcsalád linkjeit az aktuális oldalra irányítja                                                                                                                          |
-| **Üzenet kiemelés**                 | az URL-ben lévő `#msgXXXX` hozzászóláshoz görget és kiemeli azt; törölt hozzászólás esetén a legközelebbit; dupla katt a fejlécen kijelöli a hozzászólást                     |
-| **OFF hozzászólások elrejtése**     | `[OFF]` jelölésű hozzászólások elrejtése és visszakapcsolása gombnyomásra                                                                                                     |
-| **Széles nézet**                    | szélesebb fórumelrendezés; a középső oszlop jobb széle húzással méretezhető, dupla kattintással automatikus méretre állítható, nagy szélességnél a bal oldalsáv elrejthető    |
-| **Thread nézet**                    | hozzászólás-láncok vizuális összekötése és strukturáltabb megjelenítése                                                                                                       |
-| **Billentyűzetes navigáció**        | gyors navigáció a fórumon billentyűzet segítségével                                                                                                                           |
-| **Felhasználók elrejtése**          | megadott felhasználók hozzászólásait elrejti                                                                                                                                  |
-| **Új hozzászólás jelölése**         | témánként megjegyzi a legutóbb látott hozzászólásazonosítót, és az újabb hozzászólások fejlécét megjelöli                                                                     |
-| **Extra smiley-k**                  | az alap smiley-k alá egy extra adag smiley                                                                                                                                    |
-| **Képfeltöltés kek.sh-ra**          | képfeltöltés kek.sh-ra galéria 2 füllel: rács, lista nézet                                                                                                                    |
-| **Nyereményjáték válasz ellenőrző** | a `/nyeremenyjatek` oldalon a játék lezárása után végigellenőrzi a megadott válaszokat, jelzi a helyes/hibás vagy hiányzó választ, és kiemeli a saját nevet a nyerteslistában |
-| **Fix oldalsávok**                  | a bal és jobb oldalsáv görgetés közben a képernyőn marad; az aktuális témát az oldalsávban és a mobil/tablet fejléc listájában is kiemeli                                     |
-| **Mobil navigációs panel**          | összecsukható és húzható lebegő panel az előző/következő hozzászóláshoz és oldalhoz; bal/jobb oldalra áthúzható és megjegyzi a pozícióját                                     |
-| **Gist szinkronizáció**             | GitHub Gist alapú szinkronizáció, hogy a script beállításai és mentett adatai több eszköz között is szinkronban maradjanak                                                    |
+| Funkció                             | Rövid leírás                                                                                                                                                            |
+|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Hozzászólások színezése**         | Saját, neked válaszoló és `#akció` / `#akcio` jelölésű hozzászólások, avatarra kattintva szerzőfókusz, valamint hozzászóláslánc-kiemelés.                               |
+| **Link átirányítás**                | A támogatott PH! lapcsaládon belüli hivatkozások domainjét az aktuális oldalhoz igazítja; például a cikkek és hírek kivételek.                                          |
+| **Üzenet kiemelés**                 | A `#msg12345` hivatkozáshoz görget, kiemeli a hozzászólást (szükség esetén a legközelebbit); a hozzászólás fejlécén dupla kattintással a `#msg` hivatkozás beállítható. |
+| **OFF hozzászólások elrejtése**     | Az `[OFF]` hozzászólások elrejtése/megjelenítése a témaoldali gombbal.                                                                                                  |
+| **Széles nézet**                    | Szélesebb fórumelrendezés, a tartalom jobb szélének húzásával állítható oszlopszélesség és dupla kattintással visszaállítható automatikus méret.                        |
+| **Thread nézet**                    | Reddit-szerű, válaszkapcsolat alapján rendezett hozzászólásfa; vizuális ágvonalak, egyedi ág-összecsukás és **Összecsuk mind / Kibont mind** menü.                      |
+| **Billentyűzetes navigáció**        | Nyilakkal lépkedés, válaszelőzmény követése `R`-rel, visszalépés `Shift+R`-rel. A billentyűk részletei lent találhatók.                                                 |
+| **Felhasználók elrejtése**          | Szerzők hozzászólásainak elrejtése, ideiglenes felfedése, valamint a rejtett felhasználók listájának szerkesztése.                                                      |
+| **Új hozzászólás jelölése**         | Témánként tárolja a legutóbb látott hozzászólásazonosítót, jelöli az új hozzászólásokat, és gombot ad az **első olvasatlanhoz ugráshoz**.                               |
+| **Extra smiley-k**                  | Kiegészítő smiley-k és emojik a hozzászólás- és privátüzenet-szerkesztőben.                                                                                             |
+| **kek.sh képfeltöltő**              | API-kulccsal képfeltöltés a szerkesztőből, kép/link beszúrása, galéria **rács- és listanézetben**, törlés és opcionális Gist-szinkron.                                  |
+| **Nyereményjáték válasz ellenőrző** | A `/nyeremenyjatek/` oldalon a játék lezárása után ellenőrzi a válaszokat, jelöli az eredményt és kiemeli a felhasználót a nyerteslistán.                               |
+| **Fix oldalsávok**                  | Görgetéskor látható oldalsávok; az aktuális téma kiemelése az oldalsáv és a mobil/tablet fejléc témalistájában.                                                         |
+| **Mobil navigációs panel**          | Húzható, összecsukható lebegő panel a hozzászólások és oldalak közti lépkedéshez; megjegyzi az oldalt és pozíciót.                                                      |
+| **Témalisták rendezése**            | A **„Kedvenc fórumtémáim”** és **„Itt szóltam hozzá”** listát az új hozzászólások száma szerint, csökkenő sorrendbe rendezi.                                            |
+
+A menü további, nem modulkapcsolóhoz kötött funkciói a **színek testreszabása** (🎨), a **beállítások exportálása/importálása** és a **kulcsok / Gist-szinkron kezelése** (⚙️).
+
+---
+
+### ⌨️ Billentyűzetes navigáció
+
+| Billentyű | Művelet |
+|---|---|
+| `↑` / `↓` | Előző / következő látható hozzászólás a megjelenített sorrendben |
+| `←` / `→` | Első / utolsó látható hozzászólás |
+| `Shift+↑` / `Shift+↓` | Előző / következő hozzászólás azonosító szerinti sorrendben |
+| `R` | Ugrás arra a hozzászólásra, amelyre az aktuális hozzászólás válaszolt |
+| `Shift+R` | Visszalépés az `R`-rel bejárt válaszelőzményben |
+
+A billentyűzetes navigáció szövegbevitel közben és nyitott képgalériánál nem lép működésbe. Az `R`-rel bejárt útvonal a böngésző munkamenetében tárolódik, nem kerül a Gistbe.
+
+---
+
+### 💾 Beállítások exportálása és importálása
+
+A PH Power Tools menü **fájl/export ikonjára** kattintva egy `.json` fájlba mentheted a beállításokat, vagy korábbi mentést állíthatsz vissza.
+
+- **Alapértelmezett export:** modulkapcsolók, egyéni színpaletták, rejtett felhasználók, OFF / széles / Thread nézetállapot, széles nézet beállított szélessége és a mobilnavigáció helyi pozíciója.
+- **„Olvasottsági adatok és kek.sh képgaléria mentése is”**: külön bekapcsolható. Tartalmazza a témánkénti olvasottsági azonosítókat, a galériát és a törlés/visszaállítás szinkronizációs adatait is.
+- **„API-kulcsok és Gist-kapcsolati adatok mentése is”**: külön, alapból kikapcsolt opció. A GitHub-token, Gist ID, fájlnév és kek.sh API-kulcs **titkosítatlanul** kerül a JSON-ba.
+
+Az importálás csak a PH Power Tools által támogatott mentési formátumot fogadja el (legfeljebb **10 MB**), ellenőrzi az adatokat, és a felülírás előtt megerősítést kér. Sikeres visszaállítás után az oldal újratöltődik.
+
+> [!WARNING]
+> A galéria adatai képkezeléshez szükséges tokeneket is tartalmazhatnak, **az API-kulcsokat tartalmazó export pedig nincs titkosítva**. Ezeket a fájlokat ne oszd meg nyilvánosan. Aktív Gist-szinkron mellett az importált olvasottsági és galériaadatok összeolvadhatnak a Gistben lévő adatokkal.
 
 ---
 
 ### 🔄 Gist szinkronizáció beállítása
+
 <details>
 
 <summary>Kattints ide a kibontáshoz</summary>
 
-A **Gist szinkronizáció** lehetővé teszi, hogy a **beállításaid és mentett adataid több böngésző és eszköz között automatikusan szinkronban maradjanak**.
+A GitHub Gist-szinkron **opcionális**, és a következőket tartja szinkronban a támogatott böngészők/eszközök között:
 
-#### Mire jó?
+- modulbeállítások és egyéni színpaletták
+- rejtett felhasználók listája
+- témánkénti utoljára látott hozzászólásazonosítók
+- kek.sh galériaadatai, törlési jelölések és galériavisszaállítási állapotok
 
-- több gépen ugyanazok a beállítások
-- böngésző újratelepítés után azonnali visszaállítás
-- biztonsági mentés a konfigurációról
+**Nem szinkronizálódnak** az egyedi OFF / széles / Thread nézetállapotok, a széles nézet kézzel beállított szélessége, a mobilnavigáció pozíciója, a billentyűzetes válaszelőzmények, valamint a GitHub- és kek.sh-hozzáférési kulcsok. Ezeket szükség esetén a fenti **JSON-exporttal** lehet menteni (a kulcsok külön opcióval).
 
----
+#### 🪪 1. GitHub-token létrehozása
 
-#### 🪪 1. GitHub token létrehozása
-
-1. Regisztrálj vagy jelentkezz be a GitHubra
+1. Jelentkezz be a GitHubba.
 2. Nyisd meg: https://github.com/settings/personal-access-tokens
-3. **Generate new token** → *Fine-grained token*
-4. Adj neki nevet (pl. `ph-power-tools-gist`)
-5. Állítsd be a lejáratot (*Expiration*)
-6. **Permissions → Gists → Read and write**
-7. Kattints: **Generate token**
+3. Válaszd a **Generate new token → Fine-grained token** lehetőséget.
+4. Adj neki nevet (például `ph-power-tools-gist`), és állíts be lejáratot.
+5. A **Permissions → Account permissions → Gists** jogosultságnál állítsd be a **Read and write** hozzáférést.
+6. Hozd létre a tokent, majd másold ki és tárold biztonságos helyen.
 
 ⚠️ **Fontos:**  
 A létrejövő `github_pat_...` token **csak egyszer látható**, ezért **másold ki és tedd el biztonságos helyre**.
 
----
+A Gist frissítéséhez a GitHub API **Gists: write** jogosultságot igényel ([GitHub REST API dokumentáció](https://docs.github.com/en/rest/gists/gists)).
 
 #### 📄 2. Gist létrehozása
 
 1. Nyisd meg: https://gist.github.com
-2. Hozz létre egy új Gist-et:
-    - fájlnév: `ph_forum_settings.json`
-    - tartalom:
-      ```json
-      {}
-      ```
-3. Állítsd **Secret Gist**-re
-4. Kattints: **Create secret gist**
-5. A megnyíló oldal URL-jéből másold ki a **Gist ID-t**  
-   (a link végén található hosszú azonosító)
+2. Hozz létre egy **Secret Gist**-et az alábbi fájllal:
+   - fájlnév: `ph_forum_settings.json`
+   - tartalom:
+     ```json
+     {}
+     ```
+3. A létrehozott Gist URL-jéből másold ki a **Gist ID**-t. (a link végén található hosszú azonosító)
 
----
+**Fontos:** a *Secret Gist* nem valóban privát; bár nem jelenik meg a nyilvános listákban, a hivatkozás birtokában bárki elolvashatja a tartalmát ([GitHub tájékoztató](https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists)). A galéria metaadatai érzékeny törlési tokeneket is tartalmazhatnak.
 
 #### ⚙️ 3. Beállítás a scriptben
 
-1. Nyisd meg a PH Power Tools menüt
-2. Kattints a **⚙️ fogaskerék ikonra**
-3. Töltsd ki:
-    - **GitHub token**
-    - **Gist ID**
-    - **Gist fájlnév** – alapértelmezés: `ph_forum_settings.json`
-4. Mentsd el a beállításokat
+1. Nyisd meg a PH Power Tools menüt.
+2. Kattints a **⚙️ Kulcsok és szinkron** ikonra.
+3. Add meg a **GitHub Gist Tokent**, a **Gist ID-t** és a **Gist fájlnevet** (alapértelmezés: `ph_forum_settings.json`).
+4. Kattints a **Mentés** gombra; az oldal újratöltődik.
 
-Ezután a script automatikusan szinkronizálja az adatokat.
+Ezután a script a Gistből olvas, a módosított, szinkronizált adatokat pedig automatikusan feltölti. A kek.sh galériában külön **Szinkron** gomb is rendelkezésre áll.
 
----
+> [!WARNING]
+> **Meglévő helyi adatok esetén előbb készíts JSON-exportot!** Első kapcsolódáskor a Gist a még nem módosított szinkronizált kulcsoknál elsőbbséget élvez: egy **üres Gist** a helyi beállításokat alaphelyzetbe állíthatja, a rejtett felhasználók, olvasottsági adatok és galéria helyi listája pedig eltűnhet. A csatlakozás után importáld vissza az exportált mentést, hogy a megőrizni kívánt adatokat a script a Gistbe is feltölthesse.
 
-#### 🔐 Biztonság
+#### 🔐 Adatvédelem és korlátok
 
-- a token **csak a saját böngésződben tárolódik**
-- a script **kizárólag a megadott Gist-et éri el**
-- semmilyen adat nem kerül harmadik félhez
+- A GitHub-token és a kek.sh API-kulcs a userscript-kezelő tárhelyén (vagy szükség esetén helyi böngészőtárhelyben) tárolódik. Alapesetben **nem kerülnek bele a Gistbe**.
+- A szinkronizált beállítások és galéria-metaadatok a **GitHub szolgáltatásához kerülnek**; a feltöltött képek a **kek.sh szolgáltatásához**. A Gist tartalma nincs külön titkosítva.
+- A Gist **nem teljes körű biztonsági mentés**: a helyi nézetállapotok és a kapcsolati adatok nem mind részei. Teljesebb mentéshez használd a JSON-exportot a szükséges opciókkal.
 
 </details>
 
@@ -152,7 +182,7 @@ Ezután a script automatikusan szinkronizálja az adatokat.
 
 ### felhasználó hozzászólásainak kiemelése (arcképre kattintva)
 [![colorize-avatar-focus-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-light.jpg)
-[![colorizeavatar-focus-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark.jpg)
+[![colorize-avatar-focus-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark.jpg)
 
 ### hozzászólás lánc (🔗 Lánc-ra kattintva)
 
@@ -221,8 +251,10 @@ Ezután a script automatikusan szinkronizálja az adatokat.
 | **qBittorrent integráció**           | A torrentek közvetlenül elküldhetők a qBittorrent WebUI-nak a torrentlistából, a lenyíló panelből, a részletező oldalról és poszternézetből. A WebUI címe az infosáv **[qB URL]** linkjén állítható be. |
 | **Lista / poszter nézet**            | A torrentlista egy kattintással klasszikus lista- vagy kártyás poszternézetre váltható; a választott nézetet a script megjegyzi.                                                                        |
 | **Poszterkártyák**                   | A kártyákon megjelenhet a borító, kategória, minőség/formátum, IMDb értékelés, méret, seed/leech adatok és feltöltési idő, valamint letöltés-, könyvjelző-, qBittorrent- és „Láttam már” műveletek.     |
+| **Poszteres részletező ablak**       | Poszternézetben a borítóra vagy a címre kattintva a torrent natív lenyíló részletei felugró ablakban nyithatók meg, ahonnan a teljes részletező oldal új lapon is elérhető.                             |
 | **Népszerű torrentek kiemelése**     | A pozitív visszajelzések alapján kiemeli a torrenteket. A szükséges `+` jelek minimuma a beállításokban módosítható; alapértelmezés: **3**.                                                             |
 | **„Láttam már” jelölés**             | Filmek jelölhetők a listában dupla kattintással, a részletező oldalon vagy poszternézetben. A jelölt filmek elhalványulnak, a mentett lista pedig külön fülön kezelhető.                                |
+| **IMDb-alapú keresés**               | A torrent részletező oldalán a „Más verziók” mellett megjelenő **Keresés** hivatkozás az IMDb-azonosítóra keres rá az nCore-on, ha az azonosító kinyerhető.                                             |
 | **Látott filmek Gist-szinkronja**    | A látott filmek IMDb-azonosítóval, címmel és időbélyeggel GitHub Gistbe szinkronizálhatók több böngésző vagy eszköz között.                                                                             |
 | **qBittorrent letöltési előzmények** | A qBittorrentnek elküldött torrenteket a script helyben nyilvántartja, külön **Letöltések** fülön megjeleníti, és Gist használatakor szinkronizálja is.                                                 |
 | **Képek beágyazása**                 | A torrentlista lenyíló leírásában a csatolt és hivatkozott képeket közvetlenül megjeleníti, a támogatott FancyBox működését megtartva.                                                                  |
@@ -240,6 +272,7 @@ Az infosávban megjelenő **[Beállítások]** menü négy lapra oszlik:
 - **Szinkronizáció** – GitHub Gist token, Gist ID, fájlnév és kézi **Szinkronizálás most** művelet
 
 A kapcsolható modulok módosításai mentés után, az oldal újratöltésével lépnek életbe.
+A **lista / poszter nézetváltó** és a részletező oldali **IMDb-alapú keresés** külön modulkapcsoló nélkül működik. A választott torrentnézetet a script megjegyzi.
 
 ### 🔗 qBittorrent beállítása
 
@@ -266,12 +299,18 @@ A **Beállítások → Szinkronizáció** fülön add meg:
 - **Gist ID**
 - **Gist fájlnév** – alapértelmezés: `ncore_seen.json`
 
-Ha mindhárom adat ki van töltve, a szinkronizáció automatikusan aktív. A **Szinkronizálás most** gombbal kézzel is indítható.
+A **GitHub-token** és a **Gist ID** megadása szükséges; üres fájlnév esetén a script automatikusan a `ncore_seen.json` értéket használja. A kapcsolatot a **Mentés és újratöltés**, illetve a **Szinkronizálás most** gombbal is elmentheted.
+
+Induláskor a script csak akkor szinkronizál automatikusan, ha a **„Láttam már”** vagy a **qBittorrent integráció** modul közül legalább az egyik aktív. Ha mindkettőt kikapcsolod, a **Szinkronizálás most** gomb továbbra is használható. A bekapcsolt modulokkal végzett új „Láttam már” jelölések és sikeres qBittorrent-küldések automatikus szinkront is indítanak, rövid késleltetéssel.
 
 A Gistben a script két adathalmazt kezel:
 
 - `movies` – látott filmek IMDb-azonosítóval, címmel, állapottal és időbélyeggel
 - `downloads` – qBittorrentnek elküldött torrentek azonosítóval, címmel és időbélyeggel
+
+A szinkronizáció az azonosítókhoz tartozó legfrissebb időbélyegű állapotokat egyesíti; a **„Láttam már” jelölés visszavonása** is szinkronizálható. A Gist a két adatgyűjteményen és a formátumverzión kívül **nem tárolja a qBittorrent URL-t vagy a modulbeállításokat**.
+
+**Adatvédelem:** a Gistben tárolt film- és letöltési előzményeket a GitHub kezeli. A GitHub-token a helyi userscript-tárolóban (GM API hiányában a böngésző helyi tárolójában) marad, nem kerül bele a Gist tartalmába. A *Secret Gist* nem valóban privát: a link ismeretében a tartalom megtekinthető. A PH Power Tools és az nCore Tools számára **külön Gist-fájlt** használj, mert eltérő JSON-formátumot írnak.
 
 </details>
 
