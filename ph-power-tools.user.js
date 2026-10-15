@@ -4332,11 +4332,9 @@
             /* Az összes művelet a Thread nézet osztott gombjának menüjében van. */
             .ph-tv-control {
                 position: relative;
-                z-index: 1000;
                 display: inline-flex;
                 align-items: stretch;
                 vertical-align: middle;
-                isolation: isolate;
             }
             .ph-tv-control > .ph-tv-toggle {
                 margin-left: 0 !important;
@@ -4399,7 +4397,6 @@
                 margin-top: 2px;
             }
             @media (max-width: 640px) {
-                .ph-tv-control { margin-left: 3px; }
                 ul.ph-tv-active > li.ph-thread > .ph-tv-summary { min-height: 34px; padding: 6px 7px; }
             }
             @media (prefers-reduced-motion: reduce) {
@@ -4779,12 +4776,6 @@
                 color: var(--ph-ui-accent-ink) !important;
                 outline-offset: 2px;
             }
-            ul.ph-tv-active > li.ph-thread .message-head-btns .dropdown-menu {
-                z-index: 10;
-                min-width: min(180px, 100cqw) !important;
-                max-width: min(260px, 100cqw) !important;
-                white-space: normal;
-            }
             ul.ph-tv-active > li.ph-thread > .message > .message-body {
                 box-sizing: border-box;
                 width: 100%;
@@ -4825,57 +4816,6 @@
             ul.ph-tv-active > li.ph-thread .message-body :is(pre, table) {
                 max-width: 100%;
                 overflow-x: auto;
-            }
-            /* A kártya tényleges szélességéhez igazodik, nem a teljes
-               képernyőhöz. Így a mélyen behúzott válaszoknál is működik. */
-            @container ph-tv-card (max-width: 620px) {
-                ul.ph-tv-active > li.ph-thread > .message > .message-head {
-                    gap: 2px 7px !important;
-                    padding: 6px 8px 5px !important;
-                }
-                ul.ph-tv-active > li.ph-thread .message-head > .message-head-user {
-                    gap: 6px !important;
-                }
-                ul.ph-tv-active > li.ph-thread .message-head-user .user-face {
-                    flex-basis: 31px !important;
-                    width: 31px !important;
-                    min-width: 31px !important;
-                    max-width: 31px !important;
-                    height: 31px !important;
-                    min-height: 31px !important;
-                    max-height: 31px !important;
-                }
-                ul.ph-tv-active > li.ph-thread .message-head > .message-head-infos {
-                    font-size: 11px;
-                    line-height: 1.2 !important;
-                }
-                ul.ph-tv-active > li.ph-thread .message-head > .message-head-btns {
-                    padding-top: 2px !important;
-                }
-                ul.ph-tv-active > li.ph-thread .message-head-btns :is(a.message-btn, button.message-btn),
-                ul.ph-tv-active > li.ph-thread .message-head-btns > :is(a, button) {
-                    min-height: 24px !important;
-                    padding: 2px 5px !important;
-                    font-size: 11.5px;
-                }
-                ul.ph-tv-active > li.ph-thread .message-head-btns .dropdown-menu {
-                    left: 0 !important;
-                    right: auto !important;
-                }
-            }
-            /* Nagyon mély válaszág / keskeny oszlop: jobb, ha az azonosító
-               külön, jobbra igazított sorba kerül, mintha a név olvashatatlanul
-               keskenyre szorulna. Az ID/dátum itt is egymás alatt marad. */
-            @container ph-tv-card (max-width: 210px) {
-                ul.ph-tv-active > li.ph-thread > .message > .message-head {
-                    grid-template-columns: minmax(0, 1fr) !important;
-                    grid-template-areas: 'author' 'info' 'actions' !important;
-                    row-gap: 2px !important;
-                }
-                ul.ph-tv-active > li.ph-thread .message-head > .message-head-infos {
-                    width: 100% !important;
-                    justify-self: stretch !important;
-                }
             }
         `);
 
@@ -5650,7 +5590,7 @@
 
             document.addEventListener('click', event => {
                 if (!event.target.closest('.ph-tv-control')) closeMenus();
-            });
+            }, true);
             document.addEventListener('keydown', event => {
                 if (event.key === 'Escape') closeMenus();
             });
