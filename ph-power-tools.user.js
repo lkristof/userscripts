@@ -3467,6 +3467,13 @@
                 background-color: var(--ph-pt-hash-highlight) !important;
                 transition: background-color 0.2s ease;
             }
+            /* A rejtett szerzok osszecsukott uzeneteinel a kijelolt fejlec
+               nem latszik: ilyenkor a lathato Rejtett savot is kiemeljuk.
+               A CSS a fejlec allapotat koveti, uj sav beszurasakor is. */
+            li[data-id]:has(> :is(.message, .message-off) > .message-head.hash-highlight) > .hidden-bar {
+                background: var(--ph-pt-hash-highlight) !important;
+                color: var(--ph-ui-fg) !important;
+            }
             html {
                 scroll-behavior: smooth;
             }
