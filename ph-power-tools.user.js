@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.4.0
+// @version      2.4.1
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -3584,15 +3584,24 @@
         /**********************
          * INIT
          **********************/
+        // Az első #msg-hez görgetést csak az inicializáláskor ütemezzük.
+        // Korábban a body minden DOM-módosítása (pl. a navigációs panel
+        // frissítése) újabb késleltetett görgetést indított, amely egy későbbi
+        // navigációt is megzavarhatott.
+        let initialHashChecked = false;
+
         function init() {
+            const firstRun = !initialHashChecked;
+            initialHashChecked = true;
             lastHash = window.location.hash;
             highlightHashMsg();
 
-            if (lastHash.match(/^#msg\d+$/)) {
+            if (firstRun && /^#msg\d+$/.test(lastHash)) {
+                const initialHash = lastHash;
                 bindInitialScrollCancelEvents();
 
                 setTimeout(() => {
-                    if (!cancelInitialHashScroll) {
+                    if (!cancelInitialHashScroll && window.location.hash === initialHash) {
                         tryScrollToHashMsg(5);
                     }
                 }, 1200);
@@ -5661,28 +5670,177 @@
         };
     }
 
-    function keyboardNavigation() {
+    function getReplyNavigator() {
+        if (window.phPtReplyNavigator) return window.phPtReplyNavigator;
+
         const REPLY_HISTORY_KEY = 'ph_pt_reply_history';
         const REPLY_HISTORY_TOPIC_KEY = 'ph_pt_reply_history_topic';
 
-        function getCurrentTopicKey() {
-            const m = location.pathname.match(/^\/tema\/([^/]+)\//);
-            return m ? m[1] : null;
+        function topicPrefix() {
+            const match = location.pathname.match(/^(\/tema\/[^/]+\/)/);
+            return match ? match[1] : null;
         }
 
-        function resetReplyHistoryOnTopicChange() {
-            const currentTopic = getCurrentTopicKey();
-            if (!currentTopic) return;
-
-            const savedTopic = sessionStorage.getItem(REPLY_HISTORY_TOPIC_KEY);
-
-            if (savedTopic !== currentTopic) {
-                sessionStorage.removeItem(REPLY_HISTORY_KEY);
-                sessionStorage.setItem(REPLY_HISTORY_TOPIC_KEY, currentTopic);
+        function resetHistoryOnTopicChange() {
+            const prefix = topicPrefix();
+            if (!prefix) return;
+            try {
+                const key = location.host + prefix;
+                const savedKey = sessionStorage.getItem(REPLY_HISTORY_TOPIC_KEY);
+                if (savedKey !== key) {
+                    sessionStorage.removeItem(REPLY_HISTORY_KEY);
+                    sessionStorage.setItem(REPLY_HISTORY_TOPIC_KEY, key);
+                }
+            } catch (error) {
+                console.warn('[PH Power Tools] Válaszelőzmény tárolási hiba:', error);
             }
         }
 
-        resetReplyHistoryOnTopicChange();
+        function validatedHistoryItem(item) {
+            if (!item || !/^\d+$/.test(String(item.id || ''))) return null;
+            try {
+                const url = new URL(item.url);
+                if (url.origin !== location.origin ||
+                    !url.pathname.startsWith(topicPrefix() || '/tema/INVALID/') ||
+                    url.hash !== '#msg' + String(item.id)) return null;
+                return { id: String(item.id), url: url.href };
+            } catch {
+                return null;
+            }
+        }
+
+        function loadHistory() {
+            try {
+                const stored = JSON.parse(sessionStorage.getItem(REPLY_HISTORY_KEY) || '[]');
+                return Array.isArray(stored)
+                    ? stored.map(validatedHistoryItem).filter(Boolean).slice(-100) : [];
+            } catch {
+                return [];
+            }
+        }
+
+        function saveHistory(items) {
+            try {
+                sessionStorage.setItem(REPLY_HISTORY_KEY, JSON.stringify(items.slice(-100)));
+            } catch (error) {
+                console.warn('[PH Power Tools] Válaszelőzmény mentési hiba:', error);
+            }
+            document.dispatchEvent(new Event('ph-pt-reply-nav-updated'));
+        }
+
+        function findPost(id) {
+            const postId = String(id ?? '');
+            if (!/^\d+$/.test(postId)) return null;
+            const row = document.querySelector(`li[data-id="${postId}"]`);
+            return row?.querySelector('.message-body') ? row : null;
+        }
+
+        function currentIdFromHash() {
+            return location.hash.match(/^#msg(\d+)$/)?.[1] || null;
+        }
+
+        function findReplyTarget(currentId) {
+            const id = String(currentId ?? '');
+            const post = findPost(id);
+            if (!post) return null;
+
+            const replyLink = post.querySelector(
+                '.message-head-infos .message-reply a.message-id[href*="#msg"]'
+            ) || post.querySelector(
+                '.message-content-replied .message-reply a.message-id[href*="#msg"]'
+            );
+
+            let replyId = null;
+            let replyUrl = null;
+            if (replyLink?.href) {
+                try {
+                    const url = new URL(replyLink.href, location.href);
+                    const match = url.hash.match(/^#msg(\d+)$/);
+                    if (match && /^https?:$/.test(url.protocol) && url.pathname.includes('/tema/')) {
+                        replyId = match[1];
+                        replyUrl = url.href;
+                    }
+                } catch {}
+            }
+
+            if (!replyId && /^\d+$/.test(post.dataset.rplid || '')) {
+                replyId = post.dataset.rplid;
+            }
+            if (!replyId || replyId === id || replyId === '0') return null;
+
+            return {
+                id: replyId,
+                inPage: !!findPost(replyId),
+                url: replyUrl,
+            };
+        }
+
+        function getState(currentId = currentIdFromHash()) {
+            const target = findReplyTarget(currentId);
+            const backItems = loadHistory();
+            return {
+                currentId: currentId ? String(currentId) : null,
+                parentId: target?.id || null,
+                canGoToParent: !!target && (target.inPage || !!target.url),
+                backCount: backItems.length,
+                backId: backItems.length ? backItems[backItems.length - 1].id : null,
+                canGoBack: backItems.length > 0,
+            };
+        }
+
+        function jumpToId(id) {
+            const post = findPost(id);
+            if (!post) return false;
+            history.replaceState(null, '', '#msg' + id);
+            window.dispatchEvent(new HashChangeEvent('hashchange'));
+            if (!window.phPtMessageScroller?.scrollToMsgId?.(id)) {
+                post.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            document.dispatchEvent(new Event('ph-pt-reply-nav-updated'));
+            return true;
+        }
+
+        function pushHistory(id) {
+            const url = new URL(location.href);
+            url.hash = '#msg' + id; // A mobilpanel görgetés közben nem feltétlenül módosítja a hash-t.
+            const item = { id: String(id), url: url.href };
+            const items = loadHistory();
+            const last = items[items.length - 1];
+            if (last?.id === item.id && last.url === item.url) return;
+            items.push(item);
+            saveHistory(items);
+        }
+
+        function goToParent(currentId = currentIdFromHash()) {
+            const id = String(currentId ?? '');
+            const target = findReplyTarget(id);
+            if (!target || (!target.inPage && !target.url)) return false;
+
+            pushHistory(id);
+            if (target.inPage) return jumpToId(target.id);
+            window.location.href = target.url;
+            return true;
+        }
+
+        function goBack() {
+            const items = loadHistory();
+            if (!items.length) return false;
+            const previous = items.pop();
+            saveHistory(items);
+
+            if (findPost(previous.id)) return jumpToId(previous.id);
+            window.location.href = previous.url;
+            return true;
+        }
+
+        resetHistoryOnTopicChange();
+        const navigator = { getState, goToParent, goBack };
+        window.phPtReplyNavigator = navigator;
+        return navigator;
+    }
+
+    function keyboardNavigation() {
+        const replyNavigator = getReplyNavigator();
 
         function getPosts() {
             return [...document.querySelectorAll('li[data-id]')];
@@ -5716,220 +5874,51 @@
         function findClosestPost(posts, targetId) {
             let closest = null;
             let minDiff = Infinity;
-
             posts.forEach(li => {
                 const id = parseInt(li.dataset.id, 10);
                 if (Number.isNaN(id)) return;
-
                 const diff = Math.abs(id - targetId);
                 if (diff < minDiff) {
                     minDiff = diff;
                     closest = li;
                 }
             });
-
             return closest;
         }
 
         function getSortedPostIds(posts) {
-            return posts
-                .map(p => parseInt(p.dataset.id, 10))
-                .filter(id => !Number.isNaN(id))
-                .sort((a, b) => a - b);
+            return posts.map(p => parseInt(p.dataset.id, 10))
+                .filter(id => !Number.isNaN(id)).sort((a, b) => a - b);
         }
 
         function getCurrentIdIndex(sortedIds) {
             const currentId = getMsgIdFromHash();
-            if (currentId === null) return -1;
-            const idx = sortedIds.indexOf(currentId);
-            return idx;
+            return currentId === null ? -1 : sortedIds.indexOf(currentId);
         }
 
         function getSafeCurrentIndex(posts) {
-            let index = getCurrentIndex(posts);
+            const index = getCurrentIndex(posts);
             if (index !== -1) return index;
-
             const hashId = getMsgIdFromHash();
             if (hashId === null) return 0;
-
             const closest = findClosestPost(posts, hashId);
             return closest ? posts.indexOf(closest) : 0;
         }
 
-        function loadReplyHistory() {
-            try {
-                const history = JSON.parse(
-                    sessionStorage.getItem(REPLY_HISTORY_KEY) || '[]'
-                );
-
-                return Array.isArray(history) ? history : [];
-            } catch {
-                return [];
-            }
-        }
-
-        function saveReplyHistory(history) {
-            try {
-                sessionStorage.setItem(
-                    REPLY_HISTORY_KEY,
-                    JSON.stringify(history)
-                );
-            } catch {}
-        }
-
-        function pushReplyHistory(locationData) {
-            if (!locationData?.id || !locationData?.url) return;
-
-            const history = loadReplyHistory();
-            const last = history[history.length - 1];
-
-            // Ugyanazt a pontot ne tegyük be kétszer egymás után.
-            if (
-                last &&
-                String(last.id) === String(locationData.id) &&
-                last.url === locationData.url
-            ) {
-                return;
-            }
-
-            history.push(locationData);
-
-            // Biztonsági limit, nehogy végtelenre nőjön.
-            if (history.length > 100) {
-                history.splice(0, history.length - 100);
-            }
-
-            saveReplyHistory(history);
-        }
-
-        function jumpBackInReplyHistory(posts) {
-            const history = loadReplyHistory();
-            if (!history.length) return;
-
-            const target = history.pop();
-            saveReplyHistory(history);
-
-            if (!target?.id || !target?.url) return;
-
-            const targetId = String(target.id);
-
-            // Ha a cél hozzászólás már az aktuális oldalon van,
-            // csak odagörgetünk.
-            const targetPost = posts.find(
-                li => li.dataset.id === targetId
-            );
-
-            if (targetPost) {
-                setMsgId(parseInt(targetId, 10));
-                return;
-            }
-
-            // Ha másik oldalon van, visszamegyünk a pontos mentett URL-re.
-            window.location.href = target.url;
-        }
-
-        function jumpToRepliedPost(posts) {
-            const currentId = getMsgIdFromHash();
-            if (currentId === null) return;
-
-            const currentPost = posts.find(
-                li => li.dataset.id === String(currentId)
-            );
-            if (!currentPost) return;
-
-            // Elsősorban a fejlécben lévő előzmény linket használjuk.
-            // Pl. /tema/.../friss.html#msg361118
-            const replyLink =
-                currentPost.querySelector(
-                    '.message-head-infos .message-reply a.message-id[href*="#msg"]'
-                ) ||
-                currentPost.querySelector(
-                    '.message-content-replied .message-reply a.message-id[href*="#msg"]'
-                );
-
-            let replyId = null;
-
-            if (replyLink) {
-                try {
-                    const url = new URL(replyLink.href, location.href);
-                    const match = url.hash.match(/^#msg(\d+)$/);
-
-                    if (match) {
-                        replyId = match[1];
-                    }
-                } catch {}
-            }
-
-            // Fallback: ha valamiért nincs használható link,
-            // próbáljuk a data-rplid-et.
-            if (!replyId) {
-                replyId = currentPost.dataset.rplid;
-            }
-
-            if (!replyId) return;
-
-            // Mielőtt R-rel továbbmegyünk, eltesszük az aktuális pontot
-            // a visszalépési stack-be.
-            pushReplyHistory({
-                id: String(currentId),
-                url: location.href
-            });
-
-            const repliedPost = posts.find(
-                li => li.dataset.id === String(replyId)
-            );
-
-            // Ha az előzmény ezen az oldalon van, csak odagörgetünk.
-            if (repliedPost) {
-                setMsgId(parseInt(replyId, 10));
-                return;
-            }
-
-            // Ha nincs az aktuális oldalon, követjük a fórum saját linkjét.
-            if (replyLink?.href) {
-                window.location.href = replyLink.href;
-            }
-        }
-
         document.addEventListener('keydown', (e) => {
-            // gallery / input védelem
             if (document.querySelector('.layer-gallery')) return;
-
             const active = document.activeElement;
-            if (
-                active &&
-                (active.isContentEditable ||
-                    ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName))
-            ) return;
+            if (active && (active.isContentEditable ||
+                ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName))) return;
 
             const posts = getPosts();
             if (!posts.length) return;
 
-            // SHIFT + R:
-            // egy lépés vissza az R-rel bejárt előzmény stack-en.
-            if (
-                e.shiftKey &&
-                !e.ctrlKey &&
-                !e.altKey &&
-                !e.metaKey &&
-                e.key.toLowerCase() === 'r'
-            ) {
+            // R = a kijelölt hozzászólás előzménye; Shift+R = vissza az R útvonalán.
+            if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'r') {
                 e.preventDefault();
-                jumpBackInReplyHistory(posts);
-                return;
-            }
-
-            // R:
-            // ugrás arra a hozzászólásra, amire az aktuális válaszolt.
-            if (
-                !e.shiftKey &&
-                !e.ctrlKey &&
-                !e.altKey &&
-                !e.metaKey &&
-                e.key.toLowerCase() === 'r'
-            ) {
-                e.preventDefault();
-                jumpToRepliedPost(posts);
+                if (e.shiftKey) replyNavigator.goBack();
+                else replyNavigator.goToParent();
                 return;
             }
 
@@ -5937,22 +5926,17 @@
                 !li.classList.contains('ph-tv-branch-hidden') &&
                 !li.classList.contains('ph-tv-off-hidden'));
             if (!visiblePosts.length) return;
-            let currentIndex = getSafeCurrentIndex(visiblePosts);
+            const currentIndex = getSafeCurrentIndex(visiblePosts);
 
-            // SHIFT + ↑ / ↓ : következő látható msgId (ID sorrendben)
+            // Shift+fel/le: hozzászólás-ID szerint; fel/le: a megjelenített sorrend szerint.
             if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
                 e.preventDefault();
-
                 const sortedIds = getSortedPostIds(visiblePosts);
                 if (!sortedIds.length) return;
-
                 let idx = getCurrentIdIndex(sortedIds);
-
-                // ha törölt msg-en állunk → legközelebbi ID
                 if (idx === -1) {
                     const hashId = getMsgIdFromHash();
                     if (hashId === null) return;
-
                     let closestDiff = Infinity;
                     sortedIds.forEach((id, i) => {
                         const diff = Math.abs(id - hashId);
@@ -5962,33 +5946,26 @@
                         }
                     });
                 }
-
                 const delta = e.key === 'ArrowUp' ? -1 : 1;
                 const newIndex = idx + delta;
-
                 if (newIndex < 0 || newIndex >= sortedIds.length) return;
-
                 setMsgId(sortedIds[newIndex]);
                 return;
             }
 
-            // alap navigáció
             switch (e.key) {
                 case 'ArrowUp':
                     e.preventDefault();
                     jumpToIndex(visiblePosts, Math.max(0, currentIndex - 1));
                     break;
-
                 case 'ArrowDown':
                     e.preventDefault();
                     jumpToIndex(visiblePosts, Math.min(visiblePosts.length - 1, currentIndex + 1));
                     break;
-
                 case 'ArrowLeft':
                     e.preventDefault();
                     jumpToIndex(visiblePosts, 0);
                     break;
-
                 case 'ArrowRight':
                     e.preventDefault();
                     jumpToIndex(visiblePosts, visiblePosts.length - 1);
@@ -8443,6 +8420,7 @@
 
     function mobileScrollNav() {
         const POSITION_KEY = 'ph_mobile_scroll_nav_position';
+        const replyNavigator = getReplyNavigator();
 
         function loadNavPosition() {
             const pos = safeJsonParse(localStorage.getItem(POSITION_KEY) || "{}", {});
@@ -8640,22 +8618,28 @@
         // Hozzászólások összegyűjtése
         // -------------------------------------------------------
         function collectMessages() {
-            return window.phPtMessageScroller?.collectMessages?.() || Array.from(document.querySelectorAll('[id^="msg"]'))
-                .filter(el => /^msg\d+$/.test(el.id))
-                .sort((a, b) =>
-                    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
-                );
+            const all = window.phPtMessageScroller?.collectMessages?.() ||
+                Array.from(document.querySelectorAll('[id^="msg"]'))
+                    .filter(el => /^msg\d+$/.test(el.id))
+                    .sort((a, b) =>
+                        a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
+                    );
+            // Az elrejtett OFF-ok és összecsukott Thread ágak nem navigálható lépések.
+            return all.filter(el => {
+                const row = el.closest('li[data-id]');
+                return row && !row.classList.contains('ph-tv-branch-hidden') &&
+                    !row.classList.contains('ph-tv-off-hidden');
+            });
         }
 
         let messages     = [];
         let currentIndex = 0;
-
         function initMessages(anchorId) {
+            const oldId = anchorId || messages[currentIndex]?.id;
             messages = collectMessages();
-            if (anchorId) {
-                const idx = messages.findIndex(el => el.id === anchorId);
-                if (idx >= 0) currentIndex = idx;
-            }
+            const matching = oldId ? messages.findIndex(el => el.id === oldId) : -1;
+            if (matching >= 0) currentIndex = matching;
+            else currentIndex = Math.max(0, Math.min(currentIndex, messages.length - 1));
         }
 
         // -------------------------------------------------------
@@ -8666,7 +8650,15 @@
         }
 
         function setIcon(el, iconClass) {
-            el.innerHTML = iconHtml(iconClass);
+            // A vizuális feliratot is megtartjuk ikonfrissítéskor (pl. lapozásnál).
+            let icon = el.querySelector(':scope > .ph-scroll-control-icon');
+            if (!icon) {
+                icon = document.createElement('span');
+                icon.className = 'ph-scroll-control-icon';
+                el.prepend(icon);
+            }
+            icon.className = `ph-scroll-control-icon fas ${iconClass} fa-fw`;
+            icon.setAttribute('aria-hidden', 'true');
         }
 
         function updateTabIcon() {
@@ -8675,6 +8667,9 @@
             } else {
                 setIcon(tab, isHidden ? "fa-chevron-right" : "fa-chevron-left");
             }
+            tab.setAttribute('aria-expanded', String(!isHidden));
+            tab.setAttribute('aria-label', isHidden
+                ? 'Mobil navigáció megnyitása' : 'Mobil navigáció elrejtése');
         }
 
         function applySide(side, persist = true) {
@@ -8701,15 +8696,67 @@
         }
 
         function scrollToIndex(idx) {
+            initMessages(null);
             if (idx < 0 || idx >= messages.length) return;
             currentIndex = idx;
             const el = messages[currentIndex];
+            // A rövid hozzászólások miatt az automatikus képernyőkövetés
+            // nem írhatja felül a navigációval kiválasztott hozzászólást.
+            pinNavigationSelection();
             scrollToEl(el);
 
-            // Frissíti a böngésző címsorát görgetés nélkül
-            if (el) history.replaceState(null, '', '#' + el.id);
-
+            // A hash-változás a kiemelést és a többi modult is frissíti.
+            history.replaceState(null, '', '#' + el.id);
+            window.dispatchEvent(new HashChangeEvent('hashchange'));
             updateUI();
+        }
+
+        // A kijelölést navigáció után megtartjuk egészen az első VALÓDI
+        // kézi görgetésig. Így a rövid (akár 20-30 px magas) hozzászólás
+        // alatti elem nem válik automatikusan az új céllá.
+        // A hash-t továbbra is csak navigáció írja át, a kézi görgetés nem.
+        let viewportTimer = null;
+        let trackingManualScroll = true;
+
+        function pinNavigationSelection() {
+            trackingManualScroll = false;
+            if (viewportTimer !== null) {
+                clearTimeout(viewportTimer);
+                viewportTimer = null;
+            }
+        }
+
+        function resumeManualTracking(event) {
+            // A panel gombjainak érintése és húzása nem kézi oldalgörgetés.
+            if (event?.target instanceof Node && wrap.contains(event.target)) return;
+            if (trackingManualScroll) return;
+            trackingManualScroll = true;
+            scheduleViewportTracking();
+        }
+
+        function trackVisibleMessage() {
+            if (!messages.length || !trackingManualScroll) return;
+            // A korábbi 150 px-es küszöb rövid hozzászólásoknál már az
+            // alatta lévő elemet választotta. A tényleges olvasási pontot
+            // most a képernyő tetejéhez közel vizsgáljuk.
+            const line = Math.min(24, Math.max(12, window.innerHeight * 0.03));
+            let index = 0;
+            for (let i = 0; i < messages.length; i++) {
+                if (messages[i].getBoundingClientRect().top > line) break;
+                index = i;
+            }
+            if (index !== currentIndex) {
+                currentIndex = index;
+                updateUI();
+            }
+        }
+
+        function scheduleViewportTracking() {
+            if (!trackingManualScroll || viewportTimer !== null) return;
+            viewportTimer = setTimeout(() => {
+                viewportTimer = null;
+                trackVisibleMessage();
+            }, 110);
         }
 
         // -------------------------------------------------------
@@ -8779,182 +8826,286 @@
 
             setIcon(prevBtn, atFirst && hasPrevPage ? 'fa-play fa-flip-horizontal' : 'fa-chevron-up');
             setIcon(nextBtn, atLast && hasNextPage ? 'fa-play' : 'fa-chevron-down');
+            prevText.textContent = atFirst && hasPrevPage ? 'Előző lap' : 'Előző';
+            nextText.textContent = atLast && hasNextPage ? 'Követk. lap' : 'Következő';
 
             prevBtn.title = atFirst && hasPrevPage ? 'Előző oldal' : 'Előző hozzászólás';
             nextBtn.title = atLast && hasNextPage ? 'Következő oldal' : 'Következő hozzászólás';
+            prevBtn.setAttribute('aria-label', prevBtn.title);
+            nextBtn.setAttribute('aria-label', nextBtn.title);
+
+            // Az R / Shift+R kézzel elérhető megfelelői, közös előzménylistával.
+            const state = replyNavigator.getState(el?.id?.replace('msg', '') || null);
+            parentBtn.disabled = !state.canGoToParent;
+            backBtn.disabled = !state.canGoBack;
+
+            parentBtn.title = state.canGoToParent
+                ? `Ugrás az előzményhez #${state.parentId}`
+                : 'Ehhez a hozzászóláshoz nincs elérhető előzmény';
+            backBtn.title = state.canGoBack
+                ? `Visszalépés az előző válaszhoz #${state.backId}`
+                : 'Az előzményútvonal még üres';
+            parentBtn.setAttribute('aria-label', parentBtn.title);
+            backBtn.setAttribute('aria-label', backBtn.title);
+            backDepth.textContent = state.backCount > 99 ? '99+' : String(state.backCount);
+            backDepth.hidden = state.backCount === 0;
         }
 
         // -------------------------------------------------------
         // CSS
         // -------------------------------------------------------
         injectStyleOnce('ph-mobile-scroll-nav-style', `
+            /* Kompakt, a fórum világos/sötét témáját használó mobil dokk.
+               A panel keskeny; a négy nagyobb érintési cél két sorban elfér. */
             #ph-scroll-btn-wrap {
                 position: fixed;
                 bottom: 88px;
                 z-index: 99999;
                 display: flex;
-                align-items: stretch;
-                --ph-scroll-tab-width: 30px;
-                transition: transform 0.4s cubic-bezier(.4,0,.2,1), opacity 0.4s ease;
+                align-items: center;
+                --ph-scroll-tab-width: 32px;
+                --ph-scroll-dock-width: 142px;
+                --ph-scroll-dock-border: color-mix(in srgb, var(--ph-ui-fg, #202124) 22%, transparent);
+                /* Uveghatas: atlatszo feluletek, a feliratok es ikonok teljesen elesek. */
+                --ph-scroll-glass-panel: color-mix(in srgb, var(--ph-ui-bg, #fff) 57%, transparent);
+                --ph-scroll-glass-tab: color-mix(in srgb, var(--ph-ui-bg, #fff) 76%, transparent);
+                --ph-scroll-glass-btn: color-mix(in srgb, var(--ph-ui-bg, #fff) 38%, transparent);
+                --ph-scroll-glass-primary: color-mix(in srgb, var(--ph-ui-accent, #4f7fb2) 9%, var(--ph-scroll-glass-btn));
+                color: var(--ph-ui-fg, #202124);
+                font-family: inherit;
+                font-size: 12px;
                 touch-action: none;
                 user-select: none;
+                -webkit-user-select: none;
+                transition: transform 260ms cubic-bezier(.2,.8,.2,1), opacity 200ms ease;
                 opacity: 1;
+                isolation: isolate;
             }
-            
+            #ph-scroll-btn-wrap, #ph-scroll-btn-wrap * {
+                box-sizing: border-box;
+            }
+            /* Sotet temaban egy keveset erosebb felulet: a vilagos oldalszoveg
+               ne zavarja a panel ikonjainak/feliratainak olvashatosagat. */
+            body[data-theme="dark"] #ph-scroll-btn-wrap {
+                --ph-scroll-glass-panel: color-mix(in srgb, var(--ph-ui-bg, #242526) 64%, transparent);
+                --ph-scroll-glass-tab: color-mix(in srgb, var(--ph-ui-bg, #242526) 81%, transparent);
+                --ph-scroll-glass-btn: color-mix(in srgb, var(--ph-ui-bg, #242526) 44%, transparent);
+            }
             #ph-scroll-btn-wrap.side-right {
                 right: 0;
                 left: auto;
                 flex-direction: row;
-                filter: drop-shadow(-3px 4px 12px rgba(0,0,0,0.32));
             }
-
             #ph-scroll-btn-wrap.side-left {
                 left: 0;
                 right: auto;
                 flex-direction: row-reverse;
-                filter: drop-shadow(3px 4px 12px rgba(0,0,0,0.32));
             }
-
             #ph-scroll-btn-wrap.side-right.is-hidden {
                 transform: translateX(calc(100% - var(--ph-scroll-tab-width)));
-                opacity: 0.72;
+                opacity: .93;
             }
-
             #ph-scroll-btn-wrap.side-left.is-hidden {
                 transform: translateX(calc(-100% + var(--ph-scroll-tab-width)));
-                opacity: 0.72;
+                opacity: .93;
             }
 
+            /* A fül egyszerre nyitó/záró gomb és áthelyezhető fogantyú. */
             #ph-scroll-tab {
+                position: relative;
+                align-self: center;
                 width: var(--ph-scroll-tab-width);
-                background: rgba(28,28,34,0.84);
-                backdrop-filter: blur(10px);
-                -webkit-backdrop-filter: blur(10px);
+                height: 58px;
+                flex: 0 0 var(--ph-scroll-tab-width);
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                margin: 0;
+                padding: 0 0 7px;
+                border: 1px solid var(--ph-scroll-dock-border);
+                background: var(--ph-scroll-glass-tab);
+                color: var(--ph-ui-accent-ink, #245d92);
+                backdrop-filter: blur(1px);
+                -webkit-backdrop-filter: blur(1px);
+                font-size: 14px;
+                line-height: 1;
+                box-shadow: 0 5px 13px rgba(0, 0, 0, .13);
                 cursor: grab;
-                flex-shrink: 0;
-                color: rgba(255,255,255,0.84);
-                font-size: 10px;
-                transition: background 0.2s, color 0.2s;
                 touch-action: none;
+                -webkit-tap-highlight-color: transparent;
             }
-            
-            #ph-scroll-tab:active {
-                cursor: grabbing;
+            #ph-scroll-tab .ph-scroll-control-icon { pointer-events: none; }
+            /* Finom fogásjelzés: a felület függőlegesen és oldalra is húzható. */
+            #ph-scroll-tab::after {
+                content: '';
+                position: absolute;
+                left: calc(50% - 7px);
+                bottom: 10px;
+                width: 14px;
+                height: 3px;
+                border-radius: 99px;
+                background: currentColor;
+                opacity: .42;
+                box-shadow: 0 5px 0 currentColor;
             }
-
+            #ph-scroll-tab:active { cursor: grabbing; }
             #ph-scroll-btn-wrap.side-right #ph-scroll-tab {
-                border-radius: 10px 0 0 10px;
+                border-radius: 11px 0 0 11px;
+                border-right: 0;
             }
-
             #ph-scroll-btn-wrap.side-left #ph-scroll-tab {
-                border-radius: 0 10px 10px 0;
+                border-radius: 0 11px 11px 0;
+                border-left: 0;
             }
-
+            #ph-scroll-tab:focus-visible {
+                outline: 2px solid var(--ph-ui-accent-ink, #245d92);
+                outline-offset: 2px;
+            }
             #ph-scroll-tab:active {
-                background: rgba(50,50,62,0.95);
-                color: #fff;
+                background: color-mix(in srgb, var(--ph-ui-accent) 11%, var(--ph-scroll-glass-tab));
             }
 
             #ph-scroll-panel {
-                background: rgba(28,28,34,0.84);
-                backdrop-filter: blur(10px);
-                -webkit-backdrop-filter: blur(10px);
+                position: relative;
                 display: flex;
                 flex-direction: column;
+                width: min(var(--ph-scroll-dock-width), calc(100vw - 50px));
+                min-width: 0;
+                padding: 5px;
+                border: 1px solid var(--ph-scroll-dock-border);
+                background: var(--ph-scroll-glass-panel);
+                color: var(--ph-ui-fg, #202124);
+                box-shadow: 0 6px 19px rgba(0, 0, 0, .14);
+                /* Csak enyhe elmosas: ami a panel mogott van, felismerheto marad. */
+                backdrop-filter: blur(1px);
+                -webkit-backdrop-filter: blur(1px);
                 overflow: hidden;
-                position: relative;
-                min-width: 132px;
             }
-
             #ph-scroll-btn-wrap.side-right #ph-scroll-panel {
-                border-left: 1px solid rgba(255,255,255,0.07);
+                border-radius: 12px 0 0 12px;
+                border-right: 0;
             }
-
             #ph-scroll-btn-wrap.side-left #ph-scroll-panel {
-                border-right: 1px solid rgba(255,255,255,0.07);
+                border-radius: 0 12px 12px 0;
+                border-left: 0;
             }
-
+            /* Nem duplázzuk a témacímet, a felugró tippben továbbra is megvan. */
             #ph-scroll-info {
                 display: flex;
-                flex-direction: column;
-                align-items: flex-start;
-                padding: 9px 14px 7px 12px;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 5px;
+                min-height: 28px;
+                padding: 2px 6px 5px;
+                border-bottom: 1px solid var(--ph-scroll-dock-border);
                 cursor: pointer;
+                touch-action: manipulation;
                 -webkit-tap-highlight-color: transparent;
-                transition: background 0.15s;
             }
-            
-            #ph-scroll-topic {
-                max-width: 132px;
-                font-size: 10px;
-                line-height: 1.15;
-                font-weight: 500;
-                color: rgba(255,255,255,0.86);
+            #ph-scroll-info:active {
+                background: color-mix(in srgb, var(--ph-ui-accent) 9%, transparent);
+            }
+            #ph-scroll-info:focus-visible {
+                outline: 2px solid var(--ph-ui-accent-ink, #245d92);
+                outline-offset: -2px;
+            }
+            #ph-scroll-label {
+                flex: 1 1 auto;
+                min-width: 0;
+                color: var(--ph-ui-fg, #202124);
+                font-size: 13px;
+                font-weight: 800;
+                font-variant-numeric: tabular-nums;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
-                margin-bottom: 3px;
             }
-
-            #ph-scroll-info:active {
-                background: rgba(255,255,255,0.06);
-            }
-
             #ph-scroll-counter {
+                flex: 0 0 auto;
+                color: var(--ph-ui-muted, #6b7280);
                 font-size: 10px;
-                font-weight: 400;
-                color: rgba(255,255,255,0.8);
-                letter-spacing: 0.3px;
-                text-transform: uppercase;
+                font-weight: 650;
+                font-variant-numeric: tabular-nums;
+                white-space: nowrap;
             }
 
-            #ph-scroll-label {
-                font-size: 15px;
-                font-weight: 700;
-                color: #fff;
-                letter-spacing: -0.3px;
-                margin-top: 1px;
+            #ph-scroll-nav,
+            #ph-scroll-reply-nav {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 4px;
+                min-width: 0;
             }
-
-            #ph-scroll-divider {
-                height: 1px;
-                background: rgba(255,255,255,0.07);
-            }
-
-            #ph-scroll-nav {
+            #ph-scroll-nav { padding-top: 5px; }
+            #ph-scroll-reply-nav { padding-top: 4px; }
+            #ph-scroll-panel :is(.ph-nav-btn, .ph-scroll-reply-btn) {
+                position: relative;
                 display: flex;
-                align-items: stretch;
-            }
-
-            .ph-nav-btn {
-                flex: 1;
-                background: none;
-                border: none;
-                color: rgba(255,255,255,0.9);
-                font-size: 15px;
-                padding: 8px 0;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 3px;
+                min-width: 0;
+                width: 100%;
+                min-height: 44px;
+                margin: 0;
+                padding: 4px 2px;
+                border: 1px solid var(--ph-scroll-dock-border);
+                border-radius: 8px;
+                background: var(--ph-scroll-glass-btn);
+                color: var(--ph-ui-fg, #202124);
+                font: inherit;
+                font-size: 9.5px;
+                font-weight: 650;
+                line-height: 1.1;
+                text-align: center;
+                white-space: nowrap;
                 cursor: pointer;
+                touch-action: manipulation;
                 -webkit-tap-highlight-color: transparent;
-                transition: background 0.15s, color 0.15s;
-                line-height: 1;
             }
-
-            .ph-nav-btn:active {
-                background: rgba(255,255,255,0.1);
-                color: #fff;
+            #ph-scroll-panel #ph-scroll-nav .ph-nav-btn {
+                background: var(--ph-scroll-glass-primary);
+                border-color: color-mix(in srgb, var(--ph-ui-accent) 26%, var(--ph-scroll-dock-border));
             }
-
-            .ph-nav-btn:disabled {
+            #ph-scroll-panel .ph-nav-btn .ph-scroll-control-icon {
+                font-size: 15px;
+                color: var(--ph-ui-accent-ink, #245d92);
+            }
+            #ph-scroll-panel .ph-scroll-reply-btn > .fas {
+                font-size: 14px;
+                color: var(--ph-ui-accent-ink, #245d92);
+            }
+            .ph-nav-btn-label { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+            #ph-scroll-panel :is(.ph-nav-btn, .ph-scroll-reply-btn):active:not(:disabled) {
+                background: color-mix(in srgb, var(--ph-ui-accent) 21%, var(--ph-scroll-glass-tab));
+                transform: scale(.97);
+            }
+            #ph-scroll-panel :is(.ph-nav-btn, .ph-scroll-reply-btn):focus-visible {
+                outline: 2px solid var(--ph-ui-accent-ink, #245d92);
+                outline-offset: 0;
+            }
+            #ph-scroll-panel :is(.ph-nav-btn, .ph-scroll-reply-btn):disabled {
+                opacity: .36 !important;
                 cursor: default;
             }
-
-            .ph-nav-sep {
-                width: 1px;
-                background: rgba(255,255,255,0.07);
-                flex-shrink: 0;
+            #ph-scroll-back-depth {
+                position: absolute;
+                top: 2px;
+                right: 2px;
+                min-width: 16px;
+                padding: 1px 3px;
+                border-radius: 99px;
+                background: color-mix(in srgb, var(--ph-ui-accent) 15%, var(--ph-scroll-glass-tab));
+                color: var(--ph-ui-accent-ink, #245d92);
+                font-size: 9px;
+                font-weight: 800;
+                line-height: 1.2;
+            }
+            #ph-scroll-back-depth[hidden] { display: none !important; }
+            @media (prefers-reduced-motion: reduce) {
+                #ph-scroll-btn-wrap { transition: none; }
+                #ph-scroll-panel :is(.ph-nav-btn, .ph-scroll-reply-btn) { transition: none; }
             }
         `);
 
@@ -8967,19 +9118,21 @@
 
         const tab = document.createElement('div');
         tab.id = 'ph-scroll-tab';
+        tab.setAttribute('role', 'button');
+        tab.tabIndex = 0;
 
         const panel = document.createElement('div');
         panel.id = 'ph-scroll-panel';
 
         const info = document.createElement('div');
         info.id = 'ph-scroll-info';
+        info.setAttribute('role', 'button');
+        info.setAttribute('aria-label', 'Ugrás az aktuális hozzászóláshoz');
+        info.tabIndex = 0;
 
         const topicTitle = getTopicTitle();
-
-        const topicEl = document.createElement('span');
-        topicEl.id = 'ph-scroll-topic';
-        topicEl.textContent = topicTitle;
-        topicEl.title = topicTitle;
+        info.title = topicTitle ? `${topicTitle} — ugrás az aktuális hozzászóláshoz`
+            : 'Ugrás az aktuális hozzászóláshoz';
 
         const counterEl = document.createElement('span');
         counterEl.id = 'ph-scroll-counter';
@@ -8989,15 +9142,8 @@
         labelEl.id = 'ph-scroll-label';
         labelEl.textContent = 'Válassz…';
 
-        if (topicEl.textContent) {
-            info.appendChild(topicEl);
-        }
-
-        info.appendChild(counterEl);
         info.appendChild(labelEl);
-
-        const divider = document.createElement('div');
-        divider.id = 'ph-scroll-divider';
+        info.appendChild(counterEl);
 
         const nav = document.createElement('div');
         nav.id = 'ph-scroll-nav';
@@ -9010,20 +9156,52 @@
         nextBtn.className = 'ph-nav-btn';
         nextBtn.type = 'button';
 
-        const navSep = document.createElement('div');
-        navSep.className = 'ph-nav-sep';
+        const prevText = document.createElement('span');
+        prevText.className = 'ph-nav-btn-label';
+        prevText.textContent = 'Előző';
+        prevBtn.appendChild(prevText);
+
+        const nextText = document.createElement('span');
+        nextText.className = 'ph-nav-btn-label';
+        nextText.textContent = 'Következő';
+        nextBtn.appendChild(nextText);
 
         nav.appendChild(prevBtn);
-        nav.appendChild(navSep);
         nav.appendChild(nextBtn);
 
+        const replyNav = document.createElement('div');
+        replyNav.id = 'ph-scroll-reply-nav';
+
+        const parentBtn = document.createElement('button');
+        parentBtn.type = 'button';
+        parentBtn.className = 'ph-scroll-reply-btn';
+        parentBtn.innerHTML = '<span class="fas fa-reply" aria-hidden="true"></span><span>Előzmény</span>';
+
+        const backBtn = document.createElement('button');
+        backBtn.type = 'button';
+        backBtn.className = 'ph-scroll-reply-btn';
+        backBtn.innerHTML = '<span class="fas fa-undo" aria-hidden="true"></span><span>Vissza</span>';
+
+        const backDepth = document.createElement('span');
+        backDepth.id = 'ph-scroll-back-depth';
+        backDepth.hidden = true;
+        backBtn.appendChild(backDepth);
+
+        replyNav.appendChild(parentBtn);
+        replyNav.appendChild(backBtn);
+
         panel.appendChild(info);
-        panel.appendChild(divider);
         panel.appendChild(nav);
+        panel.appendChild(replyNav);
 
         wrap.appendChild(tab);
         wrap.appendChild(panel);
         document.body.appendChild(wrap);
+        wrap.style.bottom = Math.max(
+            10,
+            Math.min(Math.max(10, window.innerHeight - wrap.offsetHeight - 10),
+                parseFloat(wrap.style.bottom) || 88)
+        ) + 'px';
 
         applySide(navSide, false);
 
@@ -9050,15 +9228,39 @@
         });
 
         info.addEventListener('click', () => scrollToIndex(currentIndex));
+        info.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            scrollToIndex(currentIndex);
+        });
+        tab.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            isHidden ? expand() : collapse();
+        });
 
         prevBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            initMessages(null);
             currentIndex > 0 ? scrollToIndex(currentIndex - 1) : navigatePage(-1);
         });
 
         nextBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            initMessages(null);
             currentIndex < messages.length - 1 ? scrollToIndex(currentIndex + 1) : navigatePage(+1);
+        });
+
+        parentBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            replyNavigator.goToParent(getCurrentMsgId());
+            updateUI();
+        });
+
+        backBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            replyNavigator.goBack();
+            updateUI();
         });
 
         // Drag:
@@ -9076,6 +9278,12 @@
         tab.addEventListener('pointerdown', (e) => {
             // csak bal egérgombbal húzzuk, touch/pen esetén button általában 0
             if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+            // Az előző húzás után a böngésző nem feltétlenül küld click eseményt
+            // (különösen érintőképernyőn). A megmaradt tiltás ezért nem nyelheti
+            // el egy ÚJ érintés első kattintását. A húzás saját pointerup-ja
+            // továbbra is beállíthatja a tiltást, ha tényleges click érkezik.
+            suppressNextClick = false;
 
             startX = e.clientX;
             startY = e.clientY;
@@ -9139,13 +9347,15 @@
 
             dragging = false;
             activePointerId = null;
+            // Megszakított érintés után sem maradhat aktív kattintástiltás.
+            suppressNextClick = false;
         });
 
         window.addEventListener('resize', () => {
             const currentBottom = parseFloat(wrap.style.bottom) || 88;
             wrap.style.bottom = Math.max(
                 10,
-                Math.min(window.innerHeight - wrap.offsetHeight - 10, currentBottom)
+                Math.min(Math.max(10, window.innerHeight - wrap.offsetHeight - 10), currentBottom)
             ) + 'px';
             saveNavPosition();
         });
@@ -9157,14 +9367,35 @@
         window.addEventListener('hashchange', () => {
             const m = window.location.hash.match(/^#(msg\d+)$/);
             if (!m) return;
-
-            const newId = m[1];
-
-            // Csak a panel aktuális indexét frissíti.
-            // A #msg görgetést a msgAnchorHighlight kezeli.
-            initMessages(newId);
+            initMessages(m[1]);
+            pinNavigationSelection();
             updateUI();
         });
+
+        // Az előzmény-lista a billentyűzetes navigációtól is frissülhet.
+        document.addEventListener('ph-pt-reply-nav-updated', updateUI);
+        document.addEventListener('ph-pt-off-visibility-changed', () => {
+            initMessages(null);
+            scheduleViewportTracking();
+            updateUI();
+        });
+        window.addEventListener('scroll', scheduleViewportTracking, { passive: true });
+        // Csak a tényleges görgetési gesztus oldja fel a navigációs kijelölést.
+        // A touchstart nem megfelelő: a mobilpanel megnyomása is kiváltaná.
+        window.addEventListener('touchmove', resumeManualTracking, { passive: true });
+        window.addEventListener('wheel', resumeManualTracking, { passive: true });
+        window.addEventListener('keydown', (event) => {
+            if (!['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return;
+            if (event.target instanceof Element &&
+                event.target.closest('input, textarea, select, [contenteditable]')) return;
+            resumeManualTracking(event);
+        }, { capture: true, passive: true });
+        // Asztalon a hagyományos görgetősáv egérrel húzva is működjön.
+        window.addEventListener('pointermove', (event) => {
+            if (event.pointerType === 'mouse' && event.buttons === 1) {
+                resumeManualTracking(event);
+            }
+        }, { passive: true });
 
         // -------------------------------------------------------
         // Init
@@ -9172,8 +9403,9 @@
         function init() {
             // Lapozva érkezés kezelése (#ph-scroll-last / #ph-scroll-first)
             const incoming = window.location.hash;
+            const fromPager = incoming === '#ph-scroll-last' || incoming === '#ph-scroll-first';
 
-            if (incoming === '#ph-scroll-last' || incoming === '#ph-scroll-first') {
+            if (fromPager) {
                 initMessages(null);
                 currentIndex = incoming === '#ph-scroll-last' ? messages.length - 1 : 0;
                 history.replaceState(null, '', window.location.pathname + window.location.search + '#' + (messages[currentIndex]?.id || ''));
@@ -9183,7 +9415,13 @@
                 initMessages(m ? m[1] : null);
             }
 
+            // Hivatkozásból vagy lapozásból nyitott üzenet szándékos célpont.
+            // Ne értelmezzük újra egy rövid hozzászólás utáni görgetésként.
+            if (/^#msg\d+$/.test(incoming) || fromPager) pinNavigationSelection();
             updateUI();
+            if (!/^#msg\d+$/.test(incoming) && !fromPager) {
+                requestAnimationFrame(trackVisibleMessage);
+            }
 
             // Autoscroll az aktuális pozícióhoz (ha van kijelölt elem)
             function tryScroll(n) {
@@ -9201,8 +9439,7 @@
                 }
             }
 
-            if (window.location.hash === '#ph-scroll-last' ||
-                window.location.hash === '#ph-scroll-first') {
+            if (fromPager) {
                 setTimeout(() => tryScroll(5), 1200);
             }
         }
