@@ -4423,46 +4423,130 @@
                 list-style: none !important;
             }
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) > .message {
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 0 !important;
                 box-sizing: border-box;
                 width: 100% !important;
                 max-width: 100% !important;
                 min-width: 0;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
                 border: 1px solid var(--ph-tv-card-edge);
                 border-radius: 11px;
                 background: var(--ph-ui-bg);
-                overflow: visible;
+                overflow: visible; /* A szerkesztő felugró eszközei nem vághatók le. */
             }
-            /* Az űrlap saját fejlécét és eszköztárát megtartjuk, csak a
-               tördelést és az azonosító/válasz feliratot rendezzük. */
+            /* A szerkesztő is egysoros, kéthasábos fejlécet kap:
+               szerző balra, Válasz/Új felirat jobbra, a poszt dátumához hasonlóan. */
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) > .message > .message-head {
-                display: flex !important;
-                flex-wrap: wrap !important;
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) max-content !important;
+                grid-template-rows: auto !important;
                 align-items: center !important;
-                justify-content: space-between !important;
-                gap: 5px 9px !important;
+                align-content: center !important;
+                justify-content: stretch !important;
+                gap: 0 10px !important;
+                box-sizing: border-box;
+                width: 100% !important;
                 min-height: 0 !important;
                 height: auto !important;
-                padding: 7px 10px !important;
+                margin: 0 !important;
+                padding: 6px 10px !important;
                 border-radius: 10px 10px 0 0;
                 background: var(--ph-tv-card-head);
                 border-bottom: 1px solid var(--ph-tv-card-edge);
+            }
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) > .message > .message-head > .message-head-infos {
+                grid-column: 2;
+                grid-row: 1;
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                justify-content: flex-end !important;
+                justify-self: end !important;
+                align-self: center !important;
+                flex: none !important;
+                position: static !important;
+                float: none !important;
+                box-sizing: border-box;
+                width: auto !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                line-height: 1.25 !important;
+                text-align: right !important;
             }
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head > .message-head-infos > .message-reply {
                 display: none !important;
             }
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head > .message-head-user {
+                grid-column: 1;
+                grid-row: 1;
                 display: flex !important;
                 align-items: center !important;
-                gap: 7px;
-                min-width: 0;
+                justify-self: stretch !important;
+                align-self: center !important;
+                flex: none !important;
+                float: none !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
                 margin: 0 !important;
+                padding: 0 !important;
+                gap: 7px;
             }
+            /* A szerkesztő fejlécében ugyanaz a kompakt, kerek avatar legyen,
+               mint a normál Modern/Thread hozzászólásoknál. Az IMG eredeti
+               méretét is felül kell írni, nem elegendő az A méretezése. */
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-face {
-                flex: 0 0 34px;
-                width: 34px;
-                height: 34px;
-                min-width: 34px;
-                min-height: 34px;
+                display: inline-flex !important;
+                flex: 0 0 34px !important;
+                align-items: center;
+                justify-content: center;
+                box-sizing: border-box;
+                width: 34px !important;
+                height: 34px !important;
+                min-width: 34px !important;
+                max-width: 34px !important;
+                min-height: 34px !important;
+                max-height: 34px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden;
+                border: 1px solid var(--ph-tv-card-edge);
+                border-radius: 50%;
+            }
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-face img {
+                display: block;
+                width: 100% !important;
+                height: 100% !important;
+                max-width: 100% !important;
+                object-fit: cover;
+                border-radius: 50%;
+            }
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-text {
+                display: flex !important;
+                flex-direction: column;
+                align-items: flex-start;
+                justify-content: center;
+                min-width: 0;
+                height: auto !important;
+                line-height: 1.25;
+            }
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-text .user-title {
+                color: var(--ph-ui-fg);
+                font-weight: 700;
+            }
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-text .user-class {
+                color: var(--ph-ui-muted);
+                font-size: 12px;
             }
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) > .message > .message-body,
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-body-main,
@@ -4471,16 +4555,48 @@
                 min-width: 0;
                 max-width: 100%;
             }
+            /* A fehér csíkokat az editor régi margói és az eredeti kártya
+               térközei okozták. Az űrlap körüli hely a bézs törzsön BELÜL van,
+               így a fejléc alatt és a kártya alján sem marad fehér sáv. */
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) > .message > .message-body {
+                display: flow-root !important;
+                flex: 1 1 auto !important;
+                float: none !important;
+                box-sizing: border-box;
+                width: 100% !important;
+                min-width: 0 !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border-radius: 0 0 10px 10px !important;
+                background-clip: padding-box;
+            }
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) > .message > .message-body > .message-body-user {
+                display: none !important;
+            }
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) > .message > .message-body > .message-body-main {
+                display: block !important;
+                box-sizing: border-box;
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: .5rem .5rem .75rem !important;
+                flex: none !important;
+                float: none !important;
+            }
             @media (max-width: 640px) {
                 :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) > .message > .message-head {
                     padding: 6px 8px !important;
                 }
                 :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-face {
-                    flex-basis: 29px;
-                    min-width: 29px;
-                    width: 29px;
-                    min-height: 29px;
-                    height: 29px;
+                    flex-basis: 29px !important;
+                    min-width: 29px !important;
+                    max-width: 29px !important;
+                    width: 29px !important;
+                    min-height: 29px !important;
+                    max-height: 29px !important;
+                    height: 29px !important;
                 }
             }
             /* Egységes KÉTSOROS fejléc valamennyi képernyőméreten.
