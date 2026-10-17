@@ -3463,9 +3463,9 @@
             body[data-theme="dark"] {
                 --ph-pt-hash-highlight: ${d};
             }
-            li[data-id] .message-body.hash-highlight {
+            li[data-id] .message-head.hash-highlight {
                 background-color: var(--ph-pt-hash-highlight) !important;
-                transition: background 0.2s ease;
+                transition: background-color 0.2s ease;
             }
             html {
                 scroll-behavior: smooth;
@@ -3515,18 +3515,17 @@
                 return;
             }
 
-            document.querySelectorAll(".message-body.hash-highlight")
-                .forEach(b => b.classList.remove("hash-highlight"));
+            document.querySelectorAll('li[data-id] .message-head.hash-highlight')
+                .forEach(head => head.classList.remove('hash-highlight'));
 
-            let body = document.querySelector(`li[data-id="${msgId}"] .message-body`);
+            const post = document.querySelector(`li[data-id="${msgId}"]`)
+                ?? findClosestPost(getPosts(), msgId);
 
-            if (!body) {
-                const closest = findClosestPost(getPosts(), msgId);
-                body = closest?.querySelector('.message-body');
-            }
+            const head = post?.querySelector(
+                ':scope > :is(.message, .message-off) > .message-head'
+            );
 
-            if (!body) return;
-            body.classList.add("hash-highlight");
+            head?.classList.add('hash-highlight');
         }
 
         function scrollToHashMsg() {
