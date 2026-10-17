@@ -4484,6 +4484,13 @@
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head > .message-head-infos > .message-reply {
                 display: none !important;
             }
+            /* Asztali kompakt forummod: az "Uj" es "Valasz" jelzes egyarant
+               felkover; a mobilmod es a tobbi fejlecelem nem valtozik. */
+            @media (min-width: 992px) {
+                body ul:is(.ph-tv-active, .ph-mv-active) > li.msg-editor > .message > .message-head > .message-head-infos > span.message-id {
+                    font-weight: 700 !important;
+                }
+            }
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head > .message-head-user {
                 grid-column: 1;
                 grid-row: 1;
@@ -4531,22 +4538,39 @@
                 object-fit: cover;
                 border-radius: 50%;
             }
-            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-text {
+            /* Szerkeszto: a nev/rang ugyanazzal a sorkozzel jelenjen meg,
+               mint a normal hozzaszolasnal, a forum kompakt modjatol fuggetlenul. */
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user > .user-text {
                 display: flex !important;
-                flex-direction: column;
-                align-items: flex-start;
-                justify-content: center;
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                justify-content: center !important;
+                gap: 3px !important;
                 min-width: 0;
                 height: auto !important;
-                line-height: 1.25;
+                margin: 0 !important;
+                padding: 0 !important;
+                line-height: 1.25 !important;
             }
-            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-text .user-title {
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user > .user-text > .user-title {
+                display: block !important;
+                flex: none !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                line-height: 1.25 !important;
                 color: var(--ph-ui-fg);
                 font-weight: 700;
             }
-            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-text .user-class {
+            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user > .user-text > .user-class {
+                display: block !important;
+                flex: none !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                line-height: 1.25 !important;
                 color: var(--ph-ui-muted);
-                font-size: 12px;
+                font-size: 12px !important;
             }
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) > .message > .message-body,
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-body-main,
@@ -4554,6 +4578,67 @@
                 box-sizing: border-box;
                 min-width: 0;
                 max-width: 100%;
+            }
+            /* Mindket forummodban ugyanaz az eredeti valaszcimzett-elem
+               jelenjen meg a szerkeszto modlinkjeivel EGY sorban. Csak a
+               valasz-szerkesztoket erinti; uj hsz-nel nincs felesleges cimzett. */
+            body ul:is(.ph-tv-active, .ph-mv-active) > li.msg-editor > .message > .message-body > .message-body-main > .message-body-infos:has(> .message-reply) {
+                display: flex !important;
+                visibility: visible !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                flex-wrap: wrap !important;
+                gap: 4px 10px !important;
+                box-sizing: border-box;
+                width: 100% !important;
+                min-width: 0 !important;
+                height: auto !important;
+                margin: 0 0 6px !important;
+                padding: 0 !important;
+            }
+            body ul:is(.ph-tv-active, .ph-mv-active) > li.msg-editor > .message > .message-body > .message-body-main > .message-body-infos:has(> .message-reply) > .modlinks {
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: flex-end !important;
+                flex: 0 0 auto !important;
+                gap: 5px !important;
+                width: auto !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                margin: 0 0 0 auto !important;
+                padding: 0 !important;
+            }
+            /* Uj hozzaszolas: a forum kompakt modjaban a modlinks jobbra
+               zsugorodik. Mindket forummodban a cim balra, a szerkesztovaltas
+               jobbra keruljon; a valaszszerkeszto sorat ne erintse. */
+            body ul:is(.ph-tv-active, .ph-mv-active) > li.msg-editor > .message > .message-body > .message-body-main > .message-body-infos:not(:has(> .message-reply)) {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                box-sizing: border-box;
+                width: 100% !important;
+                min-width: 0 !important;
+                margin: 0 0 6px !important;
+                padding: 0 !important;
+                text-align: left !important;
+            }
+            body ul:is(.ph-tv-active, .ph-mv-active) > li.msg-editor > .message > .message-body > .message-body-main > .message-body-infos:not(:has(> .message-reply)) > .modlinks {
+                display: flex !important;
+                flex: 1 1 100% !important;
+                flex-wrap: wrap !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                gap: 5px !important;
+                box-sizing: border-box;
+                width: 100% !important;
+                min-width: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                float: none !important;
+                text-align: left !important;
+            }
+            body ul:is(.ph-tv-active, .ph-mv-active) > li.msg-editor > .message > .message-body > .message-body-main > .message-body-infos:not(:has(> .message-reply)) > .modlinks > [data-rtif-legacy] {
+                margin-left: auto !important;
             }
             /* A fehér csíkokat az editor régi margói és az eredeti kártya
                térközei okozták. Az űrlap körüli hely a bézs törzsön BELÜL van,
@@ -4674,9 +4759,35 @@
                 object-fit: cover;
                 border-radius: 50%;
             }
+            /* A nev es a rang mindket forummodban egymas alatt legyen.
+               A forum kompakt modja alapbol egy sorba tenne oket. */
+            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-head-user > .user-text {
+                display: flex !important;
+                flex: 1 1 auto !important;
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                justify-content: center !important;
+                gap: 3px !important;
+                min-width: 0 !important;
+                max-width: 100%;
+                margin: 0 !important;
+                padding: 0 !important;
+                line-height: 1.25 !important;
+            }
+            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-head-user > .user-text > .user-class {
+                display: block !important;
+                flex: none !important;
+                width: auto !important;
+                max-width: 100%;
+                margin: 0 !important;
+                padding: 0 !important;
+                color: var(--ph-ui-muted) !important;
+                font-size: 12px !important;
+                line-height: 1.25 !important;
+            }
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-head-user .user-title {
                 display: flex !important;
-                flex: 1 1 auto;
+                flex: 0 1 auto !important;
                 flex-wrap: wrap;
                 align-items: baseline;
                 gap: 1px 6px;
@@ -4772,6 +4883,69 @@
                 gap: 3px 5px;
                 max-width: 100%;
                 line-height: 1.4;
+            }
+            /* Kozos valaszelozmeny-cimke: normal es kompakt forummodban,
+               szerkesztoben es meglevo hozzaszolasnal is ugyanaz a kinezet.
+               Csak a Modern / Thread kartyakon beluli valaszblokkot erinti. */
+            body ul:is(.ph-tv-active, .ph-mv-active) > li:is(.msg-editor, .ph-thread, [data-id], .message-featured) > :is(.message, .message-off) > .message-body > .message-body-main > .message-body-infos > .message-reply {
+                display: inline-flex !important;
+                visibility: visible !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                flex: 0 1 auto !important;
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+                gap: 5px !important;
+                box-sizing: border-box;
+                width: max-content;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                min-height: 24px !important;
+                margin: 0 !important;
+                padding: 2px 6px !important;
+                border: 0 !important;
+                border-radius: 6px !important;
+                background: color-mix(in srgb, var(--ph-ui-bg) 72%, transparent) !important;
+                box-shadow: none !important;
+                color: var(--ph-ui-fg) !important;
+                line-height: 1.35 !important;
+                white-space: nowrap;
+                vertical-align: middle;
+            }
+            body ul:is(.ph-tv-active, .ph-mv-active) > li:is(.msg-editor, .ph-thread, [data-id], .message-featured) > :is(.message, .message-off) > .message-body > .message-body-main > .message-body-infos > .message-reply > :is(.message-id, .user-title) {
+                display: inline-flex !important;
+                align-items: center !important;
+                min-width: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                line-height: 1.35 !important;
+            }
+            body ul:is(.ph-tv-active, .ph-mv-active) > li:is(.msg-editor, .ph-thread, [data-id], .message-featured) > :is(.message, .message-off) > .message-body > .message-body-main > .message-body-infos > .message-reply > .user-face {
+                display: inline-flex !important;
+                flex: 0 0 20px !important;
+                align-items: center !important;
+                justify-content: center !important;
+                box-sizing: border-box;
+                width: 20px !important;
+                height: 20px !important;
+                min-width: 20px !important;
+                max-width: 20px !important;
+                min-height: 20px !important;
+                max-height: 20px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                background: transparent !important;
+            }
+            body ul:is(.ph-tv-active, .ph-mv-active) > li:is(.msg-editor, .ph-thread, [data-id], .message-featured) > :is(.message, .message-off) > .message-body > .message-body-main > .message-body-infos > .message-reply > .user-face img {
+                display: block !important;
+                width: 100% !important;
+                height: 100% !important;
+                max-width: 100% !important;
+                object-fit: contain !important;
             }
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-body-infos > .message-reply > .user-face {
                 display: inline-flex !important;
