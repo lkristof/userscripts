@@ -3454,6 +3454,25 @@
                 overflow-wrap: anywhere;
                 word-break: normal;
             }
+            /* A popup ugyanazokat a szineket es prioritasokat hasznalja, mint
+               az eredeti uzenettorzs: akcio < sajat/valasz < avatarfokusz.
+               A CSS-valtozokat a bekapcsolt colorize modul allitja elo,
+               igy az egyeni paletta es a vilagos/sotet tema is kovetve van. */
+            #${MODAL_ID} .ph-pt-chain-post-content.ph-pt-akcio {
+                background-color: var(--ph-pt-akcio) !important;
+            }
+            #${MODAL_ID} .ph-pt-chain-post-content.ph-pt-own {
+                background-color: var(--ph-pt-own) !important;
+            }
+            #${MODAL_ID} .ph-pt-chain-post-content.ph-pt-reply {
+                background-color: var(--ph-pt-reply) !important;
+            }
+            #${MODAL_ID} .ph-pt-chain-post-content.ph-pt-focus-author {
+                background-color: var(--ph-pt-focus-author) !important;
+            }
+            #${MODAL_ID} .ph-pt-chain-post-content.ph-pt-focus-reply {
+                background-color: var(--ph-pt-focus-reply) !important;
+            }
             #${MODAL_ID} .ph-pt-chain-post-content > :first-child { margin-top: 0 !important; }
             #${MODAL_ID} .ph-pt-chain-post-content > :last-child { margin-bottom: 0 !important; }
             #${MODAL_ID} .ph-pt-chain-post-content img,
@@ -3708,13 +3727,27 @@
                 badge.textContent = 'Kiválasztott hozzászólás';
                 article.appendChild(badge);
             }
-            if (content) article.appendChild(cloneMessageContent(content));
-            else {
-                const fallback = document.createElement('div');
-                fallback.className = 'ph-pt-chain-post-content';
-                fallback.textContent = 'A hozzászólás szövege itt nem érhető el.';
-                article.appendChild(fallback);
+            const postContent = content ? cloneMessageContent(content) : document.createElement('div');
+            if (!content) {
+                postContent.className = 'ph-pt-chain-post-content';
+                postContent.textContent = 'A hozzászólás szövege itt nem érhető el.';
             }
+            // Nem szamolunk uj szinezesi szabalyokat: az eredeti hozzaszolas
+            // torzserol vesszuk at a colorize modul mar eldontott allapotat.
+            // Ez az akciokat, a sajat/nekem szolo valaszokat es az avatarfokuszt
+            // is pontosan ugyanugy kezeli. Kikapcsolt szinezesnel semmit sem masolunk.
+            if (savedSettings.colorize) {
+                const originalBody = qs(msg, '.message-body');
+                for (const colorClass of [
+                    'ph-pt-akcio', 'ph-pt-own', 'ph-pt-reply',
+                    'ph-pt-focus-author', 'ph-pt-focus-reply'
+                ]) {
+                    if (originalBody?.classList.contains(colorClass)) {
+                        postContent.classList.add(colorClass);
+                    }
+                }
+            }
+            article.appendChild(postContent);
             return article;
         }
 
@@ -3942,7 +3975,7 @@
                 button.setAttribute('aria-label', 'Hozzászólás-lánc megtekintése');
                 button.setAttribute('aria-haspopup', 'dialog');
                 button.setAttribute('aria-expanded', 'false');
-                button.innerHTML = '<span class="fas fa-link fa-fw"></span><span class="ph-pt-chain-text d-none d-sm-inline">Lánc</span>';
+                button.innerHTML = '<span class="fas fa-link fa-fw"></span> <span class="ph-pt-chain-text d-none d-sm-inline">Lánc</span>';
                 opts.prepend(button);
             });
         }
