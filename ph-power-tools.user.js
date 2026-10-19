@@ -3454,10 +3454,10 @@
                 overflow-wrap: anywhere;
                 word-break: normal;
             }
-            /* A szines kartyak a "Kivalasztott hozzaszolas" stilusara epulnek:
-               jobban lathato, de tovabbra is kevert kartyahatter, szines szegely es vastag bal el.
-               A tartalom nem kap kulon kitoltoszint. A szinprioritas az
-               eredeti colorize szabalyait koveti: akcio < sajat/valasz < fokusz. */
+            /* A popup hozzaszolasszovegenek hattere pontosan az alap forumnezet
+               colorize-palettaszine. A fejlec es a szegely ennek a szinnek a
+               visszafogott/kontrasztos valtozata, a korabbi kartyas dizajnnal.
+               A szinprioritas megegyezik az eredeti colorize szabalyaval. */
             #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content.ph-pt-akcio) {
                 --ph-pt-card-mark: var(--ph-pt-akcio);
             }
@@ -3476,21 +3476,21 @@
             #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content:is(
                 .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
             )) {
-                --ph-pt-card-tint: color-mix(in srgb, var(--ph-pt-card-mark) 70%, var(--ph-ui-bg));
-                --ph-pt-card-edge: color-mix(in srgb, var(--ph-pt-card-mark) 85%, var(--ph-ui-fg));
-                border-color: color-mix(in srgb, var(--ph-pt-card-edge) 62%, var(--ph-ui-border));
+                --ph-pt-card-edge: color-mix(in srgb, var(--ph-pt-card-mark) 75%, var(--ph-ui-fg));
+                border-color: color-mix(in srgb, var(--ph-pt-card-edge) 82%, var(--ph-ui-border));
                 border-left: 4px solid var(--ph-pt-card-edge);
-                background: var(--ph-pt-card-tint);
+                background: var(--ph-pt-card-mark);
             }
             #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content:is(
                 .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
             )) > .ph-pt-chain-item-head {
-                background: color-mix(in srgb, var(--ph-pt-card-mark) 32%, var(--ph-ui-bg));
+                background: color-mix(in srgb, var(--ph-pt-card-mark) 62%, var(--ph-ui-bg));
             }
             #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content:is(
                 .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
             )) > .ph-pt-chain-post-content {
-                background-color: transparent !important;
+                /* Ugyanaz a teljes, keveretlen szin, mint a klasszikus message-body-n. */
+                background-color: var(--ph-pt-card-mark) !important;
             }
             /* A kivalasztott kartyat tovabbra is az eredeti kek akcentus jeloli,
                a sajat/valasz/akcio/fokusz kartyaszin ettol meg ervenyesul. */
@@ -5722,9 +5722,9 @@
             ) {
                 background-color: var(--ph-tv-card-body) !important;
             }
-            /* Csak a Modern es Thread kartyan valtozik a szinezes megjelenese:
-               az eredeti forumnezet teljes test-szinezesehez nem nyulunk.
-               A kartyara ugyanaz a palettaszin es sorrend kerul, mint a popupban. */
+            /* Modern/Thread: a szovegtorzs hattere ugyanaz a teljes palettaszin,
+               amelyet az eredeti alap forumnezet colorize szabalyai hasznalnak.
+               A fejlec es szegely ebbol szarmazik, a klasszikus CSS erintetlen. */
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize.ph-pt-akcio) {
                 --ph-pt-card-mark: var(--ph-pt-akcio);
             }
@@ -5743,23 +5743,22 @@
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize:is(
                 .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
             )) {
-                --ph-pt-card-tint: color-mix(in srgb, var(--ph-pt-card-mark) 70%, var(--ph-ui-bg));
-                --ph-pt-card-edge: color-mix(in srgb, var(--ph-pt-card-mark) 85%, var(--ph-ui-fg));
-                border-color: color-mix(in srgb, var(--ph-pt-card-edge) 62%, var(--ph-tv-card-edge)) !important;
+                --ph-pt-card-edge: color-mix(in srgb, var(--ph-pt-card-mark) 75%, var(--ph-ui-fg));
+                border-color: color-mix(in srgb, var(--ph-pt-card-edge) 82%, var(--ph-tv-card-edge)) !important;
                 border-left: 4px solid var(--ph-pt-card-edge) !important;
-                background: var(--ph-pt-card-tint) !important;
+                background: var(--ph-pt-card-mark) !important;
             }
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize:is(
                 .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
             )) > .message-head:not(.hash-highlight) {
-                background: color-mix(in srgb, var(--ph-pt-card-mark) 32%, var(--ph-tv-card-head)) !important;
+                background: color-mix(in srgb, var(--ph-pt-card-mark) 62%, var(--ph-tv-card-head)) !important;
             }
-            /* A regi !important hatterszineket csak a ket kartyas nezetben irjuk
-               felul. A #msg-kiemeles a fejlecen tovabbra is elsobbseget elvez. */
+            /* Csak a ket kartyas nezetben tartjuk a torzset az alap forum
+               eredeti, keveretlen szinevel. A #msg-kiemeles megelozi a fejlecszint. */
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message > .message-body.ph-pt-colorize:is(
                 .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
             ) {
-                background-color: var(--ph-pt-card-tint) !important;
+                background-color: var(--ph-pt-card-mark) !important;
             }
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-content,
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-content-replied {
