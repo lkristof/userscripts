@@ -177,7 +177,7 @@
     };
 
     const tooltips = {
-        colorize: 'Saját / válasz / #akció + avatar fókusz + hozzászólás-lánc kiemelés. Színek a 🎨 menüben.',
+        colorize: 'Saját / válasz / #akció + avatar fókusz. Színek a 🎨 menüben.',
         linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
         msgAnchorHighlight: 'Az URL-ben megadott #msg hozzászóláshoz görget és kiemeli azt. Színek a 🎨 menüben.',
         offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
@@ -1468,8 +1468,6 @@
                 { key: "akcio",       label: "#akció" },
                 { key: "focusAuthor", label: "Fókusz: szerző" },
                 { key: "focusReply",  label: "Fókusz: válasz" },
-                { key: "chainBg",     label: "Lánc háttér" },
-                { key: "chainBorder", label: "Lánc szegély" },
             ];
 
             const hashFields = [
@@ -3069,6 +3067,7 @@
         const modules = [
             { name: "messageScroller", when: () => isTema, fn: messageScroller },
             { name: "colorize", when: () => isTema && savedSettings.colorize, fn: colorize },
+            { name: "messageChainPopup", when: () => isTema, fn: messageChainPopup },
             { name: "markNewPosts", when: () => isTema && savedSettings.markNewPosts, fn: markNewPosts },
             { name: "linkRedirect", when: () => isTema && savedSettings.linkRedirect, fn: linkRedirect },
             { name: "msgAnchorHighlight", when: () => isTema && savedSettings.msgAnchorHighlight, fn: msgAnchorHighlight },
@@ -3102,7 +3101,6 @@
         const AKCIO_KEYWORDS = ["#akció", "#akcio"];
 
         let selectedUser = null;
-        let activeChainIds = new Set();
 
         function paletteToCssVars(pal, theme) {
             const p = pal?.[theme] || DEFAULT_COLORIZE_PALETTE[theme];
@@ -3112,8 +3110,6 @@
                 --ph-pt-akcio: ${p.akcio};
                 --ph-pt-focus-author: ${p.focusAuthor};
                 --ph-pt-focus-reply: ${p.focusReply};
-                --ph-pt-chain-bg: ${p.chainBg};
-                --ph-pt-chain-border: ${p.chainBorder};
                 --ph-pt-hash-highlight: ${p.hashHighlight};
             `;
         }
@@ -3133,10 +3129,6 @@
                 .message .message-body.ph-pt-focus-author { background-color: var(--ph-pt-focus-author) !important; }
                 .message .message-body.ph-pt-focus-reply  { background-color: var(--ph-pt-focus-reply) !important; }
             
-                .message .message-body.ph-pt-chain {
-                    background-color: var(--ph-pt-chain-bg) !important;
-                    box-shadow: inset 5px 0 0 0 var(--ph-pt-chain-border) !important;
-                }
             `);
         }
 
@@ -3162,44 +3154,6 @@
             return msg.querySelector(".message-head-infos .message-reply .user-title .user-link")?.textContent?.trim() || "";
         }
 
-        function getAllLis() {
-            return Array.from(document.querySelectorAll("li[data-id]"));
-        }
-
-        /**********************
-         * LÁNC LOGIKA
-         **********************/
-        function buildChain(startLi) {
-            activeChainIds.clear();
-
-            const all = getAllLis();
-            const byId = Object.fromEntries(all.map(li => [li.dataset.id, li]));
-
-            const startId = startLi.dataset.id;
-            activeChainIds.add(startId);
-
-            // ⬆ felfelé
-            let current = startLi;
-            while (current.dataset.rplid) {
-                const prev = byId[current.dataset.rplid];
-                if (!prev) break;
-                activeChainIds.add(prev.dataset.id);
-                current = prev;
-            }
-
-            // ⬇ lefelé
-            function findReplies(parentId) {
-                all.forEach(li => {
-                    if (li.dataset.rplid === parentId && !activeChainIds.has(li.dataset.id)) {
-                        activeChainIds.add(li.dataset.id);
-                        findReplies(li.dataset.id);
-                    }
-                });
-            }
-
-            findReplies(startId);
-        }
-
         /**********************
          * FŐ SZÍNEZÉS
          **********************/
@@ -3217,8 +3171,7 @@
                     "ph-pt-own",
                     "ph-pt-reply",
                     "ph-pt-focus-author",
-                    "ph-pt-focus-reply",
-                    "ph-pt-chain"
+                    "ph-pt-focus-reply"
                 );
 
                 const bodyClone = body.cloneNode(true);
@@ -3226,9 +3179,6 @@
                 const text = lower(bodyClone.textContent);
                 const author = getAuthor(msg);
                 const replied = getRepliedTo(msg);
-
-                const li = msg.closest("li[data-id]");
-                const msgId = li?.dataset?.id;
 
                 // 1) #akció
                 if (AKCIO_KEYWORDS.some(k => text.includes(k))) {
@@ -3259,13 +3209,7 @@
                     }
                 }
 
-                // 3) Lánc kiemelés
-                if (msgId && activeChainIds.has(msgId)) {
-                    body.classList.add("ph-pt-chain");
-                    return;
-                }
-
-                // 4) Saját / válasz
+                // 3) Saját / válasz
                 if (lower(author) === lower(FELHASZNALO)) {
                     body.classList.add("ph-pt-own");
                 } else if (lower(replied) === lower(FELHASZNALO)) {
@@ -3287,8 +3231,6 @@
             const author = getAuthor(msg);
             if (!author) return;
 
-            activeChainIds.clear();
-
             selectedUser = (selectedUser === author) ? null : author;
             recolorAll();
         }
@@ -3307,53 +3249,10 @@
         }
 
         /**********************
-         * LÁNC LINK
-         **********************/
-        function attachChainLinks() {
-            document.querySelectorAll(".message-head-btns").forEach(opts => {
-                if (opts.querySelector(".ph-pt-chain-link")) return;
-
-                const wrapper = document.createElement("a");
-                wrapper.className = "ph-pt-chain-link message-btn";
-                wrapper.href = "javascript:;";
-                wrapper.role = "button";
-                wrapper.title = 'Hozzászólás-lánc kiemelése';
-                wrapper.setAttribute('aria-label', 'Hozzászólás-lánc kiemelése');
-
-                wrapper.innerHTML = `
-                    <span class="fas fa-link fa-fw"></span>
-                    <span class="ph-pt-chain-text d-none d-sm-inline">Lánc</span>
-                `;
-
-                wrapper.addEventListener("click", e => {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const li = opts.closest("li[data-id]");
-                    if (!li) return;
-
-                    // HA LÁNCRA KATTINTASZ: Töröljük a kijelölt felhasználót
-                    selectedUser = null;
-
-                    if (activeChainIds.has(li.dataset.id)) {
-                        activeChainIds.clear();
-                    } else {
-                        buildChain(li);
-                    }
-
-                    recolorAll();
-                });
-
-                opts.prepend(wrapper);
-            });
-        }
-
-        /**********************
          * INIT
          **********************/
         function init() {
             attachAvatarHandlers();
-            attachChainLinks();
             recolorAll();
         }
 
@@ -3365,6 +3264,695 @@
         } else {
             init();
         }
+    }
+
+    // A Lánc funkció a beállított színezéstől független beszélgetés-előnézet.
+    // Csak az aktuális oldalon betöltött szülőket és leszármazottakat mutatja,
+    // pontosan a korábbi lánckiemelés hatókörében (nem gyűjti a testvérágakat).
+    function messageChainPopup() {
+        const STYLE_ID = 'ph-pt-chain-popup-style';
+        const MODAL_ID = 'ph-pt-chain-modal';
+        const qs = (root, selector) => root?.querySelector(selector) || null;
+        let lastTrigger = null;
+        let previousOverflow = '';
+        let previousFocus = null;
+        let connectorObserver = null;
+        let connectorFrame = null;
+
+        injectStyleOnce(STYLE_ID, `
+            #${MODAL_ID}.ph-pt-modal {
+                z-index: 100100 !important;
+            }
+            #${MODAL_ID} .ph-pt-chain-dialog {
+                width: min(800px, calc(100vw - 28px));
+                max-height: min(88dvh, 900px);
+                min-height: 0;
+            }
+            #${MODAL_ID} .ph-pt-chain-subtitle {
+                display: block;
+                margin-top: 3px;
+                color: var(--ph-ui-muted);
+                font-size: 11px;
+                line-height: 1.35;
+            }
+            #${MODAL_ID} .ph-pt-chain-list {
+                display: block;
+                min-height: 0;
+                overflow: auto;
+                overscroll-behavior: contain;
+                scrollbar-width: thin;
+                padding: 12px;
+            }
+            /* A vonalak a gorgetheto tartalommal egyutt mozognak, nem a popupra
+               vannak rogzitve. A kartyak elott, sajat bal oldali savban futnak. */
+            #${MODAL_ID} .ph-pt-chain-tree {
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                padding-left: 23px;
+                min-width: 0;
+                box-sizing: border-box;
+                isolation: isolate;
+            }
+            #${MODAL_ID} .ph-pt-chain-connectors {
+                position: absolute;
+                inset: 0;
+                display: block;
+                width: 100%;
+                height: 100%;
+                overflow: visible;
+                pointer-events: none;
+                z-index: 0;
+            }
+            #${MODAL_ID} .ph-pt-chain-edge {
+                fill: none;
+                stroke: color-mix(in srgb, var(--ph-ui-muted) 62%, var(--ph-ui-bg));
+                stroke-width: 2.2px;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+            #${MODAL_ID} .ph-pt-chain-edge[data-focus="true"] {
+                stroke: var(--ph-ui-accent-ink, #477baa);
+            }
+            #${MODAL_ID} .ph-pt-chain-node {
+                fill: var(--ph-ui-bg);
+                stroke: color-mix(in srgb, var(--ph-ui-muted) 62%, var(--ph-ui-bg));
+                stroke-width: 2px;
+            }
+            #${MODAL_ID} .ph-pt-chain-node[data-current="true"] {
+                fill: var(--ph-ui-accent);
+                stroke: var(--ph-ui-bg);
+                stroke-width: 2.5px;
+            }
+            #${MODAL_ID} .ph-pt-chain-item {
+                position: relative;
+                z-index: 1;
+                min-width: 0;
+                flex: 0 0 auto;
+                box-sizing: border-box;
+                margin: 0 0 0 min(var(--ph-pt-chain-indent, 0px), 112px);
+                border: 1px solid var(--ph-ui-border);
+                border-left: 3px solid color-mix(in srgb, var(--ph-ui-muted) 45%, transparent);
+                border-radius: 10px;
+                background: var(--ph-ui-bg);
+                overflow: hidden;
+            }
+            #${MODAL_ID} .ph-pt-chain-item[data-selected="true"] {
+                border-color: var(--ph-ui-accent);
+                border-left: 4px solid var(--ph-ui-accent);
+                background: color-mix(in srgb, var(--ph-ui-accent) 7%, var(--ph-ui-bg));
+            }
+            #${MODAL_ID} .ph-pt-chain-item-head {
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                padding: 10px 11px;
+                border-bottom: 1px solid var(--ph-ui-border);
+            }
+            #${MODAL_ID} .ph-pt-chain-avatar {
+                display: flex;
+                flex: 0 0 34px;
+                width: 34px;
+                height: 34px;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+                border-radius: 50%;
+                background: var(--ph-ui-soft);
+            }
+            #${MODAL_ID} .ph-pt-chain-avatar img {
+                display: block;
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: cover;
+            }
+            #${MODAL_ID} .ph-pt-chain-author {
+                flex: 1 1 auto;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                color: var(--ph-ui-fg);
+                font-size: 13px;
+                line-height: 1.25;
+            }
+            #${MODAL_ID} .ph-pt-chain-author strong {
+                overflow-wrap: anywhere;
+            }
+            #${MODAL_ID} .ph-pt-chain-author small {
+                color: var(--ph-ui-muted);
+                font-size: 11px;
+            }
+            #${MODAL_ID} .ph-pt-chain-meta {
+                flex: 0 1 auto;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 4px;
+                line-height: 1.2;
+            }
+            #${MODAL_ID} .ph-pt-chain-post-link {
+                color: var(--ph-ui-accent-ink) !important;
+                font-size: 12px;
+                font-weight: 700;
+                text-decoration: none;
+            }
+            #${MODAL_ID} .ph-pt-chain-post-link:hover {
+                text-decoration: underline;
+            }
+            #${MODAL_ID} .ph-pt-chain-time {
+                color: var(--ph-ui-muted);
+                font-size: 10.5px;
+                text-align: right;
+                overflow-wrap: anywhere;
+            }
+            #${MODAL_ID} .ph-pt-chain-label {
+                align-self: flex-start;
+                margin: 7px 11px 0;
+                padding: 2px 7px;
+                border-radius: 5px;
+                background: var(--ph-ui-soft);
+                color: var(--ph-ui-muted);
+                font-size: 10.5px;
+                font-weight: 650;
+            }
+            #${MODAL_ID} .ph-pt-chain-item[data-selected="true"] .ph-pt-chain-label {
+                background: color-mix(in srgb, var(--ph-ui-accent) 20%, var(--ph-ui-bg));
+                color: var(--ph-ui-accent-ink);
+            }
+            #${MODAL_ID} .ph-pt-chain-post-content {
+                min-width: 0;
+                padding: 8px 11px 12px;
+                color: var(--ph-ui-fg);
+                font-size: 13px;
+                line-height: 1.5;
+                overflow-wrap: anywhere;
+                word-break: normal;
+            }
+            #${MODAL_ID} .ph-pt-chain-post-content > :first-child { margin-top: 0 !important; }
+            #${MODAL_ID} .ph-pt-chain-post-content > :last-child { margin-bottom: 0 !important; }
+            #${MODAL_ID} .ph-pt-chain-post-content img,
+            #${MODAL_ID} .ph-pt-chain-post-content video {
+                max-width: 100% !important;
+                height: auto;
+            }
+            #${MODAL_ID} .ph-pt-chain-post-content pre,
+            #${MODAL_ID} .ph-pt-chain-post-content code {
+                max-width: 100%;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+            }
+            #${MODAL_ID} .ph-pt-chain-post-content a {
+                overflow-wrap: anywhere;
+            }
+            #${MODAL_ID} .ph-pt-chain-empty {
+                padding: 10px 12px;
+                border: 1px dashed var(--ph-ui-border);
+                border-radius: 9px;
+                color: var(--ph-ui-muted);
+                font-size: 12px;
+            }
+            #${MODAL_ID} .ph-pt-chain-footer {
+                justify-content: space-between;
+            }
+            #${MODAL_ID} .ph-pt-chain-hint {
+                min-width: 0;
+                max-width: 70%;
+                color: var(--ph-ui-muted);
+                font-size: 10.5px;
+                line-height: 1.35;
+            }
+            @media (max-width: 575.98px) {
+                #${MODAL_ID} .ph-pt-chain-dialog { width: 100%; max-height: calc(100dvh - 16px); }
+                #${MODAL_ID} .ph-pt-chain-list { padding: 9px; }
+                #${MODAL_ID} .ph-pt-chain-tree { gap: 8px; padding-left: 18px; }
+                #${MODAL_ID} .ph-pt-chain-item {
+                    margin-left: min(var(--ph-pt-chain-indent, 0px), 66px);
+                }
+                #${MODAL_ID} .ph-pt-chain-item-head { padding: 8px; gap: 7px; }
+                #${MODAL_ID} .ph-pt-chain-avatar { flex-basis: 30px; width: 30px; height: 30px; }
+                #${MODAL_ID} .ph-pt-chain-post-content { padding: 8px; font-size: 12.5px; }
+                #${MODAL_ID} .ph-pt-chain-hint { font-size: 10px; }
+            }
+        `);
+
+        function ensureModal() {
+            let modal = document.getElementById(MODAL_ID);
+            if (modal) return modal;
+            modal = document.createElement('div');
+            modal.id = MODAL_ID;
+            modal.className = 'ph-pt-modal';
+            modal.innerHTML = `
+                <section class="ph-pt-dialog ph-pt-chain-dialog" role="dialog" aria-modal="true"
+                         aria-labelledby="ph-pt-chain-title" aria-describedby="ph-pt-chain-count">
+                    <header class="ph-dialog-head">
+                        <div class="ph-dialog-title-wrap">
+                            <span class="ph-dialog-mark" aria-hidden="true"><span class="fas fa-link"></span></span>
+                            <span>
+                                <strong class="ph-dialog-title" id="ph-pt-chain-title">Hozzászólás-lánc</strong>
+                                <small class="ph-pt-chain-subtitle" id="ph-pt-chain-count"></small>
+                            </span>
+                        </div>
+                        <button type="button" class="ph-icon-btn ph-dialog-close" data-chain-close
+                                title="Bezárás" aria-label="Lánc bezárása">
+                            <span class="fas fa-times"></span>
+                        </button>
+                    </header>
+                    <div class="ph-dialog-body ph-pt-chain-list" id="ph-pt-chain-list" role="list"></div>
+                    <footer class="ph-dialog-footer ph-pt-chain-footer">
+                        <span class="ph-pt-chain-hint" id="ph-pt-chain-hint"></span>
+                        <button type="button" class="btn btn-sm btn-forum ph-secondary-btn" data-chain-close>Bezárás</button>
+                    </footer>
+                </section>`;
+            document.body.appendChild(modal);
+            modal.addEventListener('click', event => {
+                if (event.target === modal || event.target.closest('[data-chain-close]')) {
+                    event.preventDefault();
+                    closeModal();
+                }
+            });
+            return modal;
+        }
+
+        // A forum sajat hozzaszolas-sorrendje (a = novekvo, d = csokkeno).
+        // A megjelenitesi modulok (Modern / Thread) atrendezhetik a DOM-ot,
+        // ezert a rendezest nem a hozzaszolasok aktualis DOM-sorrendjebol talaljuk ki.
+        function getForumMessageDirection() {
+            const menus = document.querySelectorAll(
+                'ul.nav-settings li[data-rios-action-pref-mod*="mode=msg"]'
+            );
+            for (const menu of menus) {
+                for (const option of menu.querySelectorAll('.dropdown-item.active[data-pref]')) {
+                    try {
+                        const direction = JSON.parse(option.dataset.pref).dir;
+                        if (direction === 'a' || direction === 'd') return direction;
+                    } catch { /* Egy nem sorrendet tartalmazo beallitas nem befolyasolhatja a popupot. */ }
+                }
+                // Tartalek: az aktiv rendezesi elem hianyzik, de a gomb kiirja az iranyt.
+                const label = menu.querySelector('.dropdown-toggle b')?.textContent?.trim().toLowerCase();
+                if (label?.startsWith('csökken')) return 'd';
+                if (label?.startsWith('növekv')) return 'a';
+            }
+            return 'a';
+        }
+
+        function getChain(startLi) {
+            const all = Array.from(document.querySelectorAll('li[data-id]'))
+                .filter(li => li.querySelector(':scope > .message'));
+            const byId = new Map(all.map(li => [li.dataset.id, li]));
+            const children = new Map();
+            for (const li of all) {
+                const parentId = li.dataset.rplid;
+                if (!parentId || parentId === li.dataset.id) continue;
+                if (!children.has(parentId)) children.set(parentId, []);
+                children.get(parentId).push(li);
+            }
+
+            const visited = new Set([startLi.dataset.id]);
+            const parents = [];
+            let current = startLi;
+            let hasMissingParent = false;
+            while (current.dataset.rplid && current.dataset.rplid !== '0') {
+                const parentId = current.dataset.rplid;
+                const parent = byId.get(parentId);
+                if (!parent) {
+                    hasMissingParent = true;
+                    break;
+                }
+                if (visited.has(parentId)) break;
+                visited.add(parentId);
+                parents.unshift(parent);
+                current = parent;
+            }
+
+            const items = parents.map((li, depth) => ({li, depth, role: 'parent'}));
+            items.push({li: startLi, depth: parents.length, role: 'selected'});
+            // Iteratív preorder bejárás, az aktuális oldalon szereplő válaszágakra.
+            const childVisited = new Set(visited);
+            const todo = (children.get(startLi.dataset.id) || []).map(li => ({li, depth: parents.length + 1})).reverse();
+            while (todo.length) {
+                const {li, depth} = todo.pop();
+                if (childVisited.has(li.dataset.id)) continue;
+                childVisited.add(li.dataset.id);
+                items.push({li, depth, role: 'reply'});
+                const next = children.get(li.dataset.id) || [];
+                for (let i = next.length - 1; i >= 0; i--) {
+                    todo.push({li: next[i], depth: depth + 1});
+                }
+            }
+            // Az adott tematikus lancon belul a hozzaszolas-azonosito az ido szerinti
+            // sorrend: az elozo- / valaszszerep es a behuzas ettol nem valtozik.
+            const direction = getForumMessageDirection();
+            const multiplier = direction === 'd' ? -1 : 1;
+            items.sort((a, b) => multiplier * (Number(a.li.dataset.id) - Number(b.li.dataset.id)));
+            return {items, hasMissingParent, direction};
+        }
+
+        // Másolat az oldalon már megjelenített tartalomból, újrahasznosított
+        // DOM-azonosítók, eseményattribútumok és űrlapvezérlők nélkül.
+        function cloneMessageContent(original) {
+            const clone = original.cloneNode(true);
+            clone.removeAttribute('id');
+            clone.className = 'ph-pt-chain-post-content';
+            clone.querySelectorAll('script, style, iframe, object, embed, form, input, textarea, select, button, audio, video, canvas').forEach(el => el.remove());
+            for (const el of [clone, ...clone.querySelectorAll('*')]) {
+                for (const attr of [...el.attributes]) {
+                    const name = attr.name.toLowerCase();
+                    if (name === 'id' || name === 'contenteditable' || name.startsWith('on') || name.startsWith('data-')) {
+                        el.removeAttribute(attr.name);
+                    }
+                }
+                if (el.tagName === 'A') {
+                    const href = el.getAttribute('href') || '';
+                    if (!/^(https?:\/\/|\/|#)/i.test(href)) el.removeAttribute('href');
+                    else {
+                        el.target = '_blank';
+                        el.rel = 'noopener noreferrer';
+                    }
+                }
+            }
+            return clone;
+        }
+
+        function makePostCard({li, depth, role}) {
+            const id = li.dataset.id;
+            const msg = qs(li, ':scope > .message');
+            const author = qs(msg, '.message-head-user .user-title .user-link')
+                || qs(msg, '.message-head-user .user-title')
+                || qs(msg, '.message-body-user .user-title');
+            const rank = qs(msg, '.message-head-user .user-class');
+            const avatar = qs(msg, '.message-head-user .user-face img');
+            const time = qs(msg, '.message-head-infos time');
+            const content = qs(msg, '.message-body-main > .rtif-content.message-content')
+                || qs(msg, '.message-body-main > .message-content');
+
+            const article = document.createElement('article');
+            article.className = 'ph-pt-chain-item';
+            article.dataset.postId = id;
+            article.dataset.selected = role === 'selected' ? 'true' : 'false';
+            article.dataset.parentId = li.dataset.rplid || '';
+            article.style.setProperty('--ph-pt-chain-indent', `${depth * 17}px`);
+            article.setAttribute('role', 'listitem');
+            const header = document.createElement('div');
+            header.className = 'ph-pt-chain-item-head';
+            const face = document.createElement('span');
+            face.className = 'ph-pt-chain-avatar';
+            if (avatar?.getAttribute('src')) {
+                const img = document.createElement('img');
+                img.src = avatar.src;
+                img.alt = '';
+                img.loading = 'lazy';
+                face.appendChild(img);
+            } else {
+                face.innerHTML = '<span class="fas fa-user" aria-hidden="true"></span>';
+            }
+            header.appendChild(face);
+            const authorBox = document.createElement('span');
+            authorBox.className = 'ph-pt-chain-author';
+            const authorName = document.createElement('strong');
+            authorName.textContent = author?.textContent?.trim() || 'Ismeretlen szerző';
+            authorBox.appendChild(authorName);
+            if (rank?.textContent?.trim()) {
+                const authorRank = document.createElement('small');
+                authorRank.textContent = rank.textContent.trim();
+                authorBox.appendChild(authorRank);
+            }
+            header.appendChild(authorBox);
+            const meta = document.createElement('span');
+            meta.className = 'ph-pt-chain-meta';
+            const link = document.createElement('a');
+            link.className = 'ph-pt-chain-post-link';
+            link.href = `#msg${id}`;
+            link.dataset.chainJump = id;
+            link.title = 'Ugrás az eredeti hozzászólásra';
+            link.textContent = `#${id}`;
+            meta.appendChild(link);
+            if (time?.textContent?.trim()) {
+                const timeLabel = document.createElement('time');
+                timeLabel.className = 'ph-pt-chain-time';
+                timeLabel.textContent = time.textContent.trim();
+                meta.appendChild(timeLabel);
+            }
+            header.appendChild(meta);
+            article.appendChild(header);
+            // A valaszvonalak jelzik az elozmenyeket es valaszokat;
+            // csak a kivalasztott hozzaszolast jeloljuk szovegesen.
+            if (role === 'selected') {
+                const badge = document.createElement('span');
+                badge.className = 'ph-pt-chain-label';
+                badge.textContent = 'Kiválasztott hozzászólás';
+                article.appendChild(badge);
+            }
+            if (content) article.appendChild(cloneMessageContent(content));
+            else {
+                const fallback = document.createElement('div');
+                fallback.className = 'ph-pt-chain-post-content';
+                fallback.textContent = 'A hozzászólás szövege itt nem érhető el.';
+                article.appendChild(fallback);
+            }
+            return article;
+        }
+
+        // A Thread nezethez hasonlo, valódi szulo-gyermek kapcsolatot ábrázoló
+        // folytonos könyökvonalak. A sorrend bármilyen lehet (csökkenőben a
+        // válasz gyakran a szülő FELETT áll), ezért mért DOM-koordinátákból rajzolunk.
+        // A vonalak a kártyák mellett futnak, nem takarják a hozzászólásszöveget.
+        function drawChainConnectors() {
+            const modal = document.getElementById(MODAL_ID);
+            if (!modal || modal.style.display !== 'flex') return;
+            const tree = modal.querySelector('.ph-pt-chain-tree');
+            const svg = tree?.querySelector('.ph-pt-chain-connectors');
+            if (!tree || !svg) return;
+
+            const bounds = tree.getBoundingClientRect();
+            const width = tree.clientWidth;
+            const height = tree.scrollHeight;
+            if (width <= 0 || height <= 0) return;
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+            const nodes = new Map();
+            for (const article of tree.querySelectorAll('.ph-pt-chain-item')) {
+                const head = article.querySelector('.ph-pt-chain-item-head');
+                if (!head) continue;
+                const cardBox = article.getBoundingClientRect();
+                const headBox = head.getBoundingClientRect();
+                nodes.set(article.dataset.postId, {
+                    id: article.dataset.postId,
+                    parent: article.dataset.parentId,
+                    selected: article.dataset.selected === 'true',
+                    x: Math.max(7, cardBox.left - bounds.left - 11),
+                    y: headBox.top - bounds.top + Math.min(23, headBox.height / 2)
+                });
+            }
+
+            const ns = 'http://www.w3.org/2000/svg';
+            const fragment = document.createDocumentFragment();
+            const radius = 5.5;
+            // Először a vonalakat rajzoljuk, a csomópontok csak ezután kerülnek
+            // föléjük, így a vonal nem halad át a kis körökön.
+            for (const node of nodes.values()) {
+                const parent = nodes.get(node.parent);
+                if (!parent || node.id === parent.id) continue;
+                const dx = node.x - parent.x;
+                const dy = node.y - parent.y;
+                if (Math.abs(dy) < 1) continue;
+                const sign = Math.sign(dy);
+                const corner = Math.min(10, Math.max(0, dx / 2), Math.abs(dy) / 3);
+                const d = dx >= 9 && corner > 1
+                    ? `M ${parent.x} ${parent.y + sign * radius} V ${node.y - sign * corner} ` +
+                      `Q ${parent.x} ${node.y} ${parent.x + corner} ${node.y} ` +
+                      `H ${node.x - radius}`
+                    : `M ${parent.x} ${parent.y + sign * radius} V ${node.y - sign * radius}`;
+                const path = document.createElementNS(ns, 'path');
+                path.setAttribute('class', 'ph-pt-chain-edge');
+                path.setAttribute('d', d);
+                path.dataset.chainFrom = parent.id;
+                path.dataset.chainTo = node.id;
+                path.dataset.focus = parent.selected || node.selected ? 'true' : 'false';
+                fragment.appendChild(path);
+            }
+            for (const node of nodes.values()) {
+                const dot = document.createElementNS(ns, 'circle');
+                dot.setAttribute('class', 'ph-pt-chain-node');
+                dot.setAttribute('cx', node.x);
+                dot.setAttribute('cy', node.y);
+                dot.setAttribute('r', radius);
+                dot.dataset.chainNodeId = node.id;
+                dot.dataset.current = node.selected ? 'true' : 'false';
+                fragment.appendChild(dot);
+            }
+            svg.replaceChildren(fragment);
+        }
+
+        function scheduleChainConnectors() {
+            if (connectorFrame !== null) return;
+            connectorFrame = requestAnimationFrame(() => {
+                connectorFrame = null;
+                drawChainConnectors();
+            });
+        }
+
+        function closeModal() {
+            const modal = document.getElementById(MODAL_ID);
+            if (!modal || modal.style.display !== 'flex') return;
+            modal.style.display = 'none';
+            document.body.style.overflow = previousOverflow;
+            if (lastTrigger) lastTrigger.setAttribute('aria-expanded', 'false');
+            const focusTarget = previousFocus?.isConnected ? previousFocus : lastTrigger;
+            focusTarget?.focus?.({preventScroll: true});
+            previousFocus = null;
+        }
+
+        // Megnyitaskor a kijelolt hozzaszolas legyen azonnal lathato.
+        // Csak a popup sajat gorgetoelemet mozgatjuk: a forumoldal nem ugrik el,
+        // es a felhasznalo ezutan korlatozas nelkul gorgethet fel vagy le.
+        function revealSelectedChainPost(list) {
+            const selected = list.querySelector('.ph-pt-chain-item[data-selected="true"]');
+            if (!selected) return;
+            const listRect = list.getBoundingClientRect();
+            const selectedRect = selected.getBoundingClientRect();
+            const selectedTop = selectedRect.top - listRect.top + list.scrollTop;
+            // Ha a hozzaszolas nagyobb a lathato resznel, annak az eleje latszodjon.
+            const visibleHeight = Math.min(selectedRect.height, list.clientHeight);
+            list.scrollTop = Math.max(0, selectedTop - (list.clientHeight - visibleHeight) / 2);
+        }
+
+        function openModal(li, trigger) {
+            const modal = ensureModal();
+            const {items, hasMissingParent, direction} = getChain(li);
+            const list = modal.querySelector('#ph-pt-chain-list');
+            // Az ujranyitasnal a regi megfigyelok nem maradhatnak a korabbi
+            // DOM-kartyakon. A csatlakozasok a belso gorgetheto fa reszei.
+            connectorObserver?.disconnect();
+            if (connectorFrame !== null) cancelAnimationFrame(connectorFrame);
+            connectorFrame = null;
+            list.replaceChildren();
+            const tree = document.createElement('div');
+            tree.className = 'ph-pt-chain-tree';
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'ph-pt-chain-connectors');
+            svg.setAttribute('aria-hidden', 'true');
+            svg.setAttribute('focusable', 'false');
+            tree.appendChild(svg);
+            const fragment = document.createDocumentFragment();
+            for (const item of items) fragment.appendChild(makePostCard(item));
+            tree.appendChild(fragment);
+            list.appendChild(tree);
+            modal.querySelector('#ph-pt-chain-title').textContent = `Hozzászólás-lánc · #${li.dataset.id}`;
+            const ancestorCount = items.filter(item => item.role === 'parent').length;
+            const replyCount = items.length - ancestorCount - 1;
+            modal.querySelector('#ph-pt-chain-count').textContent =
+                `${items.length} hozzászólás · ${ancestorCount} előzmény · ${replyCount} válasz · ${direction === 'd' ? 'csökkenő' : 'növekvő'} sorrend`;
+            modal.querySelector('#ph-pt-chain-hint').textContent = hasMissingParent
+                ? 'Korábbi előzmény másik oldalon lehet. Csak a betöltött hozzászólások láthatók.'
+                : 'Csak az aktuális oldalon betöltött hozzászólások láthatók.';
+            previousOverflow = document.body.style.overflow;
+            previousFocus = document.activeElement;
+            if (lastTrigger && lastTrigger !== trigger) lastTrigger.setAttribute('aria-expanded', 'false');
+            lastTrigger = trigger;
+            trigger.setAttribute('aria-expanded', 'true');
+            document.body.style.overflow = 'hidden';
+            modal.style.display = 'flex';
+            list.scrollTop = 0;
+            revealSelectedChainPost(list);
+            drawChainConnectors();
+            // Képek, betűkészletek és mobilos méretváltás esetén a fa
+            // csomópontjai elmozdulhatnak: a vonalakat a méretükhöz igazítjuk.
+            if (typeof ResizeObserver === 'function') {
+                connectorObserver = new ResizeObserver(scheduleChainConnectors);
+                connectorObserver.observe(tree);
+                tree.querySelectorAll('.ph-pt-chain-item').forEach(card => connectorObserver.observe(card));
+            }
+            document.fonts?.ready?.then(scheduleChainConnectors);
+            modal.querySelector('[data-chain-close]')?.focus({preventScroll: true});
+        }
+
+        // Az iframe nélküli beágyazott tartalomképek a betöltés után is
+        // változtathatják a kártyamagasságot. A capture esemény nem görget.
+        document.addEventListener('load', event => {
+            if (event.target?.closest?.(`#${MODAL_ID} .ph-pt-chain-tree`)) {
+                scheduleChainConnectors();
+            }
+        }, true);
+        window.addEventListener('resize', scheduleChainConnectors);
+
+        // Eseménydelegálás: az AJAX-szal betöltött hozzászólások is működnek.
+        document.addEventListener('click', event => {
+            const chainButton = event.target.closest('.ph-pt-chain-link');
+            if (chainButton) {
+                event.preventDefault();
+                event.stopPropagation();
+                const post = chainButton.closest('li[data-id]');
+                if (post) openModal(post, chainButton);
+                return;
+            }
+            const jump = event.target.closest(`#${MODAL_ID} [data-chain-jump]`);
+            if (jump) {
+                const target = document.querySelector(`li[data-id="${jump.dataset.chainJump}"]`);
+                closeModal();
+                // Az aktuális hash újrakattintása önmagában nem görget.
+                if (location.hash === `#msg${jump.dataset.chainJump}` && target) {
+                    requestAnimationFrame(() => target.scrollIntoView({behavior: 'smooth', block: 'start'}));
+                }
+            }
+        }, true);
+
+        document.addEventListener('keydown', event => {
+            const modal = document.getElementById(MODAL_ID);
+            if (modal?.style.display !== 'flex') return;
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                closeModal();
+            } else if (event.key === 'Tab') {
+                const nodes = [...modal.querySelectorAll('a[href], button:not([disabled])')]
+                    .filter(el => el.getClientRects().length);
+                if (!nodes.length) return;
+                const first = nodes[0], last = nodes[nodes.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            }
+        }, true);
+
+        function attachChainLinks() {
+            document.querySelectorAll('li[data-id] .message-head-btns').forEach(opts => {
+                if (qs(opts, '.ph-pt-chain-link')) {
+                    const existing = qs(opts, '.ph-pt-chain-link');
+                    existing.title = 'Hozzászólás-lánc megtekintése';
+                    existing.setAttribute('aria-label', 'Hozzászólás-lánc megtekintése');
+                    existing.setAttribute('aria-haspopup', 'dialog');
+                    if (!existing.hasAttribute('aria-expanded')) existing.setAttribute('aria-expanded', 'false');
+                    return;
+                }
+                const button = document.createElement('a');
+                button.className = 'ph-pt-chain-link message-btn';
+                button.href = 'javascript:;';
+                button.role = 'button';
+                button.title = 'Hozzászólás-lánc megtekintése';
+                button.setAttribute('aria-label', 'Hozzászólás-lánc megtekintése');
+                button.setAttribute('aria-haspopup', 'dialog');
+                button.setAttribute('aria-expanded', 'false');
+                button.innerHTML = '<span class="fas fa-link fa-fw"></span><span class="ph-pt-chain-text d-none d-sm-inline">Lánc</span>';
+                opts.prepend(button);
+            });
+        }
+        attachChainLinks();
+        // Csak a hozzászóláslisták változására reagálunk, a popup tartalmára nem.
+        const observer = new MutationObserver(records => {
+            if (records.some(record => [...record.addedNodes].some(node =>
+                node.nodeType === Node.ELEMENT_NODE &&
+                (node.matches?.('li[data-id], .message-head-btns') || node.querySelector?.('li[data-id] .message-head-btns, .message-head-btns'))))) {
+                attachChainLinks();
+            }
+        });
+        observer.observe(document.body, {childList: true, subtree: true});
     }
 
     function linkRedirect() {
@@ -5064,10 +5652,10 @@
                 flex: none !important;
                 float: none !important;
             }
-            /* A felhasználó saját színei, a lánc és a #msg-kiemelés elsőbbséget élveznek. */
+            /* A felhasználó saját színei és a #msg-kiemelés elsőbbséget élveznek. */
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) > .message > .message-body:not(
                 .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author,
-                .ph-pt-focus-reply, .ph-pt-chain, .hash-highlight
+                .ph-pt-focus-reply, .hash-highlight
             ) {
                 background-color: var(--ph-tv-card-body) !important;
             }
