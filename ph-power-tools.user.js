@@ -142,6 +142,7 @@
         linkRedirect: true,
         msgAnchorHighlight: true,
         offHider: true,
+        messageChainPopup: true,
         wideView: true,
         threadView: true,
         modernView: true,
@@ -167,7 +168,7 @@
         },
         filtering: {
             label: 'Szűrés',
-            keys: ['offHider', 'hideUsers'],
+            keys: ['offHider', 'hideUsers', 'messageChainPopup'],
         },
         interaction: {
             label: 'Interakció',
@@ -181,6 +182,7 @@
         linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
         msgAnchorHighlight: 'Az URL-ben megadott #msg hozzászóláshoz görget és kiemeli azt. Színek a 🎨 menüben.',
         offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
+        messageChainPopup: 'A Lánc gombbal felugró ablakban megtekintheted a hozzászólás előzményeit és válaszait.',
         wideView: 'Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.',
         threadView: 'Reddit-szerű válaszfa folytonos, kiemelhető ágvonalakkal és összecsukható hozzászólásokkal. A Thread nézet gomb lenyíló menüjében minden ág összecsukható vagy kibontható.',
         modernView: 'A hozzászólásokat a Thread nézet kártyás stílusában jeleníti meg, időrendi sorrendben, behúzások és válaszfa-vonalak nélkül. A hozzászóláslista feletti Modern nézet gombbal kapcsolható.',
@@ -201,6 +203,7 @@
             linkRedirect: 'Link átirányítás',
             msgAnchorHighlight: 'Üzenet kiemelés',
             offHider: 'OFF hozzászólások elrejtése',
+            messageChainPopup: 'Hozzászólás-lánc popup',
             wideView: 'Széles nézet',
             threadView: 'Thread nézet',
             modernView: 'Modern nézet',
@@ -3067,7 +3070,7 @@
         const modules = [
             { name: "messageScroller", when: () => isTema, fn: messageScroller },
             { name: "colorize", when: () => isTema && savedSettings.colorize, fn: colorize },
-            { name: "messageChainPopup", when: () => isTema, fn: messageChainPopup },
+            { name: "messageChainPopup", when: () => isTema && savedSettings.messageChainPopup, fn: messageChainPopup },
             { name: "markNewPosts", when: () => isTema && savedSettings.markNewPosts, fn: markNewPosts },
             { name: "linkRedirect", when: () => isTema && savedSettings.linkRedirect, fn: linkRedirect },
             { name: "msgAnchorHighlight", when: () => isTema && savedSettings.msgAnchorHighlight, fn: msgAnchorHighlight },
