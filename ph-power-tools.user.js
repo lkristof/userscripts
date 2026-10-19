@@ -3289,6 +3289,13 @@
         const CHAIN_PAGE_SIZE = 200;
         const MAX_REPLY_PAGES_PER_CLICK = 3;
         const MAX_ANCESTOR_PAGES_PER_CLICK = 3;
+        // A korabbi session.pageCache csak a popup egyetlen megnyitasara elt.
+        // Az egyazon bongeszo-oldalon megnyitott Lánc popupok kozott is megosztjuk
+        // a mar letoltott 200-as oldalakat. A cache csak memoriaban letezik:
+        // lapfrissiteskor torlodik; lejar es LRU alapon korlatozott meretu.
+        const CHAIN_CACHE_TTL_MS = 10 * 60 * 1000;
+        const CHAIN_CACHE_MAX_PAGES = 10;
+        const chainPageCache = new Map();
 
         injectStyleOnce(STYLE_ID, `
             #${MODAL_ID}.ph-pt-modal {
@@ -3998,32 +4005,64 @@
             return {lis, finalUrl: finalUrl.href};
         }
 
-        // Minden megnyitott 200-as lapot eltesszuk a popup munkameneteben.
-        // Igy egyetlen lekeres eleg az ugyanazon oldalra eso szulokhoz es
-        // valaszokhoz, es a ket betoltogomb sem keri le ujra ugyanazt a lapot.
-        // Csak az oldalhoz tartozo ID-kat vesszuk at: mas linkelt hozzaszolasok
-        // es fejlecelemek nem kerulhetnek a szobajoheto lancba.
+        // Az elozmenyek es valaszok ugyanazokat a 200-as oldalakat hasznaljak.
+        // Az elso sikeres lekeres utan a tartalmat a kovetkezo popupmegnyitasoknal
+        // is ujra felhasznaljuk, a helyi session remotePosts terkepet feltoltve.
+        // A cache-kulcs tartalmazza a domaint es temat, a requestedLast pedig
+        // megkulonbozteti a reszleges utolso oldalt a teljes 200-as tartomanytol.
+        function rememberChainPage(key, page) {
+            const now = Date.now();
+            for (const [oldKey, oldPage] of chainPageCache) {
+                if (now - oldPage.savedAt > CHAIN_CACHE_TTL_MS) chainPageCache.delete(oldKey);
+            }
+            chainPageCache.delete(key);
+            chainPageCache.set(key, page);
+            while (chainPageCache.size > CHAIN_CACHE_MAX_PAGES) {
+                chainPageCache.delete(chainPageCache.keys().next().value);
+            }
+        }
+
         async function loadChainPage(session, first, last) {
-            // Egy rovidebb utolso oldal es a teljes 200-as oldal ugyanannak
-            // az ID-blokknak szamit, igy az elozmeny- es valaszkereses osztozik rajta.
-            const key = String(chainPageRange(first).first);
-            if (session.pageCache.has(key)) return {...session.pageCache.get(key), cached: true};
-            const url = topicPageUrl(session.topicBase, first, last);
-            const {lis, finalUrl} = await fetchTopicPosts(session, url);
-            const posts = lis.filter(li => {
-                const id = Number(li.dataset.id);
-                return id >= first && id <= last;
-            });
-            for (const li of posts) {
+            const key = `${location.origin}${session.topicBase}${chainPageRange(first).first}`;
+            const now = Date.now();
+            // A globalis cache-ben lehet ujabb / teljesebb valtozat is,
+            // mint az adott popup korabbi roviditett tartomanya.
+            const usable = [session.pageCache.get(key), chainPageCache.get(key)]
+                .filter(entry => entry && now - entry.savedAt <= CHAIN_CACHE_TTL_MS
+                    && entry.requestedLast >= last);
+            const pageFromCache = usable.sort((a, b) => b.requestedLast - a.requestedLast)[0];
+            let page = pageFromCache || null;
+            // Egy 200-as lap teljes lekerese fedezhet rovidebb intervallumot is,
+            // de a korabbi rovid oldal nem valthat ki egy kesobbi teljes oldalt.
+            const cached = !!page;
+            if (!page) {
+                const url = topicPageUrl(session.topicBase, first, last);
+                const {lis, finalUrl} = await fetchTopicPosts(session, url);
+                if (session !== chainSession || session.controller?.signal.aborted) {
+                    throw new DOMException('Megszakitott betoltes', 'AbortError');
+                }
+                const posts = lis.filter(li => {
+                    const id = Number(li.dataset.id);
+                    return id >= first && id <= last;
+                });
+                page = {posts, finalUrl, requestedLast: last, savedAt: Date.now()};
+                rememberChainPage(key, page);
+            } else {
+                // LRU: a nemreg hasznalt lap maradjon legtovabb a memoriaban.
+                rememberChainPage(key, page);
+            }
+            session.pageCache.set(key, page);
+            // A levalasztott DOM csomopontoket MINDEN uj munkamenethez atvesszuk.
+            // Nem eleg a page objektumot visszaadni: a getChain a remotePosts-ot olvassa.
+            for (const li of page.posts) {
                 const id = li.dataset.id;
-                if (!session.remotePosts.has(id) && !session.localIds.has(id)) {
+                const number = Number(id);
+                if (number >= first && number <= last && !session.remotePosts.has(id) && !session.localIds.has(id)) {
                     session.remotePosts.set(id, li);
-                    session.remoteUrls.set(id, finalUrl);
+                    session.remoteUrls.set(id, page.finalUrl);
                 }
             }
-            const page = {posts, finalUrl};
-            session.pageCache.set(key, page);
-            return {...page, cached: false};
+            return {posts: page.posts, finalUrl: page.finalUrl, cached};
         }
 
         // Az elozmeny ID-ja ismert: eloszor a teljes, ot tartalmazo 200-as
@@ -4252,6 +4291,8 @@
                 localIds,
                 remotePosts: new Map(),
                 remoteUrls: new Map(),
+                // Csak e munkamenet gyors hozzaferese; az oldalak globalis
+                // chainPageCache-je tuleli a popup bezarasat is.
                 pageCache: new Map(),
                 cursor: maxId,
                 latestId: onLatestPage ? maxId : (latestFromPager > maxId ? latestFromPager : Infinity),
