@@ -3388,22 +3388,65 @@
                 padding: 10px 11px;
                 border-bottom: 1px solid var(--ph-ui-border);
             }
+            /* A popup uj img-elemet keszit, ezert az eredeti .user-face
+               kepkerete nem kerul at ra. Itt egyszer, a kepTARTOn rajzoljuk meg
+               a Modern/Thread fejlecben lathato vekony, lekerekitett keretet;
+               a kep sajat CSS-szegelyet tiltjuk, hogy ne lehessen dupla. */
             #${MODAL_ID} .ph-pt-chain-avatar {
-                display: flex;
-                flex: 0 0 34px;
-                width: 34px;
-                height: 34px;
+                display: inline-flex !important;
+                flex: 0 0 40px !important;
+                width: 40px !important;
+                height: 40px !important;
+                min-width: 40px !important;
+                max-width: 40px !important;
+                min-height: 40px !important;
+                max-height: 40px !important;
                 align-items: center;
                 justify-content: center;
+                box-sizing: border-box;
+                margin: 0 !important;
+                padding: 0 !important;
+                position: relative;
                 overflow: hidden;
-                border-radius: 50%;
-                background: var(--ph-ui-soft);
+                border: 0 !important;
+                border-radius: 9px;
+                /* A forum profilkepei (atlatszo PNG-k is) feher alapon jelennek meg. */
+                background: #fff !important;
+            }
+            /* A keret a kepen jelenik meg, de nem veszi el a 40/34 px-es helyet:
+               igy a profilkep merete azonos a Modern/Thread fejlec avatarjaval. */
+            #${MODAL_ID} .ph-pt-chain-avatar::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                z-index: 1;
+                box-sizing: border-box;
+                border: 1px solid color-mix(in srgb, var(--ph-ui-muted) 64%, var(--ph-ui-bg));
+                border-radius: inherit;
+                pointer-events: none;
             }
             #${MODAL_ID} .ph-pt-chain-avatar img {
                 display: block;
-                max-width: 100%;
-                max-height: 100%;
-                object-fit: cover;
+                width: 100% !important;
+                height: 100% !important;
+                max-width: 100% !important;
+                max-height: 100% !important;
+                object-fit: contain;
+                border: 0 !important;
+                padding: 0 !important;
+                border-radius: 9px;
+            }
+            /* Ugyanaz a mobilos torespont (640 px), mint a kartyanezetekben. */
+            @media (max-width: 640px) {
+                #${MODAL_ID} .ph-pt-chain-avatar {
+                    flex-basis: 34px !important;
+                    width: 34px !important;
+                    height: 34px !important;
+                    min-width: 34px !important;
+                    max-width: 34px !important;
+                    min-height: 34px !important;
+                    max-height: 34px !important;
+                }
             }
             #${MODAL_ID} .ph-pt-chain-author {
                 flex: 1 1 auto;
@@ -3597,7 +3640,6 @@
                     margin-left: min(var(--ph-pt-chain-indent, 0px), 66px);
                 }
                 #${MODAL_ID} .ph-pt-chain-item-head { padding: 8px; gap: 7px; }
-                #${MODAL_ID} .ph-pt-chain-avatar { flex-basis: 30px; width: 30px; height: 30px; }
                 #${MODAL_ID} .ph-pt-chain-post-content { padding: 8px; font-size: 12.5px; }
                 #${MODAL_ID} .ph-pt-chain-hint { font-size: 10px; }
             }
@@ -5547,34 +5589,34 @@
                 padding: 0 !important;
                 gap: 7px;
             }
-            /* A szerkesztő fejlécében ugyanaz a kompakt, kerek avatar legyen,
-               mint a normál Modern/Thread hozzászólásoknál. Az IMG eredeti
-               méretét is felül kell írni, nem elegendő az A méretezése. */
+            /* A szerkeszto avatarjanak nincs kulso plusz kerete, hogy
+               a profilkepbe epitett eredeti keret ne duplazodjon. */
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-face {
                 display: inline-flex !important;
-                flex: 0 0 34px !important;
+                flex: 0 0 40px !important;
                 align-items: center;
                 justify-content: center;
                 box-sizing: border-box;
-                width: 34px !important;
-                height: 34px !important;
-                min-width: 34px !important;
-                max-width: 34px !important;
-                min-height: 34px !important;
-                max-height: 34px !important;
+                width: 40px !important;
+                height: 40px !important;
+                min-width: 40px !important;
+                max-width: 40px !important;
+                min-height: 40px !important;
+                max-height: 40px !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 overflow: hidden;
-                border: 1px solid var(--ph-tv-card-edge);
-                border-radius: 50%;
+                border: 0 !important;
+                background: transparent !important;
+                border-radius: 9px;
             }
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-face img {
                 display: block;
                 width: 100% !important;
                 height: 100% !important;
                 max-width: 100% !important;
-                object-fit: cover;
-                border-radius: 50%;
+                object-fit: contain;
+                border-radius: 9px;
             }
             /* Szerkeszto: a nev/rang ugyanazzal a sorkozzel jelenjen meg,
                mint a normal hozzaszolasnal, a forum kompakt modjatol fuggetlenul. */
@@ -5713,13 +5755,13 @@
                     padding: 6px 8px !important;
                 }
                 :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-head-user .user-face {
-                    flex-basis: 29px !important;
-                    min-width: 29px !important;
-                    max-width: 29px !important;
-                    width: 29px !important;
-                    min-height: 29px !important;
-                    max-height: 29px !important;
-                    height: 29px !important;
+                    flex-basis: 34px !important;
+                    min-width: 34px !important;
+                    max-width: 34px !important;
+                    width: 34px !important;
+                    min-height: 34px !important;
+                    max-height: 34px !important;
+                    height: 34px !important;
                 }
             }
             /* Egységes KÉTSOROS fejléc valamennyi képernyőméreten.
@@ -5773,29 +5815,43 @@
             }
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-head-user .user-face {
                 display: inline-flex !important;
-                flex: 0 0 34px !important;
+                flex: 0 0 40px !important;
                 align-items: center;
                 justify-content: center;
                 box-sizing: border-box;
-                width: 34px !important;
-                height: 34px !important;
-                min-width: 34px !important;
-                max-width: 34px !important;
-                min-height: 34px !important;
-                max-height: 34px !important;
+                width: 40px !important;
+                height: 40px !important;
+                min-width: 40px !important;
+                max-width: 40px !important;
+                min-height: 40px !important;
+                max-height: 40px !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 overflow: hidden;
-                border: 1px solid var(--ph-tv-card-edge);
-                border-radius: 50%;
+                border: 0 !important;
+                background: transparent !important;
+                border-radius: 9px;
             }
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-head-user .user-face img {
                 display: block;
                 width: 100% !important;
                 height: 100% !important;
                 max-width: 100% !important;
-                object-fit: cover;
-                border-radius: 50%;
+                object-fit: contain;
+                border-radius: 9px;
+            }
+            /* Mobilon a teljes kep tovabbra is lathato, de az avatar ne
+               szoritssa ossze a szerzot es a hozzaszolasazonositot. */
+            @media (max-width: 640px) {
+                ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-head-user .user-face {
+                    flex-basis: 34px !important;
+                    width: 34px !important;
+                    height: 34px !important;
+                    min-width: 34px !important;
+                    max-width: 34px !important;
+                    min-height: 34px !important;
+                    max-height: 34px !important;
+                }
             }
             /* A nev es a rang mindket forummodban egymas alatt legyen.
                A forum kompakt modja alapbol egy sorba tenne oket. */
