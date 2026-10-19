@@ -3454,24 +3454,51 @@
                 overflow-wrap: anywhere;
                 word-break: normal;
             }
-            /* A popup ugyanazokat a szineket es prioritasokat hasznalja, mint
-               az eredeti uzenettorzs: akcio < sajat/valasz < avatarfokusz.
-               A CSS-valtozokat a bekapcsolt colorize modul allitja elo,
-               igy az egyeni paletta es a vilagos/sotet tema is kovetve van. */
-            #${MODAL_ID} .ph-pt-chain-post-content.ph-pt-akcio {
-                background-color: var(--ph-pt-akcio) !important;
+            /* A szines kartyak a "Kivalasztott hozzaszolas" stilusara epulnek:
+               jobban lathato, de tovabbra is kevert kartyahatter, szines szegely es vastag bal el.
+               A tartalom nem kap kulon kitoltoszint. A szinprioritas az
+               eredeti colorize szabalyait koveti: akcio < sajat/valasz < fokusz. */
+            #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content.ph-pt-akcio) {
+                --ph-pt-card-mark: var(--ph-pt-akcio);
             }
-            #${MODAL_ID} .ph-pt-chain-post-content.ph-pt-own {
-                background-color: var(--ph-pt-own) !important;
+            #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content.ph-pt-own) {
+                --ph-pt-card-mark: var(--ph-pt-own);
             }
-            #${MODAL_ID} .ph-pt-chain-post-content.ph-pt-reply {
-                background-color: var(--ph-pt-reply) !important;
+            #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content.ph-pt-reply) {
+                --ph-pt-card-mark: var(--ph-pt-reply);
             }
-            #${MODAL_ID} .ph-pt-chain-post-content.ph-pt-focus-author {
-                background-color: var(--ph-pt-focus-author) !important;
+            #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content.ph-pt-focus-author) {
+                --ph-pt-card-mark: var(--ph-pt-focus-author);
             }
-            #${MODAL_ID} .ph-pt-chain-post-content.ph-pt-focus-reply {
-                background-color: var(--ph-pt-focus-reply) !important;
+            #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content.ph-pt-focus-reply) {
+                --ph-pt-card-mark: var(--ph-pt-focus-reply);
+            }
+            #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content:is(
+                .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
+            )) {
+                --ph-pt-card-tint: color-mix(in srgb, var(--ph-pt-card-mark) 70%, var(--ph-ui-bg));
+                --ph-pt-card-edge: color-mix(in srgb, var(--ph-pt-card-mark) 85%, var(--ph-ui-fg));
+                border-color: color-mix(in srgb, var(--ph-pt-card-edge) 62%, var(--ph-ui-border));
+                border-left: 4px solid var(--ph-pt-card-edge);
+                background: var(--ph-pt-card-tint);
+            }
+            #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content:is(
+                .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
+            )) > .ph-pt-chain-item-head {
+                background: color-mix(in srgb, var(--ph-pt-card-mark) 32%, var(--ph-ui-bg));
+            }
+            #${MODAL_ID} .ph-pt-chain-item:has(> .ph-pt-chain-post-content:is(
+                .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
+            )) > .ph-pt-chain-post-content {
+                background-color: transparent !important;
+            }
+            /* A kivalasztott kartyat tovabbra is az eredeti kek akcentus jeloli,
+               a sajat/valasz/akcio/fokusz kartyaszin ettol meg ervenyesul. */
+            #${MODAL_ID} .ph-pt-chain-item[data-selected="true"]:has(> .ph-pt-chain-post-content:is(
+                .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
+            )) {
+                border-color: var(--ph-ui-accent);
+                border-left-color: var(--ph-ui-accent);
             }
             #${MODAL_ID} .ph-pt-chain-post-content > :first-child { margin-top: 0 !important; }
             #${MODAL_ID} .ph-pt-chain-post-content > :last-child { margin-bottom: 0 !important; }
@@ -5694,6 +5721,45 @@
                 .ph-pt-focus-reply, .hash-highlight
             ) {
                 background-color: var(--ph-tv-card-body) !important;
+            }
+            /* Csak a Modern es Thread kartyan valtozik a szinezes megjelenese:
+               az eredeti forumnezet teljes test-szinezesehez nem nyulunk.
+               A kartyara ugyanaz a palettaszin es sorrend kerul, mint a popupban. */
+            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize.ph-pt-akcio) {
+                --ph-pt-card-mark: var(--ph-pt-akcio);
+            }
+            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize.ph-pt-own) {
+                --ph-pt-card-mark: var(--ph-pt-own);
+            }
+            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize.ph-pt-reply) {
+                --ph-pt-card-mark: var(--ph-pt-reply);
+            }
+            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize.ph-pt-focus-author) {
+                --ph-pt-card-mark: var(--ph-pt-focus-author);
+            }
+            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize.ph-pt-focus-reply) {
+                --ph-pt-card-mark: var(--ph-pt-focus-reply);
+            }
+            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize:is(
+                .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
+            )) {
+                --ph-pt-card-tint: color-mix(in srgb, var(--ph-pt-card-mark) 70%, var(--ph-ui-bg));
+                --ph-pt-card-edge: color-mix(in srgb, var(--ph-pt-card-mark) 85%, var(--ph-ui-fg));
+                border-color: color-mix(in srgb, var(--ph-pt-card-edge) 62%, var(--ph-tv-card-edge)) !important;
+                border-left: 4px solid var(--ph-pt-card-edge) !important;
+                background: var(--ph-pt-card-tint) !important;
+            }
+            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize:is(
+                .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
+            )) > .message-head:not(.hash-highlight) {
+                background: color-mix(in srgb, var(--ph-pt-card-mark) 32%, var(--ph-tv-card-head)) !important;
+            }
+            /* A regi !important hatterszineket csak a ket kartyas nezetben irjuk
+               felul. A #msg-kiemeles a fejlecen tovabbra is elsobbseget elvez. */
+            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message > .message-body.ph-pt-colorize:is(
+                .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
+            ) {
+                background-color: var(--ph-pt-card-tint) !important;
             }
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-content,
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) .message-content-replied {
