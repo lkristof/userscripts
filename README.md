@@ -48,27 +48,53 @@ A script többek között a `GM_xmlhttpRequest` API-t is használja, ezért az e
 ### 📦 PH Power Tools összetevői
 
 > [!NOTE]
-> A modulok a fejlécben lévő **PH Power Tools** menüből kapcsolhatók. A kapcsolók módosítása **Mentés** után, az oldal újratöltésével lép életbe. A széles, az OFF és a Thread nézetnek a témán belül külön állapotkapcsolója is van.
+> A modulok a fejlécben lévő **PH Power Tools** menüből kapcsolhatók. A kapcsolók módosítása **Mentés** után, az oldal újratöltésével lép életbe. A széles, az OFF, a Modern és a Thread nézetnek a témán belül külön állapotkapcsolója is van.
 
-| Funkció                             | Rövid leírás                                                                                                                                                            |
-|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Hozzászólások színezése**         | Saját, neked válaszoló és `#akció` / `#akcio` jelölésű hozzászólások, avatarra kattintva szerzőfókusz, valamint hozzászóláslánc-kiemelés.                               |
-| **Link átirányítás**                | A támogatott PH! lapcsaládon belüli hivatkozások domainjét az aktuális oldalhoz igazítja; például a cikkek és hírek kivételek.                                          |
-| **Üzenet kiemelés**                 | A `#msg12345` hivatkozáshoz görget, kiemeli a hozzászólást (szükség esetén a legközelebbit); a hozzászólás fejlécén dupla kattintással a `#msg` hivatkozás beállítható. |
-| **OFF hozzászólások elrejtése**     | Az `[OFF]` hozzászólások elrejtése/megjelenítése a témaoldali gombbal.                                                                                                  |
-| **Széles nézet**                    | Szélesebb fórumelrendezés, a tartalom jobb szélének húzásával állítható oszlopszélesség és dupla kattintással visszaállítható automatikus méret.                        |
-| **Thread nézet**                    | Reddit-szerű, válaszkapcsolat alapján rendezett hozzászólásfa; vizuális ágvonalak, egyedi ág-összecsukás és **Összecsuk mind / Kibont mind** menü.                      |
-| **Billentyűzetes navigáció**        | Nyilakkal lépkedés, válaszelőzmény követése `R`-rel, visszalépés `Shift+R`-rel. A billentyűk részletei lent találhatók.                                                 |
-| **Felhasználók elrejtése**          | Szerzők hozzászólásainak elrejtése, ideiglenes felfedése, valamint a rejtett felhasználók listájának szerkesztése.                                                      |
-| **Új hozzászólás jelölése**         | Témánként tárolja a legutóbb látott hozzászólásazonosítót, jelöli az új hozzászólásokat, és gombot ad az **első olvasatlanhoz ugráshoz**.                               |
-| **Extra smiley-k**                  | Kiegészítő smiley-k és emojik a hozzászólás- és privátüzenet-szerkesztőben.                                                                                             |
-| **kek.sh képfeltöltő**              | API-kulccsal képfeltöltés a szerkesztőből, kép/link beszúrása, galéria **rács- és listanézetben**, törlés és opcionális Gist-szinkron.                                  |
-| **Nyereményjáték válasz ellenőrző** | A `/nyeremenyjatek/` oldalon a játék lezárása után ellenőrzi a válaszokat, jelöli az eredményt és kiemeli a felhasználót a nyerteslistán.                               |
-| **Fix oldalsávok**                  | Görgetéskor látható oldalsávok; az aktuális téma kiemelése az oldalsáv és a mobil/tablet fejléc témalistájában.                                                         |
-| **Mobil navigációs panel**          | Húzható, összecsukható lebegő panel a hozzászólások és oldalak közti lépkedéshez; megjegyzi az oldalt és pozíciót.                                                      |
-| **Témalisták rendezése**            | A **„Kedvenc fórumtémáim”** és **„Itt szóltam hozzá”** listát az új hozzászólások száma szerint, csökkenő sorrendbe rendezi.                                            |
+| Funkció                             | Rövid leírás                                                                                                                                                                                                      |
+|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Hozzászólások színezése**         | Saját, neked válaszoló és `#akció` / `#akcio` jelölésű hozzászólások színezése, valamint szerzőfókusz a profilképre kattintva. A Lánc popup ettől független modul.                                                |
+| **Link átirányítás**                | A támogatott PH! lapcsaládon belüli fórumhivatkozásokat az aktuális domainhez igazítja; például a cikkek és hírek kivételek.                                                                                      |
+| **Üzenet kiemelés**                 | A `#msg12345` hivatkozáshoz görget, és **csak a hozzászólás fejlécét** színezi (hiányzó azonosítónál a legközelebbit, rejtett szerzőnél a „Rejtett” sávot is). A fejléc dupla kattintással aktuálisnak jelölhető. |
+| **OFF hozzászólások elrejtése**     | Az `[OFF]` hozzászólások elrejtése/megjelenítése a témaoldali gombbal; Modern és Thread nézetben animált átmenettel. Az elrejtett OFF hozzászólásokat a navigáció átugorja.                                       |
+| **Hozzászólás-lánc popup**          | A hozzászólás **Lánc** gombjára felugró beszélgetésnézet nyílik: előzmények, válaszágak, teljes szöveg, válaszvonalak és az eredeti hozzászólásokra ugrás. Külön kapcsolható a **Szűrés** menüben.                |
+| **Széles nézet**                    | Szélesebb fórumelrendezés, a tartalom jobb szélének húzásával állítható oszlopszélesség és dupla kattintással visszaállítható automatikus méret.                                                                  |
+| **Thread nézet**                    | Reddit-szerű hozzászólásfa válaszkapcsolatokkal, vizuális ágvonalakkal, egyedi ág-összecsukással és **Összecsuk mind / Kibont mind** menüvel.                                                                     |
+| **Modern nézet**                    | A Thread nézet kártyás stílusa **időrendi sorrendben**, válaszfa-behúzások és ágvonalak nélkül. Egységes kártyák a hozzászólásokhoz, a témaösszefoglalóhoz, a kiemelt hozzászólásokhoz és a szerkesztőhöz.        |
+| **Billentyűzetes navigáció**        | Hozzászólások közti léptetés a nyilakkal; válaszelőzmény követése `R`-rel és visszalépés `Shift+R`-rel. A rejtett OFF hozzászólásokat kihagyja.                                                                   |
+| **Felhasználók elrejtése**          | Szerzők hozzászólásainak elrejtése, ideiglenes felfedése, a rejtett felhasználók listájának szerkesztése; Modern/Thread nézetben animált összecsukás.                                                             |
+| **Új hozzászólás jelölése**         | Témánként megjegyzi a legutóbb látott hozzászólásazonosítót, jelöli az új hozzászólásokat, és gombot ad az **első olvasatlanhoz ugráshoz**.                                                                       |
+| **Extra smiley-k**                  | Kiegészítő smiley-k és emojik a hozzászólás- és privátüzenet-szerkesztőben.                                                                                                                                       |
+| **kek.sh képfeltöltő**              | API-kulccsal képfeltöltés a szerkesztőből, kép/link beszúrása, galéria **rács- és listanézetben**, törlés és opcionális Gist-szinkron.                                                                            |
+| **Nyereményjáték válasz ellenőrző** | A `/nyeremenyjatek/` oldalon a játék lezárása után ellenőrzi a válaszokat, jelöli az eredményt és kiemeli a felhasználót a nyerteslistán.                                                                         |
+| **Fix oldalsávok**                  | Görgetéskor látható oldalsávok; az aktuális téma kiemelése az oldalsávban és a mobil/tablet fejléc témalistájában.                                                                                                |
+| **Mobil navigációs panel**          | Kompakt, áttetsző, húzható és összecsukható lebegő panel hozzászólás- és oldalléptetéssel, közös `R` / `Shift+R` válaszelőzménnyel és görgetéskövetéssel; megjegyzi a pozícióját.                                 |
+| **Témalisták rendezése**            | A **„Kedvenc fórumtémáim”** és **„Itt szóltam hozzá”** listát az új hozzászólások száma szerint, csökkenő sorrendbe rendezi.                                                                                      |
+
+A modulok három menücsoportba rendezve érhetők el: **Megjelenés**, **Szűrés** és **Interakció**.
 
 A menü további, nem modulkapcsolóhoz kötött funkciói a **színek testreszabása** (🎨), a **beállítások exportálása/importálása** és a **kulcsok / Gist-szinkron kezelése** (⚙️).
+
+### 🔗 Hozzászólás-lánc popup
+
+A hozzászólás fejlécében lévő **Lánc** gombra kattintva a korábbi színes lánckiemelés helyett külön felugró ablak nyílik. A popup az adott hozzászólás **előzményeit és az abból induló válaszágakat** jeleníti meg, a Thread nézethez hasonló összekötő vonalakkal.
+
+- A kártyákon megjelenik a **szerző, profilkép, hozzászólásszám és szöveg**, valamint a **rang és időpont**, ha az oldalon elérhető.
+- A **„Kiválasztott hozzászólás”** jelölés megmarad; a többi bejegyzést nem zavarják külön „Előzmény” vagy „Válasz” címkék.
+- Megnyitáskor a lista a **kiválasztott hozzászóláshoz görget**, utána szabadon böngészhető felfelé és lefelé.
+- A popup a fórum **növekvő vagy csökkenő** hozzászólássorrendjét követi.
+- A **`#12345` hozzászólásszám** kattintható, és az eredeti bejegyzéshez visz.
+- Bezárható az **X** gombbal, az **Esc** billentyűvel vagy a háttérre kattintva.
+
+> [!IMPORTANT]
+> A popup **csak az aktuális oldalon betöltött hozzászólásokat** tudja megjeleníteni. A másik oldalra eső előzmények vagy válaszok nem töltődnek be automatikusan.
+
+### 🗂️ Modern és Thread nézet
+
+A **Modern nézet** a fórum hozzászólásait időrendi sorrendben, egységes, lekerekített kártyákként jeleníti meg. Nincsenek válaszfa-behúzások és összekötő vonalak; a témaösszefoglaló és a rögzített hozzászólások is illeszkednek a kártyás kialakításhoz.
+
+A **Thread nézet** a válaszkapcsolatok szerinti fát mutatja, összekötő vonalakkal és összecsukható ágakkal. Mindkét nézetben egységes a hozzászólásszerkesztő, valamint a szerző neve/rangja és a válaszhivatkozások megjelenítése **normál és kompakt fórumelrendezésben** is. Az OFF hozzászólások és a rejtett felhasználók animáltan jeleníthetők meg vagy rejthetők el.
+
+A nézeteket a **hozzászóláslista feletti gombokkal** kapcsolhatod; a Modern és a Thread nézet egymást kizáró megjelenítési módok.
 
 ---
 
@@ -82,7 +108,7 @@ A menü további, nem modulkapcsolóhoz kötött funkciói a **színek testresza
 | `R` | Ugrás arra a hozzászólásra, amelyre az aktuális hozzászólás válaszolt |
 | `Shift+R` | Visszalépés az `R`-rel bejárt válaszelőzményben |
 
-A billentyűzetes navigáció szövegbevitel közben és nyitott képgalériánál nem lép működésbe. Az `R`-rel bejárt útvonal a böngésző munkamenetében tárolódik, nem kerül a Gistbe.
+A billentyűzetes navigáció szövegbevitel közben és nyitott képgalériánál nem lép működésbe. Ha az OFF hozzászólások el vannak rejtve, a billentyűzetes és a mobil navigáció is átugorja őket. A mobilpanel és az `R` / `Shift+R` billentyűk közös válaszelőzményt használnak. Az `R`-rel bejárt útvonal a böngésző munkamenetében tárolódik, nem kerül a Gistbe.
 
 ---
 
@@ -90,7 +116,7 @@ A billentyűzetes navigáció szövegbevitel közben és nyitott képgalérián�
 
 A PH Power Tools menü **fájl/export ikonjára** kattintva egy `.json` fájlba mentheted a beállításokat, vagy korábbi mentést állíthatsz vissza.
 
-- **Alapértelmezett export:** modulkapcsolók, egyéni színpaletták, rejtett felhasználók, OFF / széles / Thread nézetállapot, széles nézet beállított szélessége és a mobilnavigáció helyi pozíciója.
+- **Alapértelmezett export:** modulkapcsolók, egyéni színpaletták, rejtett felhasználók, OFF / széles / Modern / Thread nézetállapot, széles nézet beállított szélessége és a mobilnavigáció helyi pozíciója.
 - **„Olvasottsági adatok és kek.sh képgaléria mentése is”**: külön bekapcsolható. Tartalmazza a témánkénti olvasottsági azonosítókat, a galériát és a törlés/visszaállítás szinkronizációs adatait is.
 - **„API-kulcsok és Gist-kapcsolati adatok mentése is”**: külön, alapból kikapcsolt opció. A GitHub-token, Gist ID, fájlnév és kek.sh API-kulcs **titkosítatlanul** kerül a JSON-ba.
 
@@ -114,7 +140,7 @@ A GitHub Gist-szinkron **opcionális**, és a következőket tartja szinkronban 
 - témánkénti utoljára látott hozzászólásazonosítók
 - kek.sh galériaadatai, törlési jelölések és galériavisszaállítási állapotok
 
-**Nem szinkronizálódnak** az egyedi OFF / széles / Thread nézetállapotok, a széles nézet kézzel beállított szélessége, a mobilnavigáció pozíciója, a billentyűzetes válaszelőzmények, valamint a GitHub- és kek.sh-hozzáférési kulcsok. Ezeket szükség esetén a fenti **JSON-exporttal** lehet menteni (a kulcsok külön opcióval).
+**Nem szinkronizálódnak** az egyedi OFF / széles / Modern / Thread nézetállapotok, a széles nézet kézzel beállított szélessége, a mobilnavigáció pozíciója, a billentyűzetes válaszelőzmények, valamint a GitHub- és kek.sh-hozzáférési kulcsok. Ezeket szükség esetén a fenti **JSON-exporttal** lehet menteni (a kulcsok külön opcióval).
 
 #### 🪪 1. GitHub-token létrehozása
 
@@ -184,15 +210,13 @@ Ezután a script a Gistből olvas, a módosított, szinkronizált adatokat pedig
 [![colorize-avatar-focus-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-light.jpg)
 [![colorize-avatar-focus-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark.jpg)
 
-### hozzászólás lánc (🔗 Lánc-ra kattintva)
+### hozzászólás-lánc popup (🔗 Lánc)
 
-[![colorize-chain-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-light.jpg)
-[![colorize-chain-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-dark.jpg)
+A **Lánc** gomb az aktuális oldalon elérhető hozzászólásláncot felugró, görgethető ablakban mutatja, válaszvonalakkal. A korábbi láncszínezésről készült képek már nem az aktuális működést ábrázolják.
 
-### `#msgXXXX` kiemelés
+### `#msgXXXX` fejléc-kiemelés
 
-[![msg-anchor-highlight-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-light.jpg)
-[![msg-anchor-highlight-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-dark.jpg)
+A kiválasztott hozzászólásnak **csak a fejléce** kapja a beállított kiemelőszínt; összecsukott, rejtett szerzőnél a látható „Rejtett” sáv is. A hozzászólástörzs eredeti háttere megmarad.
 
 ### színek testreszabása
 [![colorize-config](https://raw.githubusercontent.com/lkristof/userscripts/main/img/colorize-config-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/colorize-config.jpg)
@@ -207,6 +231,10 @@ Ezután a script a Gistből olvas, a módosított, szinkronizált adatokat pedig
 ### thread nézet
 [![thread-view-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-light.jpg)
 [![thread-view-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-dark.jpg)
+
+### modern nézet
+
+Időrendi kártyanézet a Thread stílusával, válaszfa-vonalak nélkül. A normál és kompakt fórumelrendezésben egységes fejlécet, rangmegjelenítést és válaszhivatkozásokat használ.
 
 ### felhasználó rejtése (elrejtés, rejtve, felfedve, feloldás, menü)
 [![dropdown-hide](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-dropdown-hide-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-dropdown-hide.jpg)
