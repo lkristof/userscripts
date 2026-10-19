@@ -3270,8 +3270,9 @@
     }
 
     // A Lánc funkció a beállított színezéstől független beszélgetés-előnézet.
-    // Csak az aktuális oldalon betöltött szülőket és leszármazottakat mutatja,
-    // pontosan a korábbi lánckiemelés hatókörében (nem gyűjti a testvérágakat).
+    // Eloszor a betoltott hozzaszolasokat mutatja; a hianyzo elozmenyeket es
+    // kesobbi valaszokat igeny szerint mas temaoldalakrol is hozza tudja adni.
+    // Csak a kivalasztott hozzaszolas sajat agait jeleniti meg (testveragat nem).
     function messageChainPopup() {
         const STYLE_ID = 'ph-pt-chain-popup-style';
         const MODAL_ID = 'ph-pt-chain-modal';
@@ -3281,6 +3282,13 @@
         let previousFocus = null;
         let connectorObserver = null;
         let connectorFrame = null;
+        let chainSession = null;
+        // A forum URL-je szabadon kerheto 200-as, 1-tol indulva illesztett
+        // hsz-tartomanyt tamogat (pl. #89605 -> hsz_89601-89800.html).
+        // Egy kattintasra legfeljebb nehany ilyen oldalt vizsgalunk at.
+        const CHAIN_PAGE_SIZE = 200;
+        const MAX_REPLY_PAGES_PER_CLICK = 3;
+        const MAX_ANCESTOR_PAGES_PER_CLICK = 3;
 
         injectStyleOnce(STYLE_ID, `
             #${MODAL_ID}.ph-pt-modal {
@@ -3526,6 +3534,47 @@
             #${MODAL_ID} .ph-pt-chain-footer {
                 justify-content: space-between;
             }
+            #${MODAL_ID} .ph-pt-chain-more {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 5px;
+                padding: 11px 8px;
+                border: 1px dashed var(--ph-ui-border);
+                border-radius: 9px;
+                background: var(--ph-ui-soft);
+                text-align: center;
+            }
+            #${MODAL_ID} .ph-pt-chain-more + .ph-pt-chain-tree,
+            #${MODAL_ID} .ph-pt-chain-tree + .ph-pt-chain-more {
+                margin-top: 10px;
+            }
+            #${MODAL_ID} .ph-pt-chain-more-button {
+                max-width: 100%;
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 7px;
+                padding: 7px 12px;
+                color: var(--ph-ui-accent-ink);
+                background: var(--ph-ui-bg);
+                font-size: 12px;
+                font-weight: 700;
+                cursor: pointer;
+            }
+            #${MODAL_ID} .ph-pt-chain-more-button:hover:not(:disabled) {
+                border-color: var(--ph-ui-accent);
+                background: color-mix(in srgb, var(--ph-ui-accent) 10%, var(--ph-ui-bg));
+            }
+            #${MODAL_ID} .ph-pt-chain-more-button:disabled {
+                cursor: wait;
+                opacity: .65;
+            }
+            #${MODAL_ID} .ph-pt-chain-more-status {
+                max-width: 100%;
+                color: var(--ph-ui-muted);
+                font-size: 11px;
+                line-height: 1.4;
+                overflow-wrap: anywhere;
+            }
             #${MODAL_ID} .ph-pt-chain-hint {
                 min-width: 0;
                 max-width: 70%;
@@ -3607,9 +3656,18 @@
             return 'a';
         }
 
-        function getChain(startLi) {
+        function getChain(startLi, extraPosts = []) {
+            // A letoltott oldalak DOM-ja el van valasztva az eredeti oldaltol.
+            // Az eredeti hozzaszolasokat nem rakjuk vissza a forum listajaba.
             const all = Array.from(document.querySelectorAll('li[data-id]'))
                 .filter(li => li.querySelector(':scope > .message'));
+            const seenIds = new Set(all.map(li => li.dataset.id));
+            for (const li of extraPosts) {
+                if (!seenIds.has(li.dataset.id)) {
+                    all.push(li);
+                    seenIds.add(li.dataset.id);
+                }
+            }
             const byId = new Map(all.map(li => [li.dataset.id, li]));
             const children = new Map();
             for (const li of all) {
@@ -3623,11 +3681,13 @@
             const parents = [];
             let current = startLi;
             let hasMissingParent = false;
+            let missingParentId = '';
             while (current.dataset.rplid && current.dataset.rplid !== '0') {
                 const parentId = current.dataset.rplid;
                 const parent = byId.get(parentId);
                 if (!parent) {
                     hasMissingParent = true;
+                    missingParentId = parentId;
                     break;
                 }
                 if (visited.has(parentId)) break;
@@ -3656,12 +3716,12 @@
             const direction = getForumMessageDirection();
             const multiplier = direction === 'd' ? -1 : 1;
             items.sort((a, b) => multiplier * (Number(a.li.dataset.id) - Number(b.li.dataset.id)));
-            return {items, hasMissingParent, direction};
+            return {items, hasMissingParent, missingParentId, direction};
         }
 
         // Másolat az oldalon már megjelenített tartalomból, újrahasznosított
         // DOM-azonosítók, eseményattribútumok és űrlapvezérlők nélkül.
-        function cloneMessageContent(original) {
+        function cloneMessageContent(original, sourceUrl = location.href) {
             const clone = original.cloneNode(true);
             clone.removeAttribute('id');
             clone.className = 'ph-pt-chain-post-content';
@@ -3675,18 +3735,27 @@
                 }
                 if (el.tagName === 'A') {
                     const href = el.getAttribute('href') || '';
-                    if (!/^(https?:\/\/|\/|#)/i.test(href)) el.removeAttribute('href');
-                    else {
+                    if (/^(https?:\/\/|\/|#)/i.test(href)) {
+                        el.setAttribute('href', new URL(href, sourceUrl).href);
                         el.target = '_blank';
                         el.rel = 'noopener noreferrer';
-                    }
+                    } else el.removeAttribute('href');
+                }
+                // A mas oldalrol letoltott tartalom relativ kephivatkozasai
+                // ne az aktualis temaoldal vagy az about:blank alapjat kapjak.
+                if (el.tagName === 'IMG') {
+                    const src = el.getAttribute('src') || '';
+                    if (/^(https?:\/\/|\/|data:image\/)/i.test(src)) {
+                        el.setAttribute('src', new URL(src, sourceUrl).href);
+                    } else if (src) el.removeAttribute('src');
                 }
             }
             return clone;
         }
 
-        function makePostCard({li, depth, role}) {
+        function makePostCard({li, depth, role}, remoteUrls = new Map()) {
             const id = li.dataset.id;
+            const sourceUrl = remoteUrls.get(id) || location.href;
             const msg = qs(li, ':scope > .message');
             const author = qs(msg, '.message-head-user .user-title .user-link')
                 || qs(msg, '.message-head-user .user-title')
@@ -3710,7 +3779,8 @@
             face.className = 'ph-pt-chain-avatar';
             if (avatar?.getAttribute('src')) {
                 const img = document.createElement('img');
-                img.src = avatar.src;
+                const imageSrc = avatar.getAttribute('src');
+                img.src = new URL(imageSrc, sourceUrl).href;
                 img.alt = '';
                 img.loading = 'lazy';
                 face.appendChild(img);
@@ -3733,7 +3803,7 @@
             meta.className = 'ph-pt-chain-meta';
             const link = document.createElement('a');
             link.className = 'ph-pt-chain-post-link';
-            link.href = `#msg${id}`;
+            link.href = remoteUrls.has(id) ? `${sourceUrl}#msg${id}` : `#msg${id}`;
             link.dataset.chainJump = id;
             link.title = 'Ugrás az eredeti hozzászólásra';
             link.textContent = `#${id}`;
@@ -3754,7 +3824,7 @@
                 badge.textContent = 'Kiválasztott hozzászólás';
                 article.appendChild(badge);
             }
-            const postContent = content ? cloneMessageContent(content) : document.createElement('div');
+            const postContent = content ? cloneMessageContent(content, sourceUrl) : document.createElement('div');
             if (!content) {
                 postContent.className = 'ph-pt-chain-post-content';
                 postContent.textContent = 'A hozzászólás szövege itt nem érhető el.';
@@ -3765,6 +3835,9 @@
             // is pontosan ugyanugy kezeli. Kikapcsolt szinezesnel semmit sem masolunk.
             if (savedSettings.colorize) {
                 const originalBody = qs(msg, '.message-body');
+                // A letoltott hozzaszolasokra a fooram szinezo modulja nem fut le.
+                // Azonos logikaval kiszamoljuk a szinezosztalyt az ottani adatokbol.
+                if (remoteUrls.has(id) && originalBody) colorizeFetchedPost(msg, originalBody);
                 for (const colorClass of [
                     'ph-pt-akcio', 'ph-pt-own', 'ph-pt-reply',
                     'ph-pt-focus-author', 'ph-pt-focus-reply'
@@ -3857,9 +3930,291 @@
             });
         }
 
+        // A hivatkozasok temaazonos alapurl-je: nem kerunk kulso domaint.
+        function getTopicBasePath() {
+            return location.pathname.match(/^(\/tema\/[^/]+\/)/)?.[1] || '';
+        }
+
+        function topicPageUrl(base, first, last = first) {
+            return new URL(`${base}hsz_${first}-${last}.html`, location.origin).href;
+        }
+
+        // Az azonosito szerinti fix, 200 hozzaszolasos lapokra igazodunk,
+        // nem az eppen megnyitott (akar egyetlen hozzaszolast mutato) nezetre.
+        // 89605 -> 89601-89800, 89801 -> 89801-90000, 200 -> 1-200.
+        function chainPageRange(postId) {
+            const first = Math.floor((postId - 1) / CHAIN_PAGE_SIZE) * CHAIN_PAGE_SIZE + 1;
+            return {first, last: first + CHAIN_PAGE_SIZE - 1};
+        }
+
+        function latestPostIdFromPager(base, localMax) {
+            let latest = localMax;
+            for (const a of document.querySelectorAll('a[href*="/hsz_"]')) {
+                try {
+                    const url = new URL(a.getAttribute('href'), location.href);
+                    if (url.origin !== location.origin || !url.pathname.startsWith(base)) continue;
+                    const match = url.pathname.match(/\/hsz_(\d+)-(\d+)\.html$/);
+                    if (match) latest = Math.max(latest, Number(match[1]), Number(match[2]));
+                } catch { /* Hibas lapozolinket kihagyjuk. */ }
+            }
+            return latest;
+        }
+
+        // A szinezo modul a levalasztott (hatterben letoltott) DOM-on nem fut.
+        // Az eredeti prioritasokat es az aktualis avatar-fokuszt reprodukaljuk.
+        function colorizeFetchedPost(msg, body) {
+            const author = qs(msg, '.message-head-user .user-title .user-link')?.textContent?.trim() || '';
+            const replyTo = qs(msg, '.message-head-infos .message-reply .user-title .user-link')?.textContent?.trim() || '';
+            const currentName = document.querySelector('.dropdown-menu h6 a[href^="/tag/"]')?.textContent?.trim() || '__NINCS_BEJELENTKEZVE__';
+            const focusedBody = document.querySelector('.message-body.ph-pt-focus-author');
+            const focusedName = focusedBody?.closest('.message')?.querySelector('.message-head-user .user-title .user-link')?.textContent?.trim() || '';
+            const textClone = body.cloneNode(true);
+            textClone.querySelector('.message-content-replied')?.remove();
+            const text = textClone.textContent.toLowerCase();
+            body.classList.remove('ph-pt-akcio', 'ph-pt-own', 'ph-pt-reply', 'ph-pt-focus-author', 'ph-pt-focus-reply');
+            if (text.includes('#akció') || text.includes('#akcio')) body.classList.add('ph-pt-akcio');
+            if (focusedName && author === focusedName) body.classList.add('ph-pt-focus-author');
+            else if (focusedName && replyTo === focusedName) body.classList.add('ph-pt-focus-reply');
+            else if (author.toLowerCase() === currentName.toLowerCase()) body.classList.add('ph-pt-own');
+            else if (replyTo.toLowerCase() === currentName.toLowerCase()) body.classList.add('ph-pt-reply');
+        }
+
+        async function fetchTopicPosts(session, url) {
+            const response = await fetch(url, {
+                credentials: 'same-origin',
+                signal: session.controller.signal,
+                headers: {'Accept': 'text/html'}
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const finalUrl = new URL(response.url || url, location.href);
+            if (finalUrl.origin !== location.origin || !finalUrl.pathname.startsWith(session.topicBase)) {
+                throw new Error('A fórum másik oldalra irányította a kérést.');
+            }
+            const html = await response.text();
+            if (html.length > 10 * 1024 * 1024) throw new Error('A letöltött oldal túl nagy.');
+            const parsed = new DOMParser().parseFromString(html, 'text/html');
+            const lis = Array.from(parsed.querySelectorAll('li[data-id]'))
+                .filter(li => /^\d+$/.test(li.dataset.id || '') && li.querySelector(':scope > .message'));
+            return {lis, finalUrl: finalUrl.href};
+        }
+
+        // Minden megnyitott 200-as lapot eltesszuk a popup munkameneteben.
+        // Igy egyetlen lekeres eleg az ugyanazon oldalra eso szulokhoz es
+        // valaszokhoz, es a ket betoltogomb sem keri le ujra ugyanazt a lapot.
+        // Csak az oldalhoz tartozo ID-kat vesszuk at: mas linkelt hozzaszolasok
+        // es fejlecelemek nem kerulhetnek a szobajoheto lancba.
+        async function loadChainPage(session, first, last) {
+            // Egy rovidebb utolso oldal es a teljes 200-as oldal ugyanannak
+            // az ID-blokknak szamit, igy az elozmeny- es valaszkereses osztozik rajta.
+            const key = String(chainPageRange(first).first);
+            if (session.pageCache.has(key)) return {...session.pageCache.get(key), cached: true};
+            const url = topicPageUrl(session.topicBase, first, last);
+            const {lis, finalUrl} = await fetchTopicPosts(session, url);
+            const posts = lis.filter(li => {
+                const id = Number(li.dataset.id);
+                return id >= first && id <= last;
+            });
+            for (const li of posts) {
+                const id = li.dataset.id;
+                if (!session.remotePosts.has(id) && !session.localIds.has(id)) {
+                    session.remotePosts.set(id, li);
+                    session.remoteUrls.set(id, finalUrl);
+                }
+            }
+            const page = {posts, finalUrl};
+            session.pageCache.set(key, page);
+            return {...page, cached: false};
+        }
+
+        // Az elozmeny ID-ja ismert: eloszor a teljes, ot tartalmazo 200-as
+        // oldalt kerjuk le. Egyetlen oldalon tobb egymasra epulo elozo
+        // hozzaszolas is lehet, amit a getChain azonnal felismer.
+        async function loadAncestors(session) {
+            const oldIds = new Set(getChain(session.startLi, session.remotePosts.values()).items
+                .filter(item => item.role === 'parent').map(item => item.li.dataset.id));
+            let scanned = 0;
+            const checked = new Set();
+            while (scanned < MAX_ANCESTOR_PAGES_PER_CLICK && session === chainSession) {
+                const chain = getChain(session.startLi, session.remotePosts.values());
+                const id = chain.missingParentId;
+                if (!id || !/^\d+$/.test(id) || Number(id) < 1 || checked.has(id)) break;
+                checked.add(id);
+                const {first, last} = chainPageRange(Number(id));
+                const {cached} = await loadChainPage(session, first, last);
+                if (!cached) scanned++;
+                // A lekerdezett intervallumban nincs ilyen uzenet: torolve lehet,
+                // vagy a szerver nem adja ki. Azonos oldalt nem toltunk ujra.
+                if (!session.remotePosts.has(id) && !session.localIds.has(id)) {
+                    session.ancestorsExhausted = true;
+                    session.status.parents = `A(z) #${id} előzmény nem érhető el.`;
+                    break;
+                }
+            }
+            const chain = getChain(session.startLi, session.remotePosts.values());
+            const count = chain.items.filter(item => item.role === 'parent' && !oldIds.has(item.li.dataset.id)).length;
+            if (!session.ancestorsExhausted) {
+                session.status.parents = count ? `${count} előzmény betöltve.` : 'Nincs több betölthető előzmény.';
+            }
+        }
+
+        // A tovabbi valaszokhoz nincs ismert ID-lista, de 200-as blokkonkent
+        // atvizsgalhatjuk az ujabb hozzaszolasokat. A keresesi kurzor mindig
+        // a fix blokk vegeig lep (nem az aktualis, pl. 25-os nezet szerint).
+        // Csak a tenylegesen a kivalasztott agba tartozo elemek latszanak.
+        async function loadReplies(session) {
+            const oldIds = new Set(getChain(session.startLi, session.remotePosts.values()).items.map(item => item.li.dataset.id));
+            let scanned = 0;
+            let newReplies = 0;
+            while (scanned < MAX_REPLY_PAGES_PER_CLICK && session === chainSession) {
+                if (session.cursor >= session.latestId || session.repliesExhausted) break;
+                const {first, last} = chainPageRange(session.cursor + 1);
+                // A tema legutolso oldala lehet 200-nal rovidebb.
+                const to = Number.isFinite(session.latestId) ? Math.min(last, session.latestId) : last;
+                const {posts} = await loadChainPage(session, first, to);
+                scanned++;
+                session.cursor = to;
+                // Ures lekeres csak akkor allitja le a keresest, ha mar nincs
+                // ismert kesobbi oldal; torolt ID-blokkokat tovabb leptetjuk.
+                if (!posts.length && (!Number.isFinite(session.latestId) || to >= session.latestId)) {
+                    session.repliesExhausted = true;
+                    break;
+                }
+                const chain = getChain(session.startLi, session.remotePosts.values());
+                newReplies = chain.items.filter(item => item.role === 'reply' && !oldIds.has(item.li.dataset.id)).length;
+                if (newReplies) break;
+            }
+            if (newReplies) session.status.replies = `${newReplies} kapcsolódó válasz betöltve.`;
+            else if (session.repliesExhausted || session.cursor >= session.latestId) {
+                session.status.replies = 'A beolvasott oldalak végéig nem találtam több kapcsolódó választ.';
+            } else {
+                session.status.replies = `A következő ${scanned} (legfeljebb 200 hozzászólásos) oldalon nem volt kapcsolódó válasz. Kereshetsz tovább.`;
+            }
+        }
+
+        function hasMoreChainPage(session, side, chain) {
+            if (!session.topicBase) return false;
+            if (side === 'parents') return !session.ancestorsExhausted && !!chain.missingParentId && /^\d+$/.test(chain.missingParentId);
+            return !session.repliesExhausted && session.cursor < session.latestId;
+        }
+
+        function makeLoadMore(session, side, chain) {
+            const showButton = hasMoreChainPage(session, side, chain);
+            const note = session.status[side];
+            if (!showButton && !note) return null;
+            const block = document.createElement('div');
+            block.className = 'ph-pt-chain-more';
+            block.dataset.chainMore = side;
+            if (showButton) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'ph-pt-chain-more-button';
+                button.dataset.chainLoad = side;
+                button.textContent = side === 'parents' ? 'További előzmények betöltése' : 'További válaszok betöltése';
+                button.disabled = session.busy;
+                block.appendChild(button);
+            }
+            if (note) {
+                const label = document.createElement('span');
+                label.className = 'ph-pt-chain-more-status';
+                label.setAttribute('role', 'status');
+                label.textContent = note;
+                block.appendChild(label);
+            }
+            return block;
+        }
+
+        function renderChain(session, initial = false) {
+            const modal = document.getElementById(MODAL_ID);
+            if (!modal || session !== chainSession) return;
+            const list = modal.querySelector('#ph-pt-chain-list');
+            // Uj hozzaszolasok beszu'rasa ne allitsa vissza a scrollt a kivalasztottra.
+            // Az elso lathato kartyat a kepernyon ugyanott tartjuk.
+            const listBounds = list.getBoundingClientRect();
+            const firstVisible = initial ? null : [...list.querySelectorAll('.ph-pt-chain-item')].find(card =>
+                card.getBoundingClientRect().bottom > listBounds.top + 1);
+            const anchorId = firstVisible?.dataset.postId || '';
+            const anchorTop = firstVisible ? firstVisible.getBoundingClientRect().top - listBounds.top : 0;
+            const oldScroll = list.scrollTop;
+            const {items, hasMissingParent, direction, missingParentId} = getChain(session.startLi, session.remotePosts.values());
+            connectorObserver?.disconnect();
+            if (connectorFrame !== null) cancelAnimationFrame(connectorFrame);
+            connectorFrame = null;
+            list.replaceChildren();
+            const topSide = direction === 'd' ? 'replies' : 'parents';
+            const bottomSide = direction === 'd' ? 'parents' : 'replies';
+            const top = makeLoadMore(session, topSide, {missingParentId});
+            if (top) list.appendChild(top);
+            const tree = document.createElement('div');
+            tree.className = 'ph-pt-chain-tree';
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'ph-pt-chain-connectors');
+            svg.setAttribute('aria-hidden', 'true');
+            svg.setAttribute('focusable', 'false');
+            tree.appendChild(svg);
+            const fragment = document.createDocumentFragment();
+            for (const item of items) fragment.appendChild(makePostCard(item, session.remoteUrls));
+            tree.appendChild(fragment);
+            list.appendChild(tree);
+            const bottom = makeLoadMore(session, bottomSide, {missingParentId});
+            if (bottom) list.appendChild(bottom);
+            modal.querySelector('#ph-pt-chain-title').textContent = `Hozzászólás-lánc · #${session.startLi.dataset.id}`;
+            const ancestors = items.filter(item => item.role === 'parent').length;
+            const replies = items.length - ancestors - 1;
+            modal.querySelector('#ph-pt-chain-count').textContent =
+                `${items.length} hozzászólás · ${ancestors} előzmény · ${replies} válasz · ${direction === 'd' ? 'csökkenő' : 'növekvő'} sorrend`;
+            modal.querySelector('#ph-pt-chain-hint').textContent =
+                hasMissingParent && !session.ancestorsExhausted
+                    ? 'Az előzmények más oldalon is folytatódhatnak. Csak a kapcsolódó hozzászólások láthatók.'
+                    : 'A betöltött fórumoldalakról csak a kapcsolódó hozzászólások láthatók.';
+            if (initial) {
+                list.scrollTop = 0;
+                revealSelectedChainPost(list);
+            } else if (anchorId) {
+                const newAnchor = [...tree.querySelectorAll('.ph-pt-chain-item')].find(card => card.dataset.postId === anchorId);
+                if (newAnchor) {
+                    list.scrollTop = oldScroll + newAnchor.getBoundingClientRect().top - list.getBoundingClientRect().top - anchorTop;
+                } else list.scrollTop = oldScroll;
+            } else list.scrollTop = oldScroll;
+            drawChainConnectors();
+            if (typeof ResizeObserver === 'function') {
+                connectorObserver = new ResizeObserver(scheduleChainConnectors);
+                connectorObserver.observe(tree);
+                tree.querySelectorAll('.ph-pt-chain-item').forEach(card => connectorObserver.observe(card));
+            }
+            document.fonts?.ready?.then(scheduleChainConnectors);
+        }
+
+        async function expandChain(side, button) {
+            const session = chainSession;
+            if (!session || session.busy || !session.topicBase || !['parents', 'replies'].includes(side)) return;
+            session.busy = true;
+            session.status[side] = '';
+            session.controller = new AbortController();
+            button.disabled = true;
+            button.textContent = 'Betöltés…';
+            try {
+                if (side === 'parents') await loadAncestors(session);
+                else await loadReplies(session);
+            } catch (error) {
+                if (error.name === 'AbortError' || session !== chainSession) return;
+                session.status[side] = `A betöltés sikertelen: ${error.message}. Próbáld újra.`;
+            } finally {
+                if (session === chainSession) {
+                    session.busy = false;
+                    session.controller = null;
+                    renderChain(session);
+                    const next = document.querySelector(`#${MODAL_ID} [data-chain-load="${side}"]`);
+                    next?.focus({preventScroll: true});
+                }
+            }
+        }
+
         function closeModal() {
             const modal = document.getElementById(MODAL_ID);
             if (!modal || modal.style.display !== 'flex') return;
+            chainSession?.controller?.abort();
+            chainSession = null;
+            connectorObserver?.disconnect();
             modal.style.display = 'none';
             document.body.style.overflow = previousOverflow;
             if (lastTrigger) lastTrigger.setAttribute('aria-expanded', 'false');
@@ -3869,48 +4224,43 @@
         }
 
         // Megnyitaskor a kijelolt hozzaszolas legyen azonnal lathato.
-        // Csak a popup sajat gorgetoelemet mozgatjuk: a forumoldal nem ugrik el,
-        // es a felhasznalo ezutan korlatozas nelkul gorgethet fel vagy le.
+        // Csak a popup sajat gorgetoelemet mozgatjuk; tovabbi betolteskor
+        // a felhasznalo altal beallitott gorgetesi poziciot megtartjuk.
         function revealSelectedChainPost(list) {
             const selected = list.querySelector('.ph-pt-chain-item[data-selected="true"]');
             if (!selected) return;
             const listRect = list.getBoundingClientRect();
             const selectedRect = selected.getBoundingClientRect();
             const selectedTop = selectedRect.top - listRect.top + list.scrollTop;
-            // Ha a hozzaszolas nagyobb a lathato resznel, annak az eleje latszodjon.
             const visibleHeight = Math.min(selectedRect.height, list.clientHeight);
             list.scrollTop = Math.max(0, selectedTop - (list.clientHeight - visibleHeight) / 2);
         }
 
         function openModal(li, trigger) {
+            chainSession?.controller?.abort();
             const modal = ensureModal();
-            const {items, hasMissingParent, direction} = getChain(li);
-            const list = modal.querySelector('#ph-pt-chain-list');
-            // Az ujranyitasnal a regi megfigyelok nem maradhatnak a korabbi
-            // DOM-kartyakon. A csatlakozasok a belso gorgetheto fa reszei.
-            connectorObserver?.disconnect();
-            if (connectorFrame !== null) cancelAnimationFrame(connectorFrame);
-            connectorFrame = null;
-            list.replaceChildren();
-            const tree = document.createElement('div');
-            tree.className = 'ph-pt-chain-tree';
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('class', 'ph-pt-chain-connectors');
-            svg.setAttribute('aria-hidden', 'true');
-            svg.setAttribute('focusable', 'false');
-            tree.appendChild(svg);
-            const fragment = document.createDocumentFragment();
-            for (const item of items) fragment.appendChild(makePostCard(item));
-            tree.appendChild(fragment);
-            list.appendChild(tree);
-            modal.querySelector('#ph-pt-chain-title').textContent = `Hozzászólás-lánc · #${li.dataset.id}`;
-            const ancestorCount = items.filter(item => item.role === 'parent').length;
-            const replyCount = items.length - ancestorCount - 1;
-            modal.querySelector('#ph-pt-chain-count').textContent =
-                `${items.length} hozzászólás · ${ancestorCount} előzmény · ${replyCount} válasz · ${direction === 'd' ? 'csökkenő' : 'növekvő'} sorrend`;
-            modal.querySelector('#ph-pt-chain-hint').textContent = hasMissingParent
-                ? 'Korábbi előzmény másik oldalon lehet. Csak a betöltött hozzászólások láthatók.'
-                : 'Csak az aktuális oldalon betöltött hozzászólások láthatók.';
+            const localPosts = Array.from(document.querySelectorAll('li[data-id]'))
+                .filter(post => post.querySelector(':scope > .message'));
+            const localIds = new Set(localPosts.map(post => post.dataset.id));
+            const maxId = Math.max(0, ...localPosts.map(post => Number(post.dataset.id) || 0));
+            const topicBase = getTopicBasePath();
+            const onLatestPage = /\/friss\.html$/.test(location.pathname);
+            const latestFromPager = topicBase ? latestPostIdFromPager(topicBase, maxId) : maxId;
+            chainSession = {
+                startLi: li,
+                topicBase,
+                localIds,
+                remotePosts: new Map(),
+                remoteUrls: new Map(),
+                pageCache: new Map(),
+                cursor: maxId,
+                latestId: onLatestPage ? maxId : (latestFromPager > maxId ? latestFromPager : Infinity),
+                ancestorsExhausted: false,
+                repliesExhausted: false,
+                status: {parents: '', replies: ''},
+                busy: false,
+                controller: null
+            };
             previousOverflow = document.body.style.overflow;
             previousFocus = document.activeElement;
             if (lastTrigger && lastTrigger !== trigger) lastTrigger.setAttribute('aria-expanded', 'false');
@@ -3918,17 +4268,7 @@
             trigger.setAttribute('aria-expanded', 'true');
             document.body.style.overflow = 'hidden';
             modal.style.display = 'flex';
-            list.scrollTop = 0;
-            revealSelectedChainPost(list);
-            drawChainConnectors();
-            // Képek, betűkészletek és mobilos méretváltás esetén a fa
-            // csomópontjai elmozdulhatnak: a vonalakat a méretükhöz igazítjuk.
-            if (typeof ResizeObserver === 'function') {
-                connectorObserver = new ResizeObserver(scheduleChainConnectors);
-                connectorObserver.observe(tree);
-                tree.querySelectorAll('.ph-pt-chain-item').forEach(card => connectorObserver.observe(card));
-            }
-            document.fonts?.ready?.then(scheduleChainConnectors);
+            renderChain(chainSession, true);
             modal.querySelector('[data-chain-close]')?.focus({preventScroll: true});
         }
 
@@ -3943,6 +4283,12 @@
 
         // Eseménydelegálás: az AJAX-szal betöltött hozzászólások is működnek.
         document.addEventListener('click', event => {
+            const loadButton = event.target.closest(`#${MODAL_ID} [data-chain-load]`);
+            if (loadButton) {
+                event.preventDefault();
+                expandChain(loadButton.dataset.chainLoad, loadButton);
+                return;
+            }
             const chainButton = event.target.closest('.ph-pt-chain-link');
             if (chainButton) {
                 event.preventDefault();
