@@ -8422,6 +8422,42 @@
                     box-shadow: var(--ph-mark-color) 5px 0 0 0 inset !important;
                     transition: box-shadow 1s ease;
                 }
+                /* A klasszikus nezet megtartja a fejléc belső jelolocsikjat.
+                   Modern/Thread: a kartya szines kerete szabad marad, az
+                   olvasatlan bejegyzest a fejlecben az ID elotti UJ cimke jelzi. */
+                ul:is(.ph-tv-active, .ph-mv-active) > li[data-id] > .message > .message-head.ph-new-post-header {
+                    box-shadow: none !important;
+                }
+                ul:is(.ph-tv-active, .ph-mv-active) > li[data-id] > .message > .message-head.ph-new-post-header > .message-head-infos > .message-id {
+                    display: inline-flex !important;
+                    flex: 0 0 auto !important;
+                    align-items: center !important;
+                    justify-content: flex-end !important;
+                    gap: 6px;
+                    white-space: nowrap;
+                }
+                ul:is(.ph-tv-active, .ph-mv-active) > li[data-id] > .message > .message-head.ph-new-post-header > .message-head-infos > .message-id::before {
+                    content: 'ÚJ';
+                    display: inline-flex;
+                    flex: 0 0 auto;
+                    align-items: center;
+                    justify-content: center;
+                    box-sizing: border-box;
+                    min-height: 17px;
+                    padding: 3px 6px;
+                    border-radius: 4px;
+                    background: #202124;
+                    color: #fff;
+                    font-size: 10px;
+                    font-weight: 800;
+                    line-height: 1;
+                    letter-spacing: .035em;
+                    text-decoration: none;
+                    white-space: nowrap;
+                }
+                body[data-theme="dark"] ul:is(.ph-tv-active, .ph-mv-active) > li[data-id] > .message > .message-head.ph-new-post-header > .message-head-infos > .message-id::before {
+                    box-shadow: 0 0 0 1px rgba(255, 255, 255, .3);
+                }
                 .pager-navbar li.ph-pt-unread-nav-item {
                     margin-left: 6px;
                 }
