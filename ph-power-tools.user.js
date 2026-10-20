@@ -30,7 +30,7 @@
 // @connect      kek.sh
 // @connect      api.github.com
 // @connect      gist.githubusercontent.com
-// @run-at       document-idle
+// @run-at       document-end
 // ==/UserScript==
 
 (async function () {
@@ -3050,8 +3050,9 @@
     async function initApp() {
         initThemeSync();
         injectBaseStyle();
-        await mountHeaderUi();
+        // A nézetek azonnal felépülnek; a fejléc menüjére nem kell várniuk.
         runEnabledModules();
+        await mountHeaderUi();
     }
 
     await initApp();
@@ -3073,11 +3074,12 @@
             { name: "messageChainPopup", when: () => isTema && savedSettings.messageChainPopup, fn: messageChainPopup },
             { name: "markNewPosts", when: () => isTema && savedSettings.markNewPosts, fn: markNewPosts },
             { name: "linkRedirect", when: () => isTema && savedSettings.linkRedirect, fn: linkRedirect },
-            { name: "msgAnchorHighlight", when: () => isTema && savedSettings.msgAnchorHighlight, fn: msgAnchorHighlight },
             { name: "offHider", when: () => isTema && savedSettings.offHider, fn: offHider },
             { name: "wideView", when: () => isTema && savedSettings.wideView, fn: wideView },
             { name: "threadView", when: () => isTema && savedSettings.threadView, fn: threadView },
             { name: "modernView", when: () => isTema && savedSettings.modernView, fn: modernView },
+            // A célpozíciót már a kiválasztott Modern/Thread elrendezés alapján számoljuk.
+            { name: "msgAnchorHighlight", when: () => isTema && savedSettings.msgAnchorHighlight, fn: msgAnchorHighlight },
             { name: "keyboardNavigation", when: () => isTema && savedSettings.keyboardNavigation, fn: keyboardNavigation },
             { name: "hideUsers", when: () => isTema && savedSettings.hideUsers, fn: hideUsers },
             { name: "extraSmilies", when: () => (isTema || isPrivat) && savedSettings.extraSmilies, fn: extraSmilies },
@@ -4545,7 +4547,7 @@
             }
             li[data-id] .message-head.hash-highlight {
                 background-color: var(--ph-pt-hash-highlight) !important;
-                transition: background-color 0.2s ease;
+                transition: none !important;
             }
             /* A rejtett szerzok osszecsukott uzeneteinel a kijelolt fejlec
                nem latszik: ilyenkor a lathato Rejtett savot is kiemeljuk.
@@ -4673,10 +4675,9 @@
         /**********************
          * INIT
          **********************/
-        // Az első #msg-hez görgetést csak az inicializáláskor ütemezzük.
-        // Korábban a body minden DOM-módosítása (pl. a navigációs panel
-        // frissítése) újabb késleltetett görgetést indított, amely egy későbbi
-        // navigációt is megzavarhatott.
+        // Egyszeri kétlépcsős indulás: a kész nézet után rögtön pozicionálunk,
+        // majd 1,2 mp múlva korrigálunk a később betöltött képek miatt.
+        // A DOM-figyelő továbbra sem indíthat újabb időzített görgetéseket.
         let initialHashChecked = false;
 
         function init() {
@@ -4689,6 +4690,16 @@
                 const initialHash = lastHash;
                 bindInitialScrollCancelEvents();
 
+                // A következő kirajzolás előtt már a Modern/Thread elrendezés
+                // alapján ugrunk a hivatkozott hozzászóláshoz.
+                requestAnimationFrame(() => {
+                    if (!cancelInitialHashScroll && window.location.hash === initialHash &&
+                        document.querySelector('ul.ph-tv-active, ul.ph-mv-active')) {
+                        scrollToHashMsg();
+                    }
+                });
+
+                // A képek okozta utólagos elmozdulás korrekciója MEGMARAD.
                 setTimeout(() => {
                     if (!cancelInitialHashScroll && window.location.hash === initialHash) {
                         tryScrollToHashMsg(5);
@@ -11542,6 +11553,11 @@
             }
 
             if (fromPager) {
+                // Az alapnézet eredeti betöltését nem módosítjuk.
+                if (document.querySelector('ul.ph-tv-active, ul.ph-mv-active')) {
+                    requestAnimationFrame(() => tryScroll(1));
+                }
+                // Második ellenőrzés a képek miatti magasságváltozáshoz.
                 setTimeout(() => tryScroll(5), 1200);
             }
         }
