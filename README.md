@@ -1,252 +1,153 @@
-# 📦 lkristof/userscripts
+# lkristof/userscripts
 
-## 💍 PH Power Tools (egy script mind fölött)
+## PH Power Tools
 
-**`ph-power-tools.user.js`** egy minden-egyben userscript, ami a Prohardver! fórumokhoz készült funkciókat **egyetlen scriptbe gyúrja össze**, külön **beállítómenüvel**, kapcsolható modulokkal.
+`ph-power-tools.user.js` – kapcsolható funkciók a **prohardver.hu**, **mobilarena.hu**, **logout.hu**, **fototrend.hu** és **hardverapro.hu** oldalakon.
 
-### ⚡ Előnyök
+**[Telepítés – PH Power Tools](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js)**
 
-- 📦 egyetlen telepítés, egyetlen frissítendő script
-- ⚙️ külön menü, funkciónként ki-/bekapcsolható modulokkal
-- 🎨 testreszabható színezés világos és sötét témához
-- 💾 JSON-alapú beállításmentés és visszaállítás
-- 🔄 opcionális GitHub Gist-szinkronizáció több eszköz között
+Tampermonkey vagy Violentmonkey szükséges. A `GM_xmlhttpRequest`-et nem támogató userscript-kezelőkben a képfeltöltés és a Gist-szinkron korlátozott lehet.
 
-### 🎯 Fókusz
+A modulok a fejléc **PH Power Tools** menüjében, a **Megjelenés / Szűrés / Interakció** csoportokban kapcsolhatók. A **Mentés** újratölti az oldalt. Az OFF, a széles, a Modern és a Thread nézetnek külön témaoldali kapcsolója is van.
 
-- jobb olvashatóság és vizuális kiemelések
-- kényelmesebb hozzászólás- és témakezelés
-- gyorsabb navigáció és egyszerűbb képfeltöltés
+### Funkciók
 
-> 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js
+| Funkció                            | Működés                                                                                                                                                                                                                                                                                         |
+|------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Hozzászólások színezése**        | Saját hozzászólás, neked címzett válasz, `#akció` / `#akcio`, illetve profilképre kattintással szerző- és válaszfókusz. Egyéni világos/sötét paletta. Modern, Thread és Lánc popup nézetben a klasszikus szövegtörzs eredeti palettaszíne jelenik meg, hozzá igazított fejléccel és szegéllyel. |
+| **Hozzászólás-lánc popup**         | A **Lánc** gomb megmutatja az előzményeket és a kapcsolódó válaszágakat, teljes szöveggel, válaszvonalakkal és az eredeti bejegyzésekre mutató hivatkozásokkal. Hiányzó hozzászólások más oldalakról is betölthetők.                                                                            |
+| **Modern nézet**                   | Időrendi, kártyás megjelenítés; válaszfa-behúzások és összekötő vonalak nélkül. Egységes fejléc és szerkesztő normál/kompakt fórumelrendezésben.                                                                                                                                                |
+| **Thread nézet**                   | Válaszkapcsolatok szerinti hozzászólásfa, összekötő vonalakkal, ágankénti összecsukással, **Összecsuk mind / Kibont mind** művelettel.                                                                                                                                                          |
+| **Széles nézet**                   | Szélesebb tartalom; a jobb széle húzással állítható, dupla kattintással automatikus szélességre állítható vissza.                                                                                                                                                                               |
+| **OFF hozzászólások elrejtése**    | `[OFF]` bejegyzések elrejtése és felfedése, Modern/Thread nézetben animációval; a navigáció az elrejtett hozzászólásokat kihagyja.                                                                                                                                                              |
+| **Felhasználók elrejtése**         | Megadott szerzők hozzászólásainak elrejtése, ideiglenes megjelenítése és a tiltólista kezelése.                                                                                                                                                                                                 |
+| **Üzenet kiemelés**                | `#msg12345` hivatkozásra görgetés és fejlécszínezés; a fejléc dupla kattintással is kijelölhető.                                                                                                                                                                                                |
+| **Új hozzászólások jelölése**      | Témánként nyilvántartja a legutóbb látott hozzászólásazonosítót, jelöli az új bejegyzéseket, és az első olvasatlanhoz ugrik.                                                                                                                                                                    |
+| **Billentyűzetes navigáció**       | Hozzászólások közti léptetés nyilakkal, válaszelőzmény megnyitása `R`-rel és visszalépés `Shift+R`-rel.                                                                                                                                                                                         |
+| **Mobil navigációs panel**         | Húzható, összecsukható lebegő panel a hozzászólások és fórumoldalak közti léptetéshez; megjegyzi a helyét.                                                                                                                                                                                      |
+| **Link átirányítás**               | A támogatott fórumdomainek közötti fórumhivatkozásokat az aktuális domainhez igazítja.                                                                                                                                                                                                          |
+| **Extra smiley-k**                 | További smiley-k és emojik a fórum- és privátüzenet-szerkesztőben.                                                                                                                                                                                                                              |
+| **kek.sh képfeltöltő**             | Képfeltöltés API-kulccsal, kép/link beszúrása a szerkesztőbe, rácsos/listás galéria, törlés és opcionális Gist-szinkron.                                                                                                                                                                        |
+| **Nyereményjáték válaszellenőrző** | Lezárult nyereményjátékokban ellenőrzi a válaszokat, jelöli az eredményt és kiemeli a nevet a nyerteslistában.                                                                                                                                                                                  |
+| **Fix oldalsávok**                 | Görgetéskor látható oldalsávok, az aktuális téma kiemelésével.                                                                                                                                                                                                                                  |
+| **Témalisták rendezése**           | A **Kedvenc fórumtémáim** és **Itt szóltam hozzá** listák rendezése az új hozzászólások száma szerint.                                                                                                                                                                                          |
 
-A script a következő domaineken töltődik be: **prohardver.hu**, **mobilarena.hu**, **logout.hu**, **fototrend.hu** és **hardverapro.hu**. Az egyes modulok csak a megfelelő oldalakon működnek, például fórumtémában (`/tema/`), privát üzenetnél (`/privat/`), nyereményjátéknál (`/nyeremenyjatek/`) vagy témalistán.
+### Lánc popup – többoldalas betöltés
 
----
+- Megnyitáskor a már betöltött hozzászólásokból építi fel a kiválasztott bejegyzés **előzményeit és saját válaszágait**.
+- A **További előzmények betöltése** és **További válaszok betöltése** gombok szükség esetén, kattintásra kérnek le más fórumoldalakat. Az előzmények keresése a hiányzó szülőazonosító alapján, a válaszkeresés későbbi oldalak átvizsgálásával történik.
+- A letöltés **200 hozzászólásos tartományokban** zajlik, a beállított fórum-oldalmérettől függetlenül. Példa: `#89605` → `hsz_89601-89800.html`. Egy kattintás legfeljebb **3 új előzményoldalt**, illetve **3 válaszoldalt** vizsgál meg; a keresés folytatható.
+- A popup csak a lánchoz tartozó bejegyzéseket jeleníti meg. Megtartja a fórum növekvő/csökkenő sorrendjét, a válaszvonalakat, a színezést és a betöltés közbeni görgetési pozíciót.
+- **Gyorsítótár:** a sikeresen háttérben letöltött oldalakat megosztja az ugyanazon fórumoldalon egymás után megnyitott popupok között. **10 perc**, legfeljebb **10 darab 200-as tartomány**, témánként/domainenként elkülönítve, LRU-kidobással. A már látható hozzászólásokat közvetlenül az oldalból olvassa, nem menti ebbe a cache-be.
+- A cache **csak JavaScript-memóriában létezik**: oldalfrissítéskor vagy oldalváltáskor elvész, nem része a Gistnek vagy a JSON-mentésnek. Sikertelen betöltés újrapróbálható; a popup bezárása megszakítja a folyamatban lévő kérést.
 
-### 🧰 Szükséges eszköz
+### Billentyűparancsok
 
-A futtatáshoz userscript-kezelő szükséges, például:
+| Billentyű             | Művelet                                         |
+|-----------------------|-------------------------------------------------|
+| `↑` / `↓`             | Előző / következő látható hozzászólás           |
+| `←` / `→`             | Első / utolsó látható hozzászólás               |
+| `Shift+↑` / `Shift+↓` | Előző / következő hozzászólás azonosító szerint |
+| `R`                   | A kijelölt hozzászólás előzményére ugrás        |
+| `Shift+R`             | Visszalépés a bejárt előzményben                |
 
-- **Tampermonkey** (Chrome / Edge / Firefox / Safari / Opera)
-- **Violentmonkey** (Firefox / Chromium-alapú böngészők)
-- **Userscripts** (iOS)
+Szövegbevitel és nyitott képgaléria közben nem aktív. A rejtett OFF hozzászólásokat kihagyja. Az `R`/`Shift+R` előzményt a mobilpanel is használja; a bejárt útvonal `sessionStorage`-ban tárolódik.
 
-A script többek között a `GM_xmlhttpRequest` API-t is használja, ezért az ezt nem biztosító userscript-kezelőkben (például egyes Greasemonkey-verziókban) a feltöltés vagy a szinkronizáció nem feltétlenül működik teljes körűen.
+### Beállításmentés és Gist-szinkron
 
----
+**JSON-export / import:** a PH Power Tools menü export ikonjával menthetők és visszaállíthatók a modulkapcsolók, színpaletták, rejtett felhasználók, nézetállapotok és navigációs beállítások. Külön opcióval az olvasottsági adatok és a kek.sh galéria, illetve az **API-/Gist-kulcsok** is menthetők. Az importálás ellenőrzi a fájlt (maximum **10 MB**), megerősítést kér és újratölti az oldalt. A kulcsokat tartalmazó export **nincs titkosítva**.
 
-### 🚀 Telepítés
-
-1. Telepíts egy támogatott userscript-kezelőt.
-2. Nyisd meg a fenti **Telepítés** linket.
-3. Hagyd jóvá a script telepítését a bővítményben.
-
----
-
-### 📦 PH Power Tools összetevői
-
-> [!NOTE]
-> A modulok a fejlécben lévő **PH Power Tools** menüből kapcsolhatók. A kapcsolók módosítása **Mentés** után, az oldal újratöltésével lép életbe. A széles, az OFF és a Thread nézetnek a témán belül külön állapotkapcsolója is van.
-
-| Funkció                             | Rövid leírás                                                                                                                                                            |
-|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Hozzászólások színezése**         | Saját, neked válaszoló és `#akció` / `#akcio` jelölésű hozzászólások, avatarra kattintva szerzőfókusz, valamint hozzászóláslánc-kiemelés.                               |
-| **Link átirányítás**                | A támogatott PH! lapcsaládon belüli hivatkozások domainjét az aktuális oldalhoz igazítja; például a cikkek és hírek kivételek.                                          |
-| **Üzenet kiemelés**                 | A `#msg12345` hivatkozáshoz görget, kiemeli a hozzászólást (szükség esetén a legközelebbit); a hozzászólás fejlécén dupla kattintással a `#msg` hivatkozás beállítható. |
-| **OFF hozzászólások elrejtése**     | Az `[OFF]` hozzászólások elrejtése/megjelenítése a témaoldali gombbal.                                                                                                  |
-| **Széles nézet**                    | Szélesebb fórumelrendezés, a tartalom jobb szélének húzásával állítható oszlopszélesség és dupla kattintással visszaállítható automatikus méret.                        |
-| **Thread nézet**                    | Reddit-szerű, válaszkapcsolat alapján rendezett hozzászólásfa; vizuális ágvonalak, egyedi ág-összecsukás és **Összecsuk mind / Kibont mind** menü.                      |
-| **Billentyűzetes navigáció**        | Nyilakkal lépkedés, válaszelőzmény követése `R`-rel, visszalépés `Shift+R`-rel. A billentyűk részletei lent találhatók.                                                 |
-| **Felhasználók elrejtése**          | Szerzők hozzászólásainak elrejtése, ideiglenes felfedése, valamint a rejtett felhasználók listájának szerkesztése.                                                      |
-| **Új hozzászólás jelölése**         | Témánként tárolja a legutóbb látott hozzászólásazonosítót, jelöli az új hozzászólásokat, és gombot ad az **első olvasatlanhoz ugráshoz**.                               |
-| **Extra smiley-k**                  | Kiegészítő smiley-k és emojik a hozzászólás- és privátüzenet-szerkesztőben.                                                                                             |
-| **kek.sh képfeltöltő**              | API-kulccsal képfeltöltés a szerkesztőből, kép/link beszúrása, galéria **rács- és listanézetben**, törlés és opcionális Gist-szinkron.                                  |
-| **Nyereményjáték válasz ellenőrző** | A `/nyeremenyjatek/` oldalon a játék lezárása után ellenőrzi a válaszokat, jelöli az eredményt és kiemeli a felhasználót a nyerteslistán.                               |
-| **Fix oldalsávok**                  | Görgetéskor látható oldalsávok; az aktuális téma kiemelése az oldalsáv és a mobil/tablet fejléc témalistájában.                                                         |
-| **Mobil navigációs panel**          | Húzható, összecsukható lebegő panel a hozzászólások és oldalak közti lépkedéshez; megjegyzi az oldalt és pozíciót.                                                      |
-| **Témalisták rendezése**            | A **„Kedvenc fórumtémáim”** és **„Itt szóltam hozzá”** listát az új hozzászólások száma szerint, csökkenő sorrendbe rendezi.                                            |
-
-A menü további, nem modulkapcsolóhoz kötött funkciói a **színek testreszabása** (🎨), a **beállítások exportálása/importálása** és a **kulcsok / Gist-szinkron kezelése** (⚙️).
-
----
-
-### ⌨️ Billentyűzetes navigáció
-
-| Billentyű | Művelet |
-|---|---|
-| `↑` / `↓` | Előző / következő látható hozzászólás a megjelenített sorrendben |
-| `←` / `→` | Első / utolsó látható hozzászólás |
-| `Shift+↑` / `Shift+↓` | Előző / következő hozzászólás azonosító szerinti sorrendben |
-| `R` | Ugrás arra a hozzászólásra, amelyre az aktuális hozzászólás válaszolt |
-| `Shift+R` | Visszalépés az `R`-rel bejárt válaszelőzményben |
-
-A billentyűzetes navigáció szövegbevitel közben és nyitott képgalériánál nem lép működésbe. Az `R`-rel bejárt útvonal a böngésző munkamenetében tárolódik, nem kerül a Gistbe.
-
----
-
-### 💾 Beállítások exportálása és importálása
-
-A PH Power Tools menü **fájl/export ikonjára** kattintva egy `.json` fájlba mentheted a beállításokat, vagy korábbi mentést állíthatsz vissza.
-
-- **Alapértelmezett export:** modulkapcsolók, egyéni színpaletták, rejtett felhasználók, OFF / széles / Thread nézetállapot, széles nézet beállított szélessége és a mobilnavigáció helyi pozíciója.
-- **„Olvasottsági adatok és kek.sh képgaléria mentése is”**: külön bekapcsolható. Tartalmazza a témánkénti olvasottsági azonosítókat, a galériát és a törlés/visszaállítás szinkronizációs adatait is.
-- **„API-kulcsok és Gist-kapcsolati adatok mentése is”**: külön, alapból kikapcsolt opció. A GitHub-token, Gist ID, fájlnév és kek.sh API-kulcs **titkosítatlanul** kerül a JSON-ba.
-
-Az importálás csak a PH Power Tools által támogatott mentési formátumot fogadja el (legfeljebb **10 MB**), ellenőrzi az adatokat, és a felülírás előtt megerősítést kér. Sikeres visszaállítás után az oldal újratöltődik.
-
-> [!WARNING]
-> A galéria adatai képkezeléshez szükséges tokeneket is tartalmazhatnak, **az API-kulcsokat tartalmazó export pedig nincs titkosítva**. Ezeket a fájlokat ne oszd meg nyilvánosan. Aktív Gist-szinkron mellett az importált olvasottsági és galériaadatok összeolvadhatnak a Gistben lévő adatokkal.
-
----
-
-### 🔄 Gist szinkronizáció beállítása
+**GitHub Gist:** a modulbeállításokat, színpalettákat, rejtett felhasználókat, olvasottsági azonosítókat és kek.sh galériaadatokat szinkronizálja. A helyi nézetállapotok, mobilpanel-pozíció, billentyűzetes előzmények és API-kulcsok **nem szinkronizálódnak**.
 
 <details>
+<summary>Gist beállítása</summary>
 
-<summary>Kattints ide a kibontáshoz</summary>
+1. Hozz létre [fine-grained GitHub-tokent](https://github.com/settings/personal-access-tokens) **Account permissions → Gists: Read and write** jogosultsággal.
+2. Hozz létre egy [Gistet](https://gist.github.com) `ph_forum_settings.json` fájllal, amelynek kezdeti tartalma `{}`.
+3. A scriptben nyisd meg a **Kulcsok és szinkron** menüt, és add meg a tokent, a Gist ID-t és a fájlnevet; majd **Mentés**.
 
-A GitHub Gist-szinkron **opcionális**, és a következőket tartja szinkronban a támogatott böngészők/eszközök között:
-
-- modulbeállítások és egyéni színpaletták
-- rejtett felhasználók listája
-- témánkénti utoljára látott hozzászólásazonosítók
-- kek.sh galériaadatai, törlési jelölések és galériavisszaállítási állapotok
-
-**Nem szinkronizálódnak** az egyedi OFF / széles / Thread nézetállapotok, a széles nézet kézzel beállított szélessége, a mobilnavigáció pozíciója, a billentyűzetes válaszelőzmények, valamint a GitHub- és kek.sh-hozzáférési kulcsok. Ezeket szükség esetén a fenti **JSON-exporttal** lehet menteni (a kulcsok külön opcióval).
-
-#### 🪪 1. GitHub-token létrehozása
-
-1. Jelentkezz be a GitHubba.
-2. Nyisd meg: https://github.com/settings/personal-access-tokens
-3. Válaszd a **Generate new token → Fine-grained token** lehetőséget.
-4. Adj neki nevet (például `ph-power-tools-gist`), és állíts be lejáratot.
-5. A **Permissions → Account permissions → Gists** jogosultságnál állítsd be a **Read and write** hozzáférést.
-6. Hozd létre a tokent, majd másold ki és tárold biztonságos helyen.
-
-⚠️ **Fontos:**  
-A létrejövő `github_pat_...` token **csak egyszer látható**, ezért **másold ki és tedd el biztonságos helyre**.
-
-A Gist frissítéséhez a GitHub API **Gists: write** jogosultságot igényel ([GitHub REST API dokumentáció](https://docs.github.com/en/rest/gists/gists)).
-
-#### 📄 2. Gist létrehozása
-
-1. Nyisd meg: https://gist.github.com
-2. Hozz létre egy **Secret Gist**-et az alábbi fájllal:
-   - fájlnév: `ph_forum_settings.json`
-   - tartalom:
-     ```json
-     {}
-     ```
-3. A létrehozott Gist URL-jéből másold ki a **Gist ID**-t. (a link végén található hosszú azonosító)
-
-**Fontos:** a *Secret Gist* nem valóban privát; bár nem jelenik meg a nyilvános listákban, a hivatkozás birtokában bárki elolvashatja a tartalmát ([GitHub tájékoztató](https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists)). A galéria metaadatai érzékeny törlési tokeneket is tartalmazhatnak.
-
-#### ⚙️ 3. Beállítás a scriptben
-
-1. Nyisd meg a PH Power Tools menüt.
-2. Kattints a **⚙️ Kulcsok és szinkron** ikonra.
-3. Add meg a **GitHub Gist Tokent**, a **Gist ID-t** és a **Gist fájlnevet** (alapértelmezés: `ph_forum_settings.json`).
-4. Kattints a **Mentés** gombra; az oldal újratöltődik.
-
-Ezután a script a Gistből olvas, a módosított, szinkronizált adatokat pedig automatikusan feltölti. A kek.sh galériában külön **Szinkron** gomb is rendelkezésre áll.
-
-> [!WARNING]
-> **Meglévő helyi adatok esetén előbb készíts JSON-exportot!** Első kapcsolódáskor a Gist a még nem módosított szinkronizált kulcsoknál elsőbbséget élvez: egy **üres Gist** a helyi beállításokat alaphelyzetbe állíthatja, a rejtett felhasználók, olvasottsági adatok és galéria helyi listája pedig eltűnhet. A csatlakozás után importáld vissza az exportált mentést, hogy a megőrizni kívánt adatokat a script a Gistbe is feltölthesse.
-
-#### 🔐 Adatvédelem és korlátok
-
-- A GitHub-token és a kek.sh API-kulcs a userscript-kezelő tárhelyén (vagy szükség esetén helyi böngészőtárhelyben) tárolódik. Alapesetben **nem kerülnek bele a Gistbe**.
-- A szinkronizált beállítások és galéria-metaadatok a **GitHub szolgáltatásához kerülnek**; a feltöltött képek a **kek.sh szolgáltatásához**. A Gist tartalma nincs külön titkosítva.
-- A Gist **nem teljes körű biztonsági mentés**: a helyi nézetállapotok és a kapcsolati adatok nem mind részei. Teljesebb mentéshez használd a JSON-exportot a szükséges opciókkal.
+**Figyelem:** meglévő beállítások mellett az első Gist-kapcsolódás előtt készíts JSON-exportot. Az üres Gist felülírhatja a még nem módosított helyi, szinkronizált adatokat; szükség esetén importáld vissza a mentést. A *Secret Gist* link birtokában a tartalma elolvasható. A hozzáférési tokenek nem kerülnek a Gistbe.
 
 </details>
 
-## 📸 Képernyőképek
-> [!NOTE]
-> Így néznek ki a PH Power Tools legfontosabb funkciói a gyakorlatban.
+### Képernyőképek
 
-### menü
+**Menü**
+
 [![menu-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/menu-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/menu-light.jpg)
 [![menu-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/menu-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/menu-dark.jpg)
 
-### saját és rád válaszoló hozzászólások
+**Saját és rád válaszoló hozzászólások**
 
 [![colorize-own-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-light.jpg)
 [![colorize-own-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/own-reply-dark.jpg)
 
-### `#akcio` jelölésű hozzászólások
+**`#akcio` jelölésű hozzászólások**
+
 [![colorize-akcio-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-light.jpg)
 [![colorize-akcio-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/akcio-dark.jpg)
 
-### felhasználó hozzászólásainak kiemelése (arcképre kattintva)
+**Felhasználó hozzászólásainak kiemelése (arcképre kattintva)**
+
 [![colorize-avatar-focus-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-light.jpg)
 [![colorize-avatar-focus-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/avatar-click-dark.jpg)
 
-### hozzászólás lánc (🔗 Lánc-ra kattintva)
+### Lánc popup
 
-[![colorize-chain-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-light.jpg)
-[![colorize-chain-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-dark.jpg)
+[![chain-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-light.jpg)
+[![chain-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/chain-dark.jpg)
 
 ### `#msgXXXX` kiemelés
 
 [![msg-anchor-highlight-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-light.jpg)
 [![msg-anchor-highlight-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/msg-highlight-dark.jpg)
 
-### színek testreszabása
-[![colorize-config](https://raw.githubusercontent.com/lkristof/userscripts/main/img/colorize-config-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/colorize-config.jpg)
+**Normál vs. széles**
 
-### kulcsok / szinkron beállítások
-[![sync-config](https://raw.githubusercontent.com/lkristof/userscripts/main/img/sync-config-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/sync-config.jpg)
-
-### normál vs. széles
 [![normal-view](https://raw.githubusercontent.com/lkristof/userscripts/main/img/normal-view-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/normal-view-light.jpg)
 [![wide-view](https://raw.githubusercontent.com/lkristof/userscripts/main/img/wide-view-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/wide-view-light.jpg)
 
-### thread nézet
+**Thread nézet**
+
 [![thread-view-light](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-light-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-light.jpg)
 [![thread-view-dark](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-dark-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/thread-view-dark.jpg)
 
-### felhasználó rejtése (elrejtés, rejtve, felfedve, feloldás, menü)
+**Felhasználó rejtése (elrejtés, rejtve, felfedve, feloldás, menü)**
+
 [![dropdown-hide](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-dropdown-hide-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-dropdown-hide.jpg)
 [![hidden](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-hidden-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-hidden.jpg)
 [![shown](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-shown-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-shown.jpg)
 [![dropdown-unhide](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-dropdown-unhide-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-dropdown-unhide.jpg)
 [![user-menu](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-menu-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/hide-user-menu.jpg)
 
-### képfeltöltés kek.sh-ra
+**Képfeltöltés kek.sh-ra**
+
 [![grid](https://raw.githubusercontent.com/lkristof/userscripts/main/img/keksh-grid-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/keksh-grid.jpg)
 [![list](https://raw.githubusercontent.com/lkristof/userscripts/main/img/keksh-list-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/keksh-list.jpg)
 
----
+**Színek testreszabása**
 
-## 📦 nCore
+[![colorize-config](https://raw.githubusercontent.com/lkristof/userscripts/main/img/colorize-config-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/colorize-config.jpg)
 
-### 🧰 nCore – Tools
+**Kulcsok / szinkron beállítások**
 
-**`ncore-tools.user.js`** az nCore-hoz készült segédfunkciókat **egyetlen scriptben egyesíti**, közös **beállítási panellel**, poszternézettel, qBittorrent integrációval és opcionális Gist-szinkronizációval.
+[![sync-config](https://raw.githubusercontent.com/lkristof/userscripts/main/img/sync-config-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/sync-config.jpg)
 
-### ⚡ Előnyök
+**Export / Import**
 
-- 📦 egyetlen telepítés
-- 🔄 frissítéskor csak **egy** scriptet kell karbantartani
-- ⚙️ a fő funkciók külön-külön ki-/bekapcsolhatók
-- 🖼️ váltható **lista / poszter** torrentnézet, megjegyzett nézetbeállítással
-- 🔗 a qBittorrent WebUI címe közvetlenül az nCore infosávjából beállítható
-- ☁️ a látott filmek és a qBittorrenttel hozzáadott torrentek GitHub Gisttel több eszköz között szinkronizálhatók
-
-> 👉 **Telepítés:**  
-> https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-tools.user.js
+[![export-import](https://raw.githubusercontent.com/lkristof/userscripts/main/img/export-import-th.jpg)](https://raw.githubusercontent.com/lkristof/userscripts/main/img/export-import.jpg)
 
 ---
 
-### 📦 nCore Tools összetevői
+## nCore Tools
 
-> [!NOTE]
-> Az **nCore – Tools** beállításai az nCore infosávjában megjelenő **[Beállítások]** linken érhetők el.
+`ncore-tools.user.js` – torrentlista, poszternézet, qBittorrent és nyilvántartási funkciók.
 
-| Funkció                              | Rövid leírás                                                                                                                                                                                            |
+**[Telepítés – nCore Tools](https://raw.githubusercontent.com/lkristof/userscripts/main/ncore/ncore-tools.user.js)**
+
+### Funkciók
+
+| Funkció                              | Működés                                                                                                                                                                                                 |
 |--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **qBittorrent integráció**           | A torrentek közvetlenül elküldhetők a qBittorrent WebUI-nak a torrentlistából, a lenyíló panelből, a részletező oldalról és poszternézetből. A WebUI címe az infosáv **[qB URL]** linkjén állítható be. |
 | **Lista / poszter nézet**            | A torrentlista egy kattintással klasszikus lista- vagy kártyás poszternézetre váltható; a választott nézetet a script megjegyzi.                                                                        |
@@ -262,75 +163,22 @@ Ezután a script a Gistből olvas, a módosított, szinkronizált adatokat pedig
 | **Köszönetek elrejtése**             | Eltávolítja a köszönetek névlistáját, miközben a megköszönések darabszámát megtartja a leírásban.                                                                                                       |
 | **Dereferer linkek eltávolítása**    | A támogatott dereferer köztes linkeket közvetlen cél-URL-re cseréli, és `nofollow` / `noreferrer` attribútumokat használ.                                                                               |
 
-### ⚙️ Beállítások
+### Beállítások
 
-Az infosávban megjelenő **[Beállítások]** menü négy lapra oszlik:
+Az nCore infosáv **Beállítások** hivatkozásán négy fül érhető el: **Általános** (modulok és kiemelési küszöbérték), **Látott filmek** (lista és törlés), **Letöltések** (qBittorrentnek elküldött torrentek), **Szinkronizáció** (Gist-kapcsolat és kézi szinkron).
 
-- **Általános** – qBittorrent, torrentkiemelés és küszöbértéke, „Láttam már”, képbeágyazás, reklámok, köszönetek és dereferer-kezelés
-- **Látott filmek** – a mentett filmek listája, nCore keresési linkkel és törlési lehetőséggel
-- **Letöltések** – a qBittorrenttel hozzáadott torrentek listája azonosítóval és időponttal
-- **Szinkronizáció** – GitHub Gist token, Gist ID, fájlnév és kézi **Szinkronizálás most** művelet
+A qBittorrent WebUI címe az infosáv **qB URL** hivatkozásán állítható be, például `http://127.0.0.1:8080`. A lista/poszter nézet és az IMDb-keresés külön modulkapcsoló nélkül használható; a választott torrentnézet megmarad.
 
-A kapcsolható modulok módosításai mentés után, az oldal újratöltésével lépnek életbe.
-A **lista / poszter nézetváltó** és a részletező oldali **IMDb-alapú keresés** külön modulkapcsoló nélkül működik. A választott torrentnézetet a script megjegyzi.
+### Gist-szinkron
 
-### 🔗 qBittorrent beállítása
+A **Szinkronizáció** fülön a GitHub-token és Gist ID szükséges, az alapértelmezett fájlnév `ncore_seen.json`. A **Mentés és újratöltés** vagy a **Szinkronizálás most** gomb használható.
 
-A **qBittorrent integrációhoz** az infosáv **[qB URL]** linkjén add meg a qBittorrent WebUI címét, például:
+A Gist a `movies` (látott filmek, időbélyegek, állapotok) és `downloads` (elküldött torrentek) adatait szinkronizálja. A **Láttam már** és a **qBittorrent integráció** közül legalább egy bekapcsolt modul esetén automatikus szinkron is működik; a kézi szinkron ettől függetlenül elérhető. A jelölés visszavonása is szinkronizálódik.
 
-```text
-http://127.0.0.1:8080
-```
+A qBittorrent URL és a modulbeállítások nem kerülnek a Gistbe. A token helyben marad. A PH Power Tools és az nCore Tools **külön Gist-fájlt** használjon.
 
 ---
 
-### 🔄 Gist szinkronizáció beállítása
-<details>
-
-<summary>Kattints ide a kibontáshoz</summary>
-
-A Gist-szinkronizáció a **látott filmeket** és a **qBittorrenttel hozzáadott torrentek előzményeit** tartja szinkronban több böngésző vagy eszköz között.
-
-#### 📄 Gist adatok
-
-A **Beállítások → Szinkronizáció** fülön add meg:
-
-- **GitHub Gist Token**
-- **Gist ID**
-- **Gist fájlnév** – alapértelmezés: `ncore_seen.json`
-
-A **GitHub-token** és a **Gist ID** megadása szükséges; üres fájlnév esetén a script automatikusan a `ncore_seen.json` értéket használja. A kapcsolatot a **Mentés és újratöltés**, illetve a **Szinkronizálás most** gombbal is elmentheted.
-
-Induláskor a script csak akkor szinkronizál automatikusan, ha a **„Láttam már”** vagy a **qBittorrent integráció** modul közül legalább az egyik aktív. Ha mindkettőt kikapcsolod, a **Szinkronizálás most** gomb továbbra is használható. A bekapcsolt modulokkal végzett új „Láttam már” jelölések és sikeres qBittorrent-küldések automatikus szinkront is indítanak, rövid késleltetéssel.
-
-A Gistben a script két adathalmazt kezel:
-
-- `movies` – látott filmek IMDb-azonosítóval, címmel, állapottal és időbélyeggel
-- `downloads` – qBittorrentnek elküldött torrentek azonosítóval, címmel és időbélyeggel
-
-A szinkronizáció az azonosítókhoz tartozó legfrissebb időbélyegű állapotokat egyesíti; a **„Láttam már” jelölés visszavonása** is szinkronizálható. A Gist a két adatgyűjteményen és a formátumverzión kívül **nem tárolja a qBittorrent URL-t vagy a modulbeállításokat**.
-
-**Adatvédelem:** a Gistben tárolt film- és letöltési előzményeket a GitHub kezeli. A GitHub-token a helyi userscript-tárolóban (GM API hiányában a böngésző helyi tárolójában) marad, nem kerül bele a Gist tartalmába. A *Secret Gist* nem valóban privát: a link ismeretében a tartalom megtekinthető. A PH Power Tools és az nCore Tools számára **külön Gist-fájlt** használj, mert eltérő JSON-formátumot írnak.
-
-</details>
-
----
-
-## ⭐ Tipp
-
-Ha egy script nem működik:
-
-- frissítsd az oldalt
-- ellenőrizd, hogy a script engedélyezve van-e
-- nézd meg a böngésző konzolt (`F12`)
-- és ha semmi nem segít: küldj áldást a böngésződre 🙏 vagy imádkozz a JavaScript istenhez 😇
-
----
-
-Ha hibát találsz, ötleted van vagy továbbfejlesztenéd, **nyugodtan jelezd**. 🙂
-
----
-
-## 📄 License
+## Licenc
 
 [MIT License](LICENSE)
