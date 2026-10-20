@@ -4386,7 +4386,7 @@
                 closeModal();
                 // Az aktuális hash újrakattintása önmagában nem görget.
                 if (location.hash === `#msg${jump.dataset.chainJump}` && target) {
-                    requestAnimationFrame(() => target.scrollIntoView({behavior: 'smooth', block: 'start'}));
+                    requestAnimationFrame(() => target.scrollIntoView({behavior: 'instant', block: 'start'}));
                 }
             }
         }, true);
@@ -4553,9 +4553,6 @@
             li[data-id]:has(> :is(.message, .message-off) > .message-head.hash-highlight) > .hidden-bar {
                 background: var(--ph-pt-hash-highlight) !important;
                 color: var(--ph-ui-fg) !important;
-            }
-            html {
-                scroll-behavior: smooth;
             }
         `);
 
@@ -7447,7 +7444,7 @@
 
             window.scrollTo({
                 top: window.scrollY + el.getBoundingClientRect().top,
-                behavior: 'smooth'
+                behavior: 'instant'
             });
 
             return true;
@@ -7603,7 +7600,7 @@
             history.replaceState(null, '', '#msg' + id);
             window.dispatchEvent(new HashChangeEvent('hashchange'));
             if (!window.phPtMessageScroller?.scrollToMsgId?.(id)) {
-                post.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                post.scrollIntoView({ behavior: 'instant', block: 'start' });
             }
             document.dispatchEvent(new Event('ph-pt-reply-nav-updated'));
             return true;
@@ -8663,7 +8660,7 @@
                         event.preventDefault();
 
                         if (!window.phPtMessageScroller?.scrollToMsgId?.(first.id)) {
-                            (anchor || first.li).scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            (anchor || first.li).scrollIntoView({ behavior: 'instant', block: 'start' });
                         }
                     }
                 });
@@ -10792,7 +10789,7 @@
             if (window.phPtMessageScroller?.scrollToEl?.(el)) return;
             window.scrollTo({
                 top: window.scrollY + el.getBoundingClientRect().top,
-                behavior: 'smooth'
+                behavior: 'instant'
             });
         }
 
