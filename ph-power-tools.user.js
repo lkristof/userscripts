@@ -144,7 +144,8 @@
             title: '2026.10.22',
             changes: [
                 'Egyes funkciók alapértelmezett beállításai módosultak. A korábban mentett beállításokat a változás nem érinti.',
-                'Új változásnapló: frissítés után megjelennek az újdonságok, amelyek később a verziószámra kattintva is megtekinthetők.'
+                'Új változásnapló: frissítés után megjelennek az újdonságok, amelyek később a verziószámra kattintva is megtekinthetők.',
+                'Új beállítás: animált görgetés a hozzászólások közötti navigációhoz, alapértelmezetten kikapcsolva.',
             ]
         },
     ];
@@ -166,6 +167,7 @@
         giveawayAnswerChecker: true,
         stickySidebar: false,
         mobileScrollNav: false,
+        smoothScrolling: false,
         sortThreadListsByNewPosts: false,
 
         colorizePalette: DEFAULT_COLORIZE_PALETTE,
@@ -185,7 +187,7 @@
         interaction: {
             label: 'Interakció',
             keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight',
-                'keyboardNavigation', 'mobileScrollNav', 'giveawayAnswerChecker'],
+                'keyboardNavigation', 'mobileScrollNav', 'smoothScrolling', 'giveawayAnswerChecker'],
         }
     };
 
@@ -205,6 +207,7 @@
         kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
         stickySidebar: 'A bal és jobb oldalsáv a képernyőn marad.',
         mobileScrollNav: 'Lebegő panel a hozzászólások közti lépkedéshez.',
+        smoothScrolling: 'Finom, animált görgetés a hozzászólások közötti léptetéskor (billentyűzet, mobil panel, válasznavigáció).',
         giveawayAnswerChecker: 'A játék lezárása után ellenőrzi a válaszaidat, ✅/❌ jelöli őket, és kiemeli a neved a nyerteslistában.',
         sortThreadListsByNewPosts: 'A „Kedvenc fórumtémáim” és „Itt szóltam hozzá” listákat az új hozzászólások száma szerint rendezi, csökkenő sorrendben.',
     };
@@ -227,6 +230,7 @@
             giveawayAnswerChecker: 'Nyereményjáték válasz ellenőrző',
             stickySidebar: 'Fix oldalsávok',
             mobileScrollNav: 'Mobil navigációs panel',
+            smoothScrolling: 'Animált görgetés',
             sortThreadListsByNewPosts: 'Témalisták rendezése',
         }[key] || key;
     }
@@ -241,6 +245,27 @@
 
     const savedSettings = getMergedSettings();
     let draftSettings = {...savedSettings};
+
+    function phPtShouldSmoothScroll() {
+        return !!savedSettings.smoothScrolling &&
+            !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function phPtNavigationScrollBehavior() {
+        return phPtShouldSmoothScroll() ? 'smooth' : 'instant';
+    }
+
+    // A felhasznaloi lepes sajat gorgetest indit. A szintetikus hashchange
+    // tovabbra is frissiti a kiemelest, de smooth modban nem ugrik ra azonnal.
+    let phPtSkipHashAutoScroll = false;
+    function phPtDispatchNavigationHashChange() {
+        phPtSkipHashAutoScroll = phPtShouldSmoothScroll();
+        try {
+            window.dispatchEvent(new HashChangeEvent('hashchange'));
+        } finally {
+            phPtSkipHashAutoScroll = false;
+        }
+    }
 
     function hasGM() {
         return (typeof GM_getValue === "function" && typeof GM_setValue === "function")
@@ -4654,11 +4679,25 @@
             }
             const jump = event.target.closest(`#${MODAL_ID} [data-chain-jump]`);
             if (jump) {
-                const target = document.querySelector(`li[data-id="${jump.dataset.chainJump}"]`);
-                closeModal();
-                // Az aktuális hash újrakattintása önmagában nem görget.
-                if (location.hash === `#msg${jump.dataset.chainJump}` && target) {
-                    requestAnimationFrame(() => target.scrollIntoView({behavior: 'instant', block: 'start'}));
+                const id = jump.dataset.chainJump;
+                const target = document.querySelector(`li[data-id="${id}"]`);
+                const localLink = jump.getAttribute('href') === `#msg${id}`;
+                if (target && localLink && phPtShouldSmoothScroll()) {
+                    event.preventDefault();
+                    closeModal();
+                    history.replaceState(null, '', '#msg' + id);
+                    phPtDispatchNavigationHashChange();
+                    requestAnimationFrame(() => {
+                        if (!window.phPtMessageScroller?.scrollToMsgId?.(id, true)) {
+                            target.scrollIntoView({behavior: 'smooth', block: 'start'});
+                        }
+                    });
+                } else {
+                    closeModal();
+                    // Az aktuális hash újrakattintása önmagában nem görget.
+                    if (location.hash === `#msg${id}` && target) {
+                        requestAnimationFrame(() => target.scrollIntoView({behavior: 'instant', block: 'start'}));
+                    }
                 }
             }
         }, true);
@@ -4908,7 +4947,7 @@
 
             highlightHashMsg();
 
-            if (window.location.hash.match(/^#msg\d+$/)) {
+            if (!phPtSkipHashAutoScroll && window.location.hash.match(/^#msg\d+$/)) {
                 tryScrollToHashMsg(5);
             }
         }
@@ -4927,7 +4966,13 @@
             if (!id) return;
 
             e.preventDefault();
-            location.hash = "#msg" + id;
+            if (phPtShouldSmoothScroll()) {
+                history.replaceState(null, '', '#msg' + id);
+                phPtDispatchNavigationHashChange();
+                window.phPtMessageScroller?.scrollToMsgId?.(id, true);
+            } else {
+                location.hash = "#msg" + id;
+            }
         });
 
         let cancelInitialHashScroll = false;
@@ -7720,25 +7765,25 @@
                 );
         }
 
-        function scrollToEl(el) {
+        function scrollToEl(el, animate = false) {
             if (!el) return false;
 
             window.scrollTo({
                 top: window.scrollY + el.getBoundingClientRect().top,
-                behavior: 'instant'
+                behavior: animate ? phPtNavigationScrollBehavior() : 'instant'
             });
 
             return true;
         }
 
-        function scrollToMsgId(msgId) {
+        function scrollToMsgId(msgId, animate = false) {
             const id = String(msgId).replace(/^msg/, '');
             // Az összecsukott ágban lévő célhoz először nyissuk ki az őseit.
             window.phPtThreadView?.revealById?.(id);
             const el = document.getElementById('msg' + id);
             const row = el?.closest('li[data-id]');
             // A saját maga összecsukott kommentet a rövid, látható sorához görgetjük.
-            return scrollToEl(row?.classList.contains('ph-tv-collapsed') ? row : el);
+            return scrollToEl(row?.classList.contains('ph-tv-collapsed') ? row : el, animate);
         }
 
         window.phPtMessageScroller = {
@@ -7879,9 +7924,9 @@
             const post = findPost(id);
             if (!post || isOffExcludedFromNavigation(post)) return false;
             history.replaceState(null, '', '#msg' + id);
-            window.dispatchEvent(new HashChangeEvent('hashchange'));
-            if (!window.phPtMessageScroller?.scrollToMsgId?.(id)) {
-                post.scrollIntoView({ behavior: 'instant', block: 'start' });
+            phPtDispatchNavigationHashChange();
+            if (!window.phPtMessageScroller?.scrollToMsgId?.(id, true)) {
+                post.scrollIntoView({ behavior: phPtNavigationScrollBehavior(), block: 'start' });
             }
             document.dispatchEvent(new Event('ph-pt-reply-nav-updated'));
             return true;
@@ -7948,8 +7993,8 @@
             if (index < 0 || index >= posts.length) return;
             const id = posts[index].dataset.id;
             history.replaceState(null, '', '#msg' + id);
-            window.dispatchEvent(new HashChangeEvent('hashchange'));
-            window.phPtMessageScroller?.scrollToMsgId(id);
+            phPtDispatchNavigationHashChange();
+            window.phPtMessageScroller?.scrollToMsgId(id, true);
         }
 
         function getMsgIdFromHash() {
@@ -7960,8 +8005,8 @@
         function setMsgId(id) {
             if (id < 0) return;
             history.replaceState(null, '', '#msg' + id);
-            window.dispatchEvent(new HashChangeEvent('hashchange'));
-            window.phPtMessageScroller?.scrollToMsgId(id);
+            phPtDispatchNavigationHashChange();
+            window.phPtMessageScroller?.scrollToMsgId(id, true);
         }
 
         function findClosestPost(posts, targetId) {
@@ -8937,6 +8982,15 @@
                     }
 
                     const anchor = document.getElementById(`msg${first.id}`);
+                    if (anchor && phPtShouldSmoothScroll()) {
+                        event.preventDefault();
+                        history.replaceState(null, '', `#msg${first.id}`);
+                        phPtDispatchNavigationHashChange();
+                        if (!window.phPtMessageScroller?.scrollToMsgId?.(first.id, true)) {
+                            anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                        return;
+                    }
                     if (!anchor || window.location.hash === `#msg${first.id}`) {
                         event.preventDefault();
 
@@ -10775,7 +10829,7 @@
                             - sidebarRect.top
                             - (sidebar.clientHeight / 2)
                             + (li.clientHeight / 2);
-                        sidebar.scrollTo({ top: scrollTarget, behavior: 'smooth' });
+                        sidebar.scrollTo({ top: scrollTarget, behavior: phPtNavigationScrollBehavior() });
                     }
                 }
             }
@@ -11065,12 +11119,12 @@
         // -------------------------------------------------------
         // Görgetés + URL frissítés
         // -------------------------------------------------------
-        function scrollToEl(el) {
+        function scrollToEl(el, animate = false) {
             if (!el) return;
-            if (window.phPtMessageScroller?.scrollToEl?.(el)) return;
+            if (window.phPtMessageScroller?.scrollToEl?.(el, animate)) return;
             window.scrollTo({
                 top: window.scrollY + el.getBoundingClientRect().top,
-                behavior: 'instant'
+                behavior: animate ? phPtNavigationScrollBehavior() : 'instant'
             });
         }
 
@@ -11082,11 +11136,11 @@
             // A rövid hozzászólások miatt az automatikus képernyőkövetés
             // nem írhatja felül a navigációval kiválasztott hozzászólást.
             pinNavigationSelection();
-            scrollToEl(el);
+            scrollToEl(el, true);
 
             // A hash-változás a kiemelést és a többi modult is frissíti.
             history.replaceState(null, '', '#' + el.id);
-            window.dispatchEvent(new HashChangeEvent('hashchange'));
+            phPtDispatchNavigationHashChange();
             updateUI();
         }
 
