@@ -2305,6 +2305,15 @@
                 border-radius: 12px;
                 box-shadow: var(--ph-menu-shadow);
             }
+            /* A fejléc és a Mentés sor fixen látszik; csak a kapcsolók listája görgethető. */
+            .ph-power-menu.show {
+                display: flex !important;
+                flex-direction: column;
+            }
+            .ph-power-menu > .ph-menu-head,
+            .ph-power-menu > .ph-menu-footer {
+                flex: 0 0 auto;
+            }
             .ph-menu-head {
                 display: flex;
                 align-items: center;
@@ -2437,11 +2446,13 @@
             .ph-icon-btn:active {
                 transform: scale(0.96);
             }
-            .ph-accordion {
-                max-height: calc(min(68vh, 620px) - 96px);
+            .ph-power-menu > .ph-accordion {
+                flex: 1 1 auto;
+                min-height: 0;
                 padding: 6px;
                 overflow-y: auto;
                 overscroll-behavior: contain;
+                -webkit-overflow-scrolling: touch;
                 scrollbar-width: thin;
             }
             .ph-acc-group {
@@ -3156,7 +3167,8 @@
                     left: 0 !important;
                 }
                 .ph-power-btn + .dropdown-menu.show {
-                    display: block !important;
+                    display: flex !important;
+                    flex-direction: column;
                 }
                 ul.navbar-nav.navbar-buttons {
                     overflow-x: auto !important;
@@ -3191,15 +3203,16 @@
                     position: relative !important;
                     z-index: 100031 !important;
                 }
-                .ph-accordion {
-                    max-height: calc(100dvh - 150px);
-                }
                 .ph-setting-row.dropdown-item {
                     min-height: 40px;
                     padding: 8px;
                 }
             }
             @media (max-width: 575.98px) {
+                /* A mobilos alsó navigáció fölött maradjon a Mentés gomb. */
+                #ph-power-tools-dropdown .dropdown-menu.ph-power-menu {
+                    max-height: calc(100dvh - 108px - env(safe-area-inset-bottom, 0px)) !important;
+                }
                 .ph-pt-modal {
                     width: 100vw;
                     height: 100dvh;
