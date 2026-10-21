@@ -139,22 +139,22 @@
 
     const defaultSettings = {
         colorize: true,
-        linkRedirect: true,
+        linkRedirect: false,
         msgAnchorHighlight: true,
         offHider: true,
         messageChainPopup: true,
         wideView: true,
         threadView: true,
         modernView: true,
-        keyboardNavigation: true,
+        keyboardNavigation: false,
         hideUsers: true,
         markNewPosts: true,
         extraSmilies: true,
         kekShUploader: true,
         giveawayAnswerChecker: true,
-        stickySidebar: true,
-        mobileScrollNav: true,
-        sortThreadListsByNewPosts: true,
+        stickySidebar: false,
+        mobileScrollNav: false,
+        sortThreadListsByNewPosts: false,
 
         colorizePalette: DEFAULT_COLORIZE_PALETTE,
     };
