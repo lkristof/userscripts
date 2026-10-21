@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.5.0
+// @version      2.5.1
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -136,6 +136,18 @@
             hashHighlight: "#4A4015",
         }
     };
+
+    const CHANGELOG_SEEN_KEY = 'ph_power_tools_last_seen_changelog_version';
+    const CHANGELOG = [
+        {
+            version: '2.5.1',
+            title: '2026.10.22',
+            changes: [
+                'Egyes funkciók alapértelmezett beállításai módosultak. A korábban mentett beállításokat a változás nem érinti.',
+                'Új változásnapló: frissítés után megjelennek az újdonságok, amelyek később a verziószámra kattintva is megtekinthetők.'
+            ]
+        },
+    ];
 
     const defaultSettings = {
         colorize: true,
@@ -1166,6 +1178,7 @@
     function insertSettingsDropdown(container) {
         if (container.querySelector('#ph-power-tools-dropdown')) return;
         phPtSyncSitePalette();
+        const scriptVersion = String(GM_info.script.version || '0.0.0');
         const li = document.createElement('li');
         li.id = 'ph-power-tools-dropdown';
         li.className = 'dropdown';
@@ -1180,10 +1193,17 @@
                 <div class="ph-menu-head">
                     <div class="ph-menu-title-wrap">
                         <span class="ph-menu-mark"><span class="fas fa-bolt"></span></span>
-                        <span>
+                        <div class="ph-menu-brand-copy">
                             <strong class="ph-menu-title">PH Power Tools</strong>
-                            <small class="ph-menu-subtitle">Fórum finomhangolása</small>
-                        </span>
+                            <button type="button"
+                                    id="ph-open-changelog"
+                                    class="ph-menu-version-link"
+                                    title="Változásnapló megnyitása"
+                                    aria-label="v${scriptVersion} – változásnapló megnyitása">
+                                <span class="fas fa-history" aria-hidden="true"></span>
+                                <span>v${scriptVersion} · Változások</span>
+                            </button>
+                        </div>
                     </div>
                     <div class="ph-menu-actions">
                         ${(savedSettings.colorize || savedSettings.msgAnchorHighlight) ? `
@@ -1454,6 +1474,40 @@
             document.body.appendChild(modal);
         }
 
+        // ===== Újdonságok / változásnapló =====
+        if (!document.getElementById('ph-changelog-modal')) {
+            const changelogEl = document.createElement('div');
+            changelogEl.id = 'ph-changelog-modal';
+            changelogEl.className = 'ph-pt-modal';
+            changelogEl.innerHTML = `
+                <div class="ph-pt-dialog ph-pt-dialog-wide" role="dialog" aria-modal="true"
+                     aria-labelledby="ph-changelog-title">
+                    <div class="ph-dialog-head">
+                        <div class="ph-dialog-title-wrap">
+                            <span class="ph-dialog-mark"><span class="fas fa-list-alt"></span></span>
+                            <span>
+                                <strong id="ph-changelog-title" class="ph-dialog-title">Újdonságok</strong>
+                                <small class="ph-dialog-subtitle">PH Power Tools – változásnapló</small>
+                            </span>
+                        </div>
+                        <button type="button" class="ph-icon-btn ph-dialog-close" id="ph-changelog-close"
+                                title="Bezárás" aria-label="Bezárás">
+                            <span class="fas fa-times"></span>
+                        </button>
+                    </div>
+                    <div id="ph-changelog-body" class="ph-dialog-body ph-changelog-body"></div>
+                    <div class="ph-dialog-footer">
+                        <div class="ph-dialog-buttons">
+                            <button type="button" class="btn btn-sm btn-forum btn-primary" id="ph-changelog-done">
+                                Rendben
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(changelogEl);
+        }
+
         function applyColorsTheme() {
             phPtSyncThemeAttr();
         }
@@ -1522,6 +1576,130 @@
         }
 
         container.prepend(li);
+
+        const changelogModal = document.getElementById('ph-changelog-modal');
+        const changelogBtn = li.querySelector('#ph-open-changelog');
+        let changelogClosedOnThisPage = false;
+
+        function compareVersions(a, b) {
+            const numbers = version => String(version || '').split(/[.-]/).slice(0, 3)
+                .map(part => Number.parseInt(part, 10) || 0);
+            const x = numbers(a), y = numbers(b);
+            for (let i = 0; i < 3; i++) {
+                if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
+            }
+            return 0;
+        }
+
+        // A GM-tároló ugyanahhoz a userscripthez tartozik minden PH-oldalon.
+        // Ha egy kezelő nem ad GM-tárolót, a helyi tároló a tartalék megoldás.
+        async function readSeenChangelogVersion() {
+            try {
+                if (hasGM()) {
+                    const value = await gmGet(CHANGELOG_SEEN_KEY, null);
+                    if (typeof value === 'string') return value;
+                }
+            } catch (error) {
+                console.warn('[PH Power Tools] Changelog storage read failed:', error);
+            }
+            try { return localStorage.getItem(CHANGELOG_SEEN_KEY); }
+            catch { return null; }
+        }
+
+        async function saveSeenChangelogVersion() {
+            const previous = await readSeenChangelogVersion();
+            if (previous && compareVersions(previous, scriptVersion) >= 0) return;
+            try {
+                if (hasGM()) {
+                    await gmSet(CHANGELOG_SEEN_KEY, scriptVersion);
+                    return;
+                }
+            } catch (error) {
+                console.warn('[PH Power Tools] Changelog storage write failed:', error);
+            }
+            try { localStorage.setItem(CHANGELOG_SEEN_KEY, scriptVersion); }
+            catch { /* Privát mód / tiltott tárhely: nincs további teendő. */ }
+        }
+
+        function availableChangelogEntries() {
+            return CHANGELOG
+                .filter(entry => compareVersions(entry.version, scriptVersion) <= 0)
+                .sort((a, b) => compareVersions(b.version, a.version));
+        }
+
+        function openChangelogModal(entries = availableChangelogEntries()) {
+            if (!changelogModal) return;
+            const body = changelogModal.querySelector('#ph-changelog-body');
+            if (!body) return;
+            body.replaceChildren();
+
+            if (!entries.length) {
+                const empty = document.createElement('p');
+                empty.textContent = 'Ehhez a verzióhoz még nincs közzétett változásnapló.';
+                body.appendChild(empty);
+            }
+            for (const entry of entries) {
+                const section = document.createElement('section');
+                section.className = 'ph-changelog-entry';
+                const heading = document.createElement('h3');
+                heading.className = 'ph-changelog-heading';
+                heading.textContent = `v${entry.version} – ${entry.title}`;
+                section.appendChild(heading);
+
+                const items = document.createElement('ul');
+                items.className = 'ph-changelog-items';
+                for (const change of entry.changes) {
+                    const item = document.createElement('li');
+                    item.textContent = change;
+                    items.appendChild(item);
+                }
+                section.appendChild(items);
+                body.appendChild(section);
+            }
+            changelogModal.style.display = 'flex';
+        }
+
+        function closeChangelogModal() {
+            if (!changelogModal || changelogModal.style.display !== 'flex') return;
+            changelogModal.style.display = 'none';
+            changelogClosedOnThisPage = true;
+            void saveSeenChangelogVersion();
+        }
+
+        changelogBtn?.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            li.querySelector('.dropdown-toggle')?.click();
+            setTimeout(() => openChangelogModal(), 0);
+        });
+        changelogModal?.querySelector('#ph-changelog-close')?.addEventListener('click', closeChangelogModal);
+        changelogModal?.querySelector('#ph-changelog-done')?.addEventListener('click', closeChangelogModal);
+        changelogModal?.addEventListener('click', event => {
+            if (event.target === changelogModal) closeChangelogModal();
+        });
+
+        async function maybeShowChangelogAfterUpdate() {
+            const previous = await readSeenChangelogVersion();
+            if (previous && compareVersions(previous, scriptVersion) >= 0) return;
+
+            // Első changelogos futásnál is mutassuk az AKTUÁLIS verzió bejegyzését,
+            // akkor is, ha a korábbi telepítés még nem tárolt verzióinformációt.
+            // Korábbi mentett verzió esetén az azóta megjelent bejegyzések látszanak.
+            const unread = availableChangelogEntries()
+                .filter(entry => previous
+                    ? compareVersions(entry.version, previous) > 0
+                    : compareVersions(entry.version, scriptVersion) === 0);
+            if (!unread.length) {
+                await saveSeenChangelogVersion();
+                return;
+            }
+
+            // Nincs késleltetés: ha van olvasatlan bejegyzés, rögtön megnyitjuk.
+            // Közben kézzel megnyitott vagy bezárt changelogot nem írunk felül.
+            if (!changelogClosedOnThisPage && changelogModal?.style.display !== 'flex') {
+                openChangelogModal(unread);
+            }
+        }
 
         const openBtn = li.querySelector('#ph-open-secrets');
         const modal = document.getElementById('ph-secrets-modal');
@@ -1845,6 +2023,11 @@
                 const colorsModal  = document.getElementById('ph-colors-modal');
                 const backupModal  = document.getElementById('ph-backup-modal');
 
+                if (changelogModal?.style.display === 'flex') {
+                    closeChangelogModal();
+                    return;
+                }
+
                 if (backupModal?.style.display === 'flex') {
                     backupModal.style.display = 'none';
                     return;
@@ -1966,6 +2149,11 @@
             await storage.flush();
             li.querySelector('.dropdown-toggle').click();
             location.reload();
+        });
+
+        // Verzióellenőrzés a beállítások és a fórum inicializálása után.
+        void maybeShowChangelogAfterUpdate().catch(error => {
+            console.warn('[PH Power Tools] Changelog check failed:', error);
         });
 
         // Accordion toggle (animated)
@@ -2106,6 +2294,60 @@
                 display: flex;
                 align-items: center;
                 gap: 9px;
+            }
+            .ph-menu-head > .ph-menu-title-wrap { flex: 1 1 auto; }
+            .ph-menu-head > .ph-menu-actions { flex: 0 0 auto; }
+            .ph-menu-brand-copy {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                min-width: 0;
+            }
+            .ph-menu-brand-copy .ph-menu-title { white-space: nowrap; }
+            .ph-menu-version-link {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                max-width: 100%;
+                min-width: 0;
+                margin-top: 2px;
+                padding: 0;
+                border: 0;
+                background: transparent;
+                color: var(--ph-ui-muted);
+                font: inherit;
+                font-size: 10.5px;
+                font-weight: 500;
+                line-height: 1.18;
+                text-decoration: none;
+                text-align: left;
+                cursor: pointer;
+                -webkit-appearance: none;
+                appearance: none;
+            }
+            .ph-menu-version-link .fa-history {
+                font-size: 9px;
+                flex: 0 0 auto;
+            }
+            .ph-menu-version-link span:last-child {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .ph-menu-version-link:hover,
+            .ph-menu-version-link:focus-visible {
+                color: var(--ph-ui-accent-ink);
+                text-decoration: none;
+            }
+            .ph-menu-version-link:hover span:last-child,
+            .ph-menu-version-link:focus-visible span:last-child {
+                text-decoration: underline;
+            }
+            .ph-menu-version-link:focus-visible {
+                outline: 2px solid var(--ph-ui-accent-ink);
+                outline-offset: 2px;
+                border-radius: 2px;
             }
             .ph-menu-mark,
             .ph-dialog-mark {
@@ -2560,6 +2802,34 @@
                 background: transparent;
                 cursor: pointer;
             }
+
+            /* Újdonságok / changelog. */
+            #ph-changelog-modal .ph-dialog-footer { justify-content: flex-end; }
+            #ph-changelog-modal .ph-changelog-body {
+                display: grid;
+                align-content: start;
+                gap: 10px;
+            }
+            #ph-changelog-modal .ph-changelog-entry {
+                padding: 12px 13px;
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 10px;
+                background: var(--ph-ui-soft);
+            }
+            #ph-changelog-modal .ph-changelog-heading {
+                margin: 0 0 8px;
+                color: var(--ph-ui-fg);
+                font-size: 13px;
+                font-weight: 700;
+            }
+            #ph-changelog-modal .ph-changelog-items {
+                margin: 0;
+                padding-left: 18px;
+                color: var(--ph-ui-fg);
+                font-size: 12px;
+                line-height: 1.55;
+            }
+            #ph-changelog-modal .ph-changelog-items li + li { margin-top: 5px; }
 
             /* Beállítások importálása / exportálása. */
             .ph-backup-body {
