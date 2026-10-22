@@ -10810,12 +10810,32 @@
     }
 
     function stickySidebar() {
+        const desktopSidebarQuery = window.matchMedia('(min-width: 992px)');
+        // A Fix oldalsavok sajat animacioja NEM fugg a hozzaszolas-
+        // navigaciohoz tartozo smoothScrolling beallitastol.
+        // A rendszer csokkentett mozgas preferenciajat megtartjuk.
+        function sidebarScrollBehavior() {
+            return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                ? 'instant' : 'smooth';
+        }
+        const leftSidebar = document.querySelector('#left');
+        const rightSidebar = document.querySelector('#right.slotSingleColumn');
+        const sidebars = [leftSidebar, rightSidebar].filter(Boolean);
+
         injectStyleOnce('ph-sticky-sidebar-style', `
-            #right.slotSingleColumn::-webkit-scrollbar,
-            #left::-webkit-scrollbar {
-                width: 4px;
+            /* A bal es jobb sav megorzi a sajat oszlopat es kulon scrollbarjat. */
+            #right.slotSingleColumn::-webkit-scrollbar { width: 8px; }
+            #right.slotSingleColumn::-webkit-scrollbar-thumb {
+                background: color-mix(in srgb, var(--ph-ui-muted) 55%, transparent);
+                border: 1px solid transparent;
+                background-clip: padding-box;
+                border-radius: 10px;
             }
-            #right.slotSingleColumn::-webkit-scrollbar-thumb,
+            #right.slotSingleColumn::-webkit-scrollbar-thumb:hover {
+                background: var(--ph-ui-muted);
+                background-clip: padding-box;
+            }
+            #left::-webkit-scrollbar { width: 4px; }
             #left::-webkit-scrollbar-thumb {
                 background-color: #ccc;
                 border-radius: 10px;
@@ -10826,9 +10846,7 @@
                 box-shadow: inset 5px 0px 0 0;
                 padding-left: 10px !important;
             }
-            .active-topic-sidebar a {
-                color: #000 !important;
-            }
+            .active-topic-sidebar a { color: #000 !important; }
             body[data-theme="dark"] .active-topic-sidebar {
                 background-color: #3a352a !important;
                 box-shadow: inset 5px 0px 0 0 #e0e0e0;
@@ -10841,9 +10859,7 @@
                 font-weight: bold !important;
                 box-shadow: inset 5px 0px 0 0 #000000;
             }
-            .active-topic-header a {
-                color: #000 !important;
-            }
+            .active-topic-header a { color: #000 !important; }
             body[data-theme="dark"] .active-topic-header {
                 background-color: #3a352a !important;
                 box-shadow: inset 5px 0px 0 0 #e0e0e0;
@@ -10851,30 +10867,47 @@
             body[data-theme="dark"] .active-topic-header a {
                 color: var(--ph-ui-fg) !important;
             }
-            /* Asztalon megmarad a sticky oldalsav es a kulon gorgetes. */
+
             @media (min-width: 992px) {
+                #right.slotSingleColumn,
+                #left {
+                    position: sticky !important;
+                    top: 85px !important;
+                    align-self: flex-start;
+                    height: auto !important;
+                    max-height: var(--ph-pt-sidebar-scroll-height, calc(100dvh - 87px)) !important;
+                    overflow-y: auto !important;
+                    overflow-x: hidden !important;
+                    overscroll-behavior-y: contain;
+                    overscroll-behavior-x: auto;
+                    scrollbar-width: thin;
+                    -webkit-overflow-scrolling: touch;
+                    /* A helyi, programozott oldalssav-gorgetes mindig finom,
+                       fuggetlenul a kozponti Animalt gorgetes kapcsolotol. */
+                    scroll-behavior: smooth !important;
+                    transition: top 0.3s ease, max-height 0.3s ease !important;
+                    z-index: auto !important;
+                }
                 #right.slotSingleColumn {
                     padding-left: 4px;
                     margin-left: -4px;
-                }
-                #right.slotSingleColumn,
-                #left {
-                    position: sticky;
-                    top: 85px;
-                    max-height: calc(100vh - 55px);
-                    overflow-y: auto;
-                    overscroll-behavior-y: contain;
-                    overscroll-behavior-x: auto;
-                    transition: top 0.3s ease, max-height 0.3s ease;
+                    scrollbar-color: var(--ph-ui-muted) transparent;
                 }
                 html.scroll-down #right.slotSingleColumn,
                 html.scroll-down #left {
-                    top: 45px;
-                    max-height: calc(100vh - 10px);
+                    top: 45px !important;
+                    max-height: var(--ph-pt-sidebar-scroll-height, calc(100dvh - 47px)) !important;
                 }
             }
-            /* Mobilon es tableten a dokumentum az egyetlen fuggoleges scroller.
-               A webhely sajat magassagi/overflow beallitasait is felulirjuk. */
+            /* A felhasznalo kisegitő mozgaspreferenciaja mindket oldalt erinti. */
+            @media (prefers-reduced-motion: reduce) {
+                #right.slotSingleColumn,
+                #left {
+                    transition: none !important;
+                    scroll-behavior: auto !important;
+                }
+            }
+            /* Telefonon/tableten a dokumentum az egyetlen fuggoleges scroller. */
             @media (max-width: 991.98px) {
                 #right.slotSingleColumn,
                 #left {
@@ -10885,6 +10918,7 @@
                     max-height: none !important;
                     overflow: visible !important;
                     overscroll-behavior: auto !important;
+                    scroll-behavior: auto !important;
                     transition: none !important;
                 }
                 #right.slotSingleColumn {
@@ -10894,51 +10928,124 @@
             }
         `);
 
-        const desktopSidebarQuery = window.matchMedia('(min-width: 992px)');
+        // A ket oldalsav ugyanattol a kepernyo- es szulohatartol fugg.
+        // Azonos max-height szamitassal a bal sav nem kesobb/erosebben
+        // koveti az iranyvaltast, mint a jobb. A belso gorgetesuk fuggetlen.
+        const row = rightSidebar?.closest('.row') || leftSidebar?.closest('.row')
+            || rightSidebar?.parentElement || leftSidebar?.parentElement;
+        const center = row?.querySelector('#center');
+        const originalRowMinHeight = row?.style.minHeight || '';
+        let rowHeightHeld = false;
+        let scheduled = false;
 
-        // Szelesbol mobilnezetbe valtaskor a desktop sidebar korabbi
-        // belso scroll pozicioja sem tarthatja vissza a tartalmat.
+        function updateSidebarScrollHeights() {
+            if (!row || !sidebars.length || !desktopSidebarQuery.matches) {
+                for (const sidebar of sidebars) {
+                    sidebar.style.removeProperty('--ph-pt-sidebar-scroll-height');
+                }
+                if (rowHeightHeld && row) {
+                    row.style.minHeight = originalRowMinHeight;
+                    rowHeightHeld = false;
+                }
+                return;
+            }
+
+            const viewportHeight = window.innerHeight;
+            const stickyTop = document.documentElement.classList.contains('scroll-down') ? 45 : 85;
+            const rowRect = row.getBoundingClientRect();
+            const visibleTop = Math.max(stickyTop, rowRect.top);
+            // Megtartjuk a feltoltott valtozat 0 pixeles also rahagyasat.
+            const bottomGap = 0;
+            const screenRoom = viewportHeight - visibleTop - bottomGap;
+
+            // Ha a sor magassagat valamelyik oldalsav adja, a sajat
+            // max-height beallitasa ne okozhasson zsugorodasi hurkot.
+            const visibleSidebars = sidebars.filter(sidebar => sidebar.getClientRects().length > 0);
+            const rowOwnHeight = visibleSidebars.some(sidebar =>
+                Math.abs(rowRect.height - sidebar.offsetHeight) < 3);
+            const tallestSidebar = Math.max(0, ...visibleSidebars.map(sidebar => sidebar.offsetHeight));
+            const centerHeight = center?.offsetHeight || 0;
+            const rowLimitedBySidebar = rowOwnHeight && centerHeight < tallestSidebar;
+            if (rowLimitedBySidebar && !rowHeightHeld) {
+                row.style.minHeight = `${Math.ceil(rowRect.height)}px`;
+                rowHeightHeld = true;
+            }
+            const parentRoom = rowLimitedBySidebar
+                ? screenRoom : rowRect.bottom - visibleTop - bottomGap;
+
+            const maxHeight = Math.max(80, Math.floor(Math.min(screenRoom, parentRoom)));
+            const nextValue = `${maxHeight}px`;
+            for (const sidebar of sidebars) {
+                if (sidebar.style.getPropertyValue('--ph-pt-sidebar-scroll-height') !== nextValue) {
+                    sidebar.style.setProperty('--ph-pt-sidebar-scroll-height', nextValue);
+                }
+            }
+        }
+
+        function scheduleSidebarScrollUpdate() {
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(() => {
+                scheduled = false;
+                updateSidebarScrollHeights();
+            });
+        }
+
         function resetMobileSidebarScroll() {
             if (desktopSidebarQuery.matches) return;
-            for (const sidebar of document.querySelectorAll('#right.slotSingleColumn, #left')) {
+            for (const sidebar of sidebars) {
                 if (sidebar.scrollTop !== 0) sidebar.scrollTop = 0;
             }
         }
+
+        updateSidebarScrollHeights();
         resetMobileSidebarScroll();
+        window.addEventListener('scroll', scheduleSidebarScrollUpdate, { passive: true });
+        window.addEventListener('resize', scheduleSidebarScrollUpdate, { passive: true });
+        const onBreakpointChange = () => {
+            resetMobileSidebarScroll();
+            scheduleSidebarScrollUpdate();
+        };
         if (desktopSidebarQuery.addEventListener) {
-            desktopSidebarQuery.addEventListener('change', resetMobileSidebarScroll);
+            desktopSidebarQuery.addEventListener('change', onBreakpointChange);
         } else if (desktopSidebarQuery.addListener) {
-            desktopSidebarQuery.addListener(resetMobileSidebarScroll);
+            desktopSidebarQuery.addListener(onBreakpointChange);
         }
+        if (typeof ResizeObserver !== 'undefined' && center) {
+            new ResizeObserver(scheduleSidebarScrollUpdate).observe(center);
+        }
+        if (row) {
+            new MutationObserver(scheduleSidebarScrollUpdate)
+                .observe(row, { attributes: true, attributeFilter: ['class'] });
+        }
+        new MutationObserver(scheduleSidebarScrollUpdate)
+            .observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
         const currentMatch = window.location.pathname.match(/\/tema\/[^/]+\//);
         if (!currentMatch) return;
-
         const currentTopicId = currentMatch[0];
 
-        // Sidebar (#right) - desktop
+        // Az aktív téma eredeti kijelölése és a jobb listán belüli görgetése.
         document.querySelectorAll('.user-thread-list a').forEach(link => {
             const href = link.getAttribute('href');
             if (href && href.includes(currentTopicId)) {
                 const li = link.closest('li');
                 if (li) {
                     li.classList.add('active-topic-sidebar');
-                    const sidebar = document.querySelector('#right.slotSingleColumn');
-                    if (sidebar && desktopSidebarQuery.matches) {
+                    if (rightSidebar && desktopSidebarQuery.matches) {
                         const liRect = li.getBoundingClientRect();
-                        const sidebarRect = sidebar.getBoundingClientRect();
-                        const scrollTarget = sidebar.scrollTop
+                        const sidebarRect = rightSidebar.getBoundingClientRect();
+                        const scrollTarget = rightSidebar.scrollTop
                             + liRect.top
                             - sidebarRect.top
-                            - (sidebar.clientHeight / 2)
+                            - (rightSidebar.clientHeight / 2)
                             + (li.clientHeight / 2);
-                        sidebar.scrollTo({ top: scrollTarget, behavior: phPtNavigationScrollBehavior() });
+                        rightSidebar.scrollTo({ top: scrollTarget, behavior: sidebarScrollBehavior() });
                     }
                 }
             }
         });
 
-        // Header dropdown list - mobil/tablet
         document.querySelectorAll('.header-thread-list a').forEach(link => {
             const href = link.getAttribute('href');
             if (href && href.includes(currentTopicId)) {
