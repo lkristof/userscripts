@@ -6,7 +6,7 @@
 
 **[Telepítés – PH Power Tools](https://raw.githubusercontent.com/lkristof/userscripts/main/ph-power-tools.user.js)**
 
-Tampermonkey vagy Violentmonkey szükséges. A `GM_xmlhttpRequest`-et nem támogató userscript-kezelőkben a képfeltöltés és a Gist-szinkron korlátozott lehet.
+Tampermonkey vagy Violentmonkey ajánlott. Userscript-kezelő nélkül bookmarkletként is futtatható, de a böngésző CORS-/CSP-korlátai egyes funkciókat (például a képfeltöltést és a Gist-szinkront) korlátozhatnak.
 
 A modulok a fejléc **PH Power Tools** menüjében, a **Megjelenés / Szűrés / Interakció** csoportokban kapcsolhatók. A **Mentés** újratölti az oldalt. Az OFF, a széles, a Modern és a Thread nézetnek külön témaoldali kapcsolója is van.
 
@@ -25,12 +25,14 @@ A modulok a fejléc **PH Power Tools** menüjében, a **Megjelenés / Szűrés /
 | **Új hozzászólások jelölése**      | Témánként nyilvántartja a legutóbb látott hozzászólásazonosítót, jelöli az új bejegyzéseket, és az első olvasatlanhoz ugrik.                                                                                                                                                                    |
 | **Billentyűzetes navigáció**       | Hozzászólások közti léptetés nyilakkal, válaszelőzmény megnyitása `R`-rel és visszalépés `Shift+R`-rel.                                                                                                                                                                                         |
 | **Mobil navigációs panel**         | Húzható, összecsukható lebegő panel a hozzászólások és fórumoldalak közti léptetéshez; megjegyzi a helyét.                                                                                                                                                                                      |
+| **Animált görgetés**               | Kapcsolható, finom görgetés a hozzászólások közötti navigációhoz;                                                                                                                                                                                                                               |
 | **Link átirányítás**               | A támogatott fórumdomainek közötti fórumhivatkozásokat az aktuális domainhez igazítja.                                                                                                                                                                                                          |
 | **Extra smiley-k**                 | További smiley-k és emojik a fórum- és privátüzenet-szerkesztőben.                                                                                                                                                                                                                              |
 | **kek.sh képfeltöltő**             | Képfeltöltés API-kulccsal, kép/link beszúrása a szerkesztőbe, rácsos/listás galéria, törlés és opcionális Gist-szinkron.                                                                                                                                                                        |
 | **Nyereményjáték válaszellenőrző** | Lezárult nyereményjátékokban ellenőrzi a válaszokat, jelöli az eredményt és kiemeli a nevet a nyerteslistában.                                                                                                                                                                                  |
 | **Fix oldalsávok**                 | Görgetéskor látható oldalsávok, az aktuális téma kiemelésével.                                                                                                                                                                                                                                  |
 | **Témalisták rendezése**           | A **Kedvenc fórumtémáim** és **Itt szóltam hozzá** listák rendezése az új hozzászólások száma szerint.                                                                                                                                                                                          |
+| **Változásnapló**                  | Frissítés után megjeleníti az újdonságokat; később a menü verziószámára kattintva nyitható meg. A fórumos és GitHub-visszajelzés innen érhető el.                                                                                                                                               |
 
 ### Lánc popup – többoldalas betöltés
 
