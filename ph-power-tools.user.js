@@ -1521,7 +1521,16 @@
                         </button>
                     </div>
                     <div id="ph-changelog-body" class="ph-dialog-body ph-changelog-body"></div>
-                    <div class="ph-dialog-footer">
+                    <div class="ph-dialog-footer ph-changelog-footer">
+                        <div class="ph-changelog-feedback" aria-label="Visszajelzés">
+                            <span class="fas fa-comment-alt" aria-hidden="true"></span>
+                            <span class="ph-changelog-feedback-title">Észrevétel?</span>
+                            <a href="https://prohardver.hu/tema/prohardver_forum_userscript_hogy_lasd_mikor_neked/friss.html"
+                               target="_blank" rel="noopener noreferrer" title="Visszajelzés a fórumban">Fórum</a>
+                            <span aria-hidden="true">·</span>
+                            <a href="https://github.com/lkristof/userscripts/issues"
+                               target="_blank" rel="noopener noreferrer" title="Hibajelentés GitHubon">GitHub</a>
+                        </div>
                         <div class="ph-dialog-buttons">
                             <button type="button" class="btn btn-sm btn-forum btn-primary" id="ph-changelog-done">
                                 Rendben
@@ -2840,7 +2849,47 @@
             }
 
             /* Újdonságok / changelog. */
-            #ph-changelog-modal .ph-dialog-footer { justify-content: flex-end; }
+            #ph-changelog-modal .ph-changelog-footer {
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                padding: 8px 12px;
+            }
+            #ph-changelog-modal .ph-changelog-footer .ph-dialog-buttons {
+                flex: 0 0 auto;
+                margin-left: auto;
+                justify-content: flex-end;
+            }
+            #ph-changelog-modal .ph-changelog-feedback {
+                display: flex;
+                flex: 1 1 auto;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 3px 5px;
+                min-width: 0;
+                color: var(--ph-ui-muted);
+                font-size: 11.5px;
+                line-height: 1.35;
+            }
+            #ph-changelog-modal .ph-changelog-feedback > .fas {
+                font-size: 11px;
+            }
+            #ph-changelog-modal .ph-changelog-feedback-title {
+                color: var(--ph-ui-fg);
+                font-weight: 700;
+            }
+            #ph-changelog-modal .ph-changelog-feedback a {
+                color: var(--ph-ui-accent-ink);
+                font-weight: 600;
+                // text-decoration: underline;
+                // text-underline-offset: 2px;
+            }
+            #ph-changelog-modal .ph-changelog-feedback a:focus-visible {
+                outline: 2px solid var(--ph-ui-accent-ink);
+                outline-offset: 2px;
+                border-radius: 2px;
+            }
             #ph-changelog-modal .ph-changelog-body {
                 display: grid;
                 align-content: start;
