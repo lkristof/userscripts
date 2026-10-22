@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.5.1
+// @version      2.5.2
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -146,12 +146,20 @@
     const CHANGELOG_SEEN_KEY = 'ph_power_tools_last_seen_changelog_version';
     const CHANGELOG = [
         {
+            version: '2.5.2',
+            title: '2026.10.25',
+            changes: [
+                '[FIX] Fix oldalsávok: az oldalsávok teljes tartalma az oldal görgetési pozíciójától függetlenül végiggörgethető.',
+                '[NEW] A változásnapló bejegyzései színes NEW, FIX és CHANGE címkéket kaptak.',
+            ]
+        },
+        {
             version: '2.5.1',
             title: '2026.10.22',
             changes: [
-                'Egyes funkciók alapértelmezett beállításai módosultak. A korábban mentett beállításokat a változás nem érinti.',
-                'Új változásnapló: frissítés után megjelennek az újdonságok, amelyek később a verziószámra kattintva is megtekinthetők.',
-                'Új beállítás: animált görgetés a hozzászólások közötti navigációhoz, alapértelmezetten kikapcsolva.',
+                '[CHANGE] Egyes funkciók alapértelmezett beállításai módosultak. A korábban mentett beállításokat a változás nem érinti.',
+                '[NEW] Új változásnapló: frissítés után megjelennek az újdonságok, amelyek később a verziószámra kattintva is megtekinthetők.',
+                '[NEW] Új beállítás: animált görgetés a hozzászólások közötti navigációhoz, alapértelmezetten kikapcsolva.',
             ]
         },
     ];
@@ -1690,7 +1698,25 @@
                 items.className = 'ph-changelog-items';
                 for (const change of entry.changes) {
                     const item = document.createElement('li');
-                    item.textContent = change;
+                    const changeText = String(change);
+                    const typeMatch = changeText.match(/^\[(NEW|FIX|CHANGE)\]\s*/i);
+
+                    // Az ismert [NEW]/[FIX]/[CHANGE] előtagokat kis színes címkévé alakítjuk.
+                    // A szöveget textContenttel adjuk hozzá, hogy ne legyen HTML-beszúrás.
+                    if (typeMatch) {
+                        const type = typeMatch[1].toLowerCase();
+                        const label = document.createElement('span');
+                        label.className = `ph-changelog-type ph-changelog-type-${type}`;
+                        label.textContent = type.toUpperCase();
+                        label.title = { new: 'Új funkció', fix: 'Hibajavítás', change: 'Módosítás' }[type];
+                        item.appendChild(label);
+                    }
+
+                    const description = document.createElement('span');
+                    description.className = 'ph-changelog-item-text';
+                    description.textContent = typeMatch
+                        ? changeText.slice(typeMatch[0].length) : changeText;
+                    item.appendChild(description);
                     items.appendChild(item);
                 }
                 section.appendChild(items);
@@ -2915,12 +2941,69 @@
             }
             #ph-changelog-modal .ph-changelog-items {
                 margin: 0;
-                padding-left: 18px;
+                padding: 0;
+                list-style: none;
                 color: var(--ph-ui-fg);
                 font-size: 12px;
                 line-height: 1.55;
             }
-            #ph-changelog-modal .ph-changelog-items li + li { margin-top: 5px; }
+            #ph-changelog-modal .ph-changelog-items li {
+                display: flex;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            #ph-changelog-modal .ph-changelog-items li + li { margin-top: 8px; }
+            #ph-changelog-modal .ph-changelog-item-text {
+                min-width: 0;
+                flex: 1 1 auto;
+                overflow-wrap: anywhere;
+            }
+            #ph-changelog-modal .ph-changelog-type {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex: 0 0 auto;
+                min-width: 53px;
+                margin-top: 1px;
+                padding: 2px 6px;
+                border: 1px solid transparent;
+                border-radius: 5px;
+                font-size: 9.5px;
+                font-weight: 700;
+                line-height: 1.4;
+                letter-spacing: 0.03em;
+                white-space: nowrap;
+            }
+            #ph-changelog-modal .ph-changelog-type-new {
+                color: #136342;
+                background: #e7f4eb;
+                border-color: #b9ddc7;
+            }
+            #ph-changelog-modal .ph-changelog-type-fix {
+                color: #8e4c0a;
+                background: #fff0da;
+                border-color: #edd1a8;
+            }
+            #ph-changelog-modal .ph-changelog-type-change {
+                color: #1b57a2;
+                background: #e8f1ff;
+                border-color: #bfd4f3;
+            }
+            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-new {
+                color: #a5f4c7;
+                background: rgba(30, 160, 94, 0.18);
+                border-color: rgba(100, 230, 155, 0.35);
+            }
+            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-fix {
+                color: #ffd195;
+                background: rgba(217, 129, 25, 0.18);
+                border-color: rgba(243, 171, 86, 0.35);
+            }
+            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-change {
+                color: #bdd5ff;
+                background: rgba(67, 119, 221, 0.19);
+                border-color: rgba(139, 173, 255, 0.35);
+            }
 
             /* Beállítások importálása / exportálása. */
             .ph-backup-body {
