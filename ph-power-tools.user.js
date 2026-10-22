@@ -137,6 +137,12 @@
         }
     };
 
+    function getScriptVersion() {
+        const gmVersion = (typeof GM_info !== 'undefined') ? GM_info?.script?.version : null;
+        // Userscript-kezelő nélkül a CHANGELOG első, legfrissebb bejegyzése a verzió.
+        return String(gmVersion || CHANGELOG[0]?.version || '0.0.0');
+    }
+
     const CHANGELOG_SEEN_KEY = 'ph_power_tools_last_seen_changelog_version';
     const CHANGELOG = [
         {
@@ -412,7 +418,7 @@
         const backup = {
             format: BACKUP_FORMAT,
             formatVersion: BACKUP_FORMAT_VERSION,
-            scriptVersion: GM_info.script.version,
+            scriptVersion: getScriptVersion(),
             exportedAt: new Date().toISOString(),
             values,
         };
@@ -1203,7 +1209,7 @@
     function insertSettingsDropdown(container) {
         if (container.querySelector('#ph-power-tools-dropdown')) return;
         phPtSyncSitePalette();
-        const scriptVersion = String(GM_info.script.version || '0.0.0');
+        const scriptVersion = getScriptVersion();
         const li = document.createElement('li');
         li.id = 'ph-power-tools-dropdown';
         li.className = 'dropdown';
@@ -9421,8 +9427,41 @@
 
         /* ================= GM REQUEST ================= */
 
+        // Under a userscript manager this is a privileged cross-origin request.
+        // Bookmarklets have no GM_xmlhttpRequest, so try regular browser fetch;
+        // the destination server must allow CORS for this to succeed.
         function gmRequest(opts) {
-            return GM_xmlhttpRequest(opts);
+            if (typeof GM_xmlhttpRequest === 'function') return GM_xmlhttpRequest(opts);
+
+            const controller = new AbortController();
+            let timedOut = false;
+            const timer = Number(opts.timeout) > 0 ? setTimeout(() => {
+                timedOut = true;
+                controller.abort();
+            }, opts.timeout) : null;
+
+            fetch(opts.url, {
+                method: opts.method || 'GET',
+                headers: opts.headers || {},
+                ...(opts.data == null ? {} : { body: opts.data }),
+                signal: controller.signal
+            }).then(async response => {
+                const responseText = await response.text();
+                await opts.onload?.({
+                    status: response.status,
+                    statusText: response.statusText,
+                    responseText
+                });
+            }).catch(error => {
+                if (timedOut) opts.ontimeout?.(error);
+                else if (controller.signal.aborted) opts.onabort?.(error);
+                else opts.onerror?.(error);
+            }).finally(() => {
+                if (timer !== null) clearTimeout(timer);
+            });
+
+            // fetch does not expose upload progress; onprogress is GM-only.
+            return { abort: () => controller.abort() };
         }
 
         /* ================= STORAGE (shared) ================= */
@@ -10339,7 +10378,9 @@
                         }
                     },
                     onerror: () => {
-                        setStatus(wrapper, "Hálózati hiba történt feltöltés közben.", "error");
+                        setStatus(wrapper, typeof GM_xmlhttpRequest === 'function'
+                            ? "Hálózati hiba történt feltöltés közben."
+                            : "A kek.sh feltöltés nem érhető el ebből a böngészőből (lehetséges CORS-korlátozás).", "error");
                         setKekUploading(wrapper, false);
                     },
                     ontimeout: () => {
