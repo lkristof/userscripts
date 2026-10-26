@@ -151,7 +151,7 @@
             changes: [
                 '[NEW] A változásnapló bejegyzései színes NEW, FIX és CHANGE címkéket kaptak.',
                 '[FIX] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
-                '[FIX] Fix oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető, a teljes tartalmuk végiggörgethető.',
+                '[FIX] Fix oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető. Az oldalsávok a fejléc mozgásától függetlenül állandó pozícióban maradnak, így a fejléc rájuk lóghat.',
             ]
         },
         {
@@ -10977,16 +10977,20 @@
                 color: var(--ph-ui-fg) !important;
             }
 
-            /* A sticky elemeket a forum tartalmi soranak also hatara fogja meg:
-               a footer elott a TELJES sav felfele mozdul, nem a max-height
-               csokken. Tableten (768-991 px) a jobb sav ugyanezt tudja. */
+            /* Az oldalsavok a fejlec 40 px-es nyitasatol/csukodasatol
+               fuggetlen, allando top erteket kapnak. A sticky szulohatar
+               tovabbra is megallitja oket a footer elott, a belso gorgetes
+               es a 2 px also rahagyas megmarad. A fejlec lehet felul. */
             @media (min-width: 768px) {
+                #header-sticky {
+                    z-index: 1050 !important;
+                }
                 #right.slotSingleColumn {
                     position: sticky !important;
-                    top: 85px !important;
+                    top: 45px !important;
                     align-self: flex-start;
                     height: auto !important;
-                    max-height: calc(100dvh - 87px) !important;
+                    max-height: calc(100dvh - 47px) !important;
                     overflow-y: auto !important;
                     overflow-x: hidden !important;
                     overscroll-behavior-y: contain;
@@ -10994,27 +10998,20 @@
                     scrollbar-width: thin;
                     -webkit-overflow-scrolling: touch;
                     scroll-behavior: smooth !important;
-                    transition: top 0.3s ease, max-height 0.3s ease !important;
                     z-index: auto !important;
                     padding-left: 4px;
                     margin-left: -4px;
                     scrollbar-color: var(--ph-ui-muted) transparent;
                 }
-                html.scroll-down #right.slotSingleColumn {
-                    top: 45px !important;
-                    max-height: calc(100dvh - 47px) !important;
-                }
             }
-            /* Asztali nezetben a bal es jobb oldalsav a fejlec 85/45 px-es
-               valtasaival egyutt, 0.3 masodperces atmenettel mozog. */
-            /* A bal oldalsáv csak az asztali nézetben rögzített. */
+            /* Asztalon mindket sav 45 px-nel marad, akarhol is all a fejlec. */
             @media (min-width: 992px) {
                 #left {
                     position: sticky !important;
-                    top: 85px !important;
+                    top: 45px !important;
                     align-self: flex-start;
                     height: auto !important;
-                    max-height: calc(100dvh - 87px) !important;
+                    max-height: calc(100dvh - 47px) !important;
                     overflow-y: auto !important;
                     overflow-x: hidden !important;
                     overscroll-behavior-y: contain;
@@ -11022,25 +11019,12 @@
                     scrollbar-width: thin;
                     -webkit-overflow-scrolling: touch;
                     scroll-behavior: smooth !important;
-                    transition: top 0.3s ease, max-height 0.3s ease !important;
                     z-index: auto !important;
                 }
-                html.scroll-down #left {
-                    top: 45px !important;
-                    max-height: calc(100dvh - 47px) !important;
-                }
             }
-            /* Tablet: a rovidebb fejlec miatt 49 px a kiindulo tavolsag.
-               A scroll-down allapot ugyanolyan, 40 px-es elmozdulast kap,
-               mint az asztali 85 -> 45 px: tablet 49 -> 9 px.
-               A max-height egyutt valtozik a top-pal, 2 px alsó rahagyassal;
-               a sticky szulohatar tovabbra is a footer elott tartja a savot. */
+            /* Tableten csak a jobb sav rögzített: allando 9 px-es felso tavolsag. */
             @media (min-width: 768px) and (max-width: 991.98px) {
                 #right.slotSingleColumn {
-                    top: 49px !important;
-                    max-height: calc(100dvh - 51px) !important;
-                }
-                html.scroll-down #right.slotSingleColumn {
                     top: 9px !important;
                     max-height: calc(100dvh - 11px) !important;
                 }
