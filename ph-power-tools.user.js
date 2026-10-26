@@ -149,9 +149,9 @@
             version: '2.5.2',
             title: '2026.10.26',
             changes: [
-                '[FIX] Fix oldalsávok: az oldalsávok teljes tartalma az oldal görgetési pozíciójától függetlenül végiggörgethető.',
                 '[NEW] A változásnapló bejegyzései színes NEW, FIX és CHANGE címkéket kaptak.',
                 '[FIX] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
+                '[FIX] Fix oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető, a teljes tartalmuk végiggörgethető.',
             ]
         },
         {
@@ -220,7 +220,7 @@
         markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
         extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
         kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
-        stickySidebar: 'A bal és jobb oldalsáv a képernyőn marad.',
+        stickySidebar: 'Asztali nézetben mindkét oldalsáv, tablet nézetben a jobb oldalsáv rögzített és külön görgethető.',
         mobileScrollNav: 'Lebegő panel a hozzászólások közti lépkedéshez.',
         smoothScrolling: 'Finom, animált görgetés a hozzászólások közötti léptetéskor (billentyűzet, mobil panel, válasznavigáció).',
         giveawayAnswerChecker: 'A játék lezárása után ellenőrzi a válaszaidat, ✅/❌ jelöli őket, és kiemeli a neved a nyerteslistában.',
@@ -10917,6 +10917,8 @@
     }
 
     function stickySidebar() {
+        // A 768-991 px széles tablet nézetben csak a jobb oldalsáv látható.
+        const tabletSidebarQuery = window.matchMedia('(min-width: 768px)');
         const desktopSidebarQuery = window.matchMedia('(min-width: 992px)');
         // A Fix oldalsavok sajat animacioja NEM fugg a hozzaszolas-
         // navigaciohoz tartozo smoothScrolling beallitastol.
@@ -10975,35 +10977,72 @@
                 color: var(--ph-ui-fg) !important;
             }
 
-            @media (min-width: 992px) {
-                #right.slotSingleColumn,
-                #left {
+            /* A sticky elemeket a forum tartalmi soranak also hatara fogja meg:
+               a footer elott a TELJES sav felfele mozdul, nem a max-height
+               csokken. Tableten (768-991 px) a jobb sav ugyanezt tudja. */
+            @media (min-width: 768px) {
+                #right.slotSingleColumn {
                     position: sticky !important;
                     top: 85px !important;
                     align-self: flex-start;
                     height: auto !important;
-                    max-height: var(--ph-pt-sidebar-scroll-height, calc(100dvh - 87px)) !important;
+                    max-height: calc(100dvh - 87px) !important;
                     overflow-y: auto !important;
                     overflow-x: hidden !important;
                     overscroll-behavior-y: contain;
                     overscroll-behavior-x: auto;
                     scrollbar-width: thin;
                     -webkit-overflow-scrolling: touch;
-                    /* A helyi, programozott oldalssav-gorgetes mindig finom,
-                       fuggetlenul a kozponti Animalt gorgetes kapcsolotol. */
                     scroll-behavior: smooth !important;
                     transition: top 0.3s ease, max-height 0.3s ease !important;
                     z-index: auto !important;
-                }
-                #right.slotSingleColumn {
                     padding-left: 4px;
                     margin-left: -4px;
                     scrollbar-color: var(--ph-ui-muted) transparent;
                 }
-                html.scroll-down #right.slotSingleColumn,
+                html.scroll-down #right.slotSingleColumn {
+                    top: 45px !important;
+                    max-height: calc(100dvh - 47px) !important;
+                }
+            }
+            /* Asztali nezetben a bal es jobb oldalsav a fejlec 85/45 px-es
+               valtasaival egyutt, 0.3 masodperces atmenettel mozog. */
+            /* A bal oldalsáv csak az asztali nézetben rögzített. */
+            @media (min-width: 992px) {
+                #left {
+                    position: sticky !important;
+                    top: 85px !important;
+                    align-self: flex-start;
+                    height: auto !important;
+                    max-height: calc(100dvh - 87px) !important;
+                    overflow-y: auto !important;
+                    overflow-x: hidden !important;
+                    overscroll-behavior-y: contain;
+                    overscroll-behavior-x: auto;
+                    scrollbar-width: thin;
+                    -webkit-overflow-scrolling: touch;
+                    scroll-behavior: smooth !important;
+                    transition: top 0.3s ease, max-height 0.3s ease !important;
+                    z-index: auto !important;
+                }
                 html.scroll-down #left {
                     top: 45px !important;
-                    max-height: var(--ph-pt-sidebar-scroll-height, calc(100dvh - 47px)) !important;
+                    max-height: calc(100dvh - 47px) !important;
+                }
+            }
+            /* Tablet: a rovidebb fejlec miatt 49 px a kiindulo tavolsag.
+               A scroll-down allapot ugyanolyan, 40 px-es elmozdulast kap,
+               mint az asztali 85 -> 45 px: tablet 49 -> 9 px.
+               A max-height egyutt valtozik a top-pal, 2 px alsó rahagyassal;
+               a sticky szulohatar tovabbra is a footer elott tartja a savot. */
+            @media (min-width: 768px) and (max-width: 991.98px) {
+                #right.slotSingleColumn {
+                    top: 49px !important;
+                    max-height: calc(100dvh - 51px) !important;
+                }
+                html.scroll-down #right.slotSingleColumn {
+                    top: 9px !important;
+                    max-height: calc(100dvh - 11px) !important;
                 }
             }
             /* A felhasznalo kisegitő mozgaspreferenciaja mindket oldalt erinti. */
@@ -11014,9 +11053,8 @@
                     scroll-behavior: auto !important;
                 }
             }
-            /* Telefonon/tableten a dokumentum az egyetlen fuggoleges scroller. */
+            /* Tableten a bal sáv már nem sticky (jellemzően rejtett). */
             @media (max-width: 991.98px) {
-                #right.slotSingleColumn,
                 #left {
                     position: static !important;
                     top: auto !important;
@@ -11028,105 +11066,49 @@
                     scroll-behavior: auto !important;
                     transition: none !important;
                 }
+            }
+            /* Telefonon a jobb sáv is visszatér a normál dokumentumgörgetéshez. */
+            @media (max-width: 767.98px) {
                 #right.slotSingleColumn {
+                    position: static !important;
+                    top: auto !important;
+                    bottom: auto !important;
+                    height: auto !important;
+                    max-height: none !important;
+                    overflow: visible !important;
+                    overscroll-behavior: auto !important;
+                    scroll-behavior: auto !important;
+                    transition: none !important;
                     padding-left: 0 !important;
                     margin-left: 0 !important;
                 }
             }
         `);
 
-        // A ket oldalsav ugyanattol a kepernyo- es szulohatartol fugg.
-        // Azonos max-height szamitassal a bal sav nem kesobb/erosebben
-        // koveti az iranyvaltast, mint a jobb. A belso gorgetesuk fuggetlen.
-        const row = rightSidebar?.closest('.row') || leftSidebar?.closest('.row')
-            || rightSidebar?.parentElement || leftSidebar?.parentElement;
-        const center = row?.querySelector('#center');
-        const originalRowMinHeight = row?.style.minHeight || '';
-        let rowHeightHeld = false;
-        let scheduled = false;
+        // A magassag a viewporthoz igazodik, nem a sor aljahoz.
+        // A CSS sticky a szulo tartalmi sor vege elott automatikusan
+        // felfele tolja a teljes panelt, hogy ne fedje at a footer teruletet.
+        // Tableten csak a jobb sav sticky; telefonon egyik sem.
+        function getStickySidebars() {
+            if (desktopSidebarQuery.matches) return sidebars;
+            return tabletSidebarQuery.matches && rightSidebar ? [rightSidebar] : [];
+        }
 
-        function updateSidebarScrollHeights() {
-            if (!row || !sidebars.length || !desktopSidebarQuery.matches) {
-                for (const sidebar of sidebars) {
-                    sidebar.style.removeProperty('--ph-pt-sidebar-scroll-height');
-                }
-                if (rowHeightHeld && row) {
-                    row.style.minHeight = originalRowMinHeight;
-                    rowHeightHeld = false;
-                }
-                return;
-            }
-
-            const viewportHeight = window.innerHeight;
-            const stickyTop = document.documentElement.classList.contains('scroll-down') ? 45 : 85;
-            const rowRect = row.getBoundingClientRect();
-            const visibleTop = Math.max(stickyTop, rowRect.top);
-            // Megtartjuk a feltoltott valtozat 0 pixeles also rahagyasat.
-            const bottomGap = 0;
-            const screenRoom = viewportHeight - visibleTop - bottomGap;
-
-            // Ha a sor magassagat valamelyik oldalsav adja, a sajat
-            // max-height beallitasa ne okozhasson zsugorodasi hurkot.
-            const visibleSidebars = sidebars.filter(sidebar => sidebar.getClientRects().length > 0);
-            const rowOwnHeight = visibleSidebars.some(sidebar =>
-                Math.abs(rowRect.height - sidebar.offsetHeight) < 3);
-            const tallestSidebar = Math.max(0, ...visibleSidebars.map(sidebar => sidebar.offsetHeight));
-            const centerHeight = center?.offsetHeight || 0;
-            const rowLimitedBySidebar = rowOwnHeight && centerHeight < tallestSidebar;
-            if (rowLimitedBySidebar && !rowHeightHeld) {
-                row.style.minHeight = `${Math.ceil(rowRect.height)}px`;
-                rowHeightHeld = true;
-            }
-            const parentRoom = rowLimitedBySidebar
-                ? screenRoom : rowRect.bottom - visibleTop - bottomGap;
-
-            const maxHeight = Math.max(80, Math.floor(Math.min(screenRoom, parentRoom)));
-            const nextValue = `${maxHeight}px`;
+        function resetInactiveSidebarScroll() {
+            const active = getStickySidebars();
             for (const sidebar of sidebars) {
-                if (sidebar.style.getPropertyValue('--ph-pt-sidebar-scroll-height') !== nextValue) {
-                    sidebar.style.setProperty('--ph-pt-sidebar-scroll-height', nextValue);
+                if (!active.includes(sidebar) && sidebar.scrollTop !== 0) {
+                    sidebar.scrollTop = 0;
                 }
             }
         }
 
-        function scheduleSidebarScrollUpdate() {
-            if (scheduled) return;
-            scheduled = true;
-            requestAnimationFrame(() => {
-                scheduled = false;
-                updateSidebarScrollHeights();
-            });
+        resetInactiveSidebarScroll();
+        const onBreakpointChange = () => resetInactiveSidebarScroll();
+        for (const query of [tabletSidebarQuery, desktopSidebarQuery]) {
+            if (query.addEventListener) query.addEventListener('change', onBreakpointChange);
+            else if (query.addListener) query.addListener(onBreakpointChange);
         }
-
-        function resetMobileSidebarScroll() {
-            if (desktopSidebarQuery.matches) return;
-            for (const sidebar of sidebars) {
-                if (sidebar.scrollTop !== 0) sidebar.scrollTop = 0;
-            }
-        }
-
-        updateSidebarScrollHeights();
-        resetMobileSidebarScroll();
-        window.addEventListener('scroll', scheduleSidebarScrollUpdate, { passive: true });
-        window.addEventListener('resize', scheduleSidebarScrollUpdate, { passive: true });
-        const onBreakpointChange = () => {
-            resetMobileSidebarScroll();
-            scheduleSidebarScrollUpdate();
-        };
-        if (desktopSidebarQuery.addEventListener) {
-            desktopSidebarQuery.addEventListener('change', onBreakpointChange);
-        } else if (desktopSidebarQuery.addListener) {
-            desktopSidebarQuery.addListener(onBreakpointChange);
-        }
-        if (typeof ResizeObserver !== 'undefined' && center) {
-            new ResizeObserver(scheduleSidebarScrollUpdate).observe(center);
-        }
-        if (row) {
-            new MutationObserver(scheduleSidebarScrollUpdate)
-                .observe(row, { attributes: true, attributeFilter: ['class'] });
-        }
-        new MutationObserver(scheduleSidebarScrollUpdate)
-            .observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
         const currentMatch = window.location.pathname.match(/\/tema\/[^/]+\//);
         if (!currentMatch) return;
@@ -11139,7 +11121,7 @@
                 const li = link.closest('li');
                 if (li) {
                     li.classList.add('active-topic-sidebar');
-                    if (rightSidebar && desktopSidebarQuery.matches) {
+                    if (rightSidebar && tabletSidebarQuery.matches && rightSidebar.getClientRects().length > 0) {
                         const liRect = li.getBoundingClientRect();
                         const sidebarRect = rightSidebar.getBoundingClientRect();
                         const scrollTarget = rightSidebar.scrollTop
