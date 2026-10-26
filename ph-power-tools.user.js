@@ -147,10 +147,11 @@
     const CHANGELOG = [
         {
             version: '2.5.2',
-            title: '2026.10.25',
+            title: '2026.10.26',
             changes: [
                 '[FIX] Fix oldalsávok: az oldalsávok teljes tartalma az oldal görgetési pozíciójától függetlenül végiggörgethető.',
                 '[NEW] A változásnapló bejegyzései színes NEW, FIX és CHANGE címkéket kaptak.',
+                '[FIX] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
             ]
         },
         {
@@ -4998,23 +4999,46 @@
         const l = pal?.light?.hashHighlight || DEFAULT_COLORIZE_PALETTE.light.hashHighlight;
         const d = pal?.dark?.hashHighlight  || DEFAULT_COLORIZE_PALETTE.dark.hashHighlight;
 
+        // A Fototrend szines (pl. zold) uzenetfejleceiben gyakori a feher
+        // szoveg. Vilagos hash-kiemeles utan ezt kulon korrigalni kell.
+        // Az egyeni szinpaletta miatt nem eleg csak a light/dark temat nezni:
+        // a tenyleges kiemeloszinhez a nagyobb kontrasztu feliratot valasztjuk.
+        function hashHighlightInk(background) {
+            const bg = phPtParseRgb(background);
+            if (!bg) return '#202124';
+            return phPtContrast(bg, [32, 33, 36]) >= phPtContrast(bg, [255, 255, 255])
+                ? '#202124' : '#ffffff';
+        }
+        const lightInk = hashHighlightInk(l);
+        const darkInk = hashHighlightInk(d);
+
         injectStyleOnce("ph-pt-msg-anchor-highlight-style", `
             body[data-theme="light"] {
                 --ph-pt-hash-highlight: ${l};
+                --ph-pt-hash-highlight-ink: ${lightInk};
             }
             body[data-theme="dark"] {
                 --ph-pt-hash-highlight: ${d};
+                --ph-pt-hash-highlight-ink: ${darkInk};
             }
             li[data-id] .message-head.hash-highlight {
                 background-color: var(--ph-pt-hash-highlight) !important;
                 transition: none !important;
+            }
+            /* A kiemelt fejlec szerzoje, rangja, azonositoja, datuma es
+               muveleti ikonjai ugyanazon a hatteren jol olvashatoak legyenek.
+               A lenyilo menuket nem szinezzuk at. A szabaly a klasszikus,
+               Modern es Thread nezetben is felulirja az eredeti fejlecszint. */
+            body[data-theme] li[data-id] .message-head.hash-highlight,
+            body[data-theme] li[data-id] .message-head.hash-highlight :where(*):not(.dropdown-menu, .dropdown-menu *) {
+                color: var(--ph-pt-hash-highlight-ink) !important;
             }
             /* A rejtett szerzok osszecsukott uzeneteinel a kijelolt fejlec
                nem latszik: ilyenkor a lathato Rejtett savot is kiemeljuk.
                A CSS a fejlec allapotat koveti, uj sav beszurasakor is. */
             li[data-id]:has(> :is(.message, .message-off) > .message-head.hash-highlight) > .hidden-bar {
                 background: var(--ph-pt-hash-highlight) !important;
-                color: var(--ph-ui-fg) !important;
+                color: var(--ph-pt-hash-highlight-ink) !important;
             }
         `);
 
