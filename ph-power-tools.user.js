@@ -147,11 +147,12 @@
     const CHANGELOG = [
         {
             version: '2.5.2',
-            title: '2026.10.26',
+            title: '2026.10.27',
             changes: [
                 '[ADDED] A változásnapló bejegyzései színes ADDED, CHANGED és FIXED címkéket kaptak.',
                 '[FIXED] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
                 '[FIXED] Fix oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető. Az oldalsávok a fejléc mozgásától függetlenül állandó pozícióban maradnak, így a fejléc rájuk lóghat.',
+                '[FIXED] Hozzászólás-lánc: a hibás kép-, avatar- és link-URL-ek nem szakítják meg a popup megjelenítését.',
             ]
         },
         {
@@ -4217,6 +4218,22 @@
             return {items, hasMissingParent, missingParentId, direction};
         }
 
+        // Egy hozzaszolasban elofordulhat csonka (pl. "https://" vagy "//")
+        // kep-/link-URL. A new URL() ilyenkor kivetelt dobna, es az egesz
+        // hozzaszolas-lanc popup megjeleniteset megszakitana.
+        function resolveChainUrl(rawValue, sourceUrl, allowDataImage = false) {
+            const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+            if (!value) return null;
+            try {
+                const resolved = new URL(value, sourceUrl);
+                if (resolved.protocol === 'http:' || resolved.protocol === 'https:') return resolved.href;
+                if (allowDataImage && resolved.protocol === 'data:' && /^data:image\//i.test(value)) {
+                    return resolved.href;
+                }
+            } catch { /* Ervenytelen URL: csak ezt a hivatkozast hagyjuk ki. */ }
+            return null;
+        }
+
         // Másolat az oldalon már megjelenített tartalomból, újrahasznosított
         // DOM-azonosítók, eseményattribútumok és űrlapvezérlők nélkül.
         function cloneMessageContent(original, sourceUrl = location.href) {
@@ -4232,9 +4249,11 @@
                     }
                 }
                 if (el.tagName === 'A') {
-                    const href = el.getAttribute('href') || '';
-                    if (/^(https?:\/\/|\/|#)/i.test(href)) {
-                        el.setAttribute('href', new URL(href, sourceUrl).href);
+                    const href = (el.getAttribute('href') || '').trim();
+                    const resolvedHref = /^(https?:\/\/|\/|#)/i.test(href)
+                        ? resolveChainUrl(href, sourceUrl) : null;
+                    if (resolvedHref) {
+                        el.setAttribute('href', resolvedHref);
                         el.target = '_blank';
                         el.rel = 'noopener noreferrer';
                     } else el.removeAttribute('href');
@@ -4242,10 +4261,11 @@
                 // A mas oldalrol letoltott tartalom relativ kephivatkozasai
                 // ne az aktualis temaoldal vagy az about:blank alapjat kapjak.
                 if (el.tagName === 'IMG') {
-                    const src = el.getAttribute('src') || '';
-                    if (/^(https?:\/\/|\/|data:image\/)/i.test(src)) {
-                        el.setAttribute('src', new URL(src, sourceUrl).href);
-                    } else if (src) el.removeAttribute('src');
+                    const src = (el.getAttribute('src') || '').trim();
+                    const resolvedSrc = /^(https?:\/\/|\/|data:image\/)/i.test(src)
+                        ? resolveChainUrl(src, sourceUrl, true) : null;
+                    if (resolvedSrc) el.setAttribute('src', resolvedSrc);
+                    else el.removeAttribute('src');
                 }
             }
             return clone;
@@ -4275,10 +4295,10 @@
             header.className = 'ph-pt-chain-item-head';
             const face = document.createElement('span');
             face.className = 'ph-pt-chain-avatar';
-            if (avatar?.getAttribute('src')) {
+            const avatarSrc = resolveChainUrl(avatar?.getAttribute('src'), sourceUrl, true);
+            if (avatarSrc) {
                 const img = document.createElement('img');
-                const imageSrc = avatar.getAttribute('src');
-                img.src = new URL(imageSrc, sourceUrl).href;
+                img.src = avatarSrc;
                 img.alt = '';
                 img.loading = 'lazy';
                 face.appendChild(img);
