@@ -152,7 +152,7 @@
                 '[ADDED] A változásnapló bejegyzései színes ADDED, CHANGED és FIXED címkéket kaptak.',
                 '[FIXED] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
                 '[FIXED] Fix oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető. Az oldalsávok a fejléc mozgásától függetlenül állandó pozícióban maradnak, így a fejléc rájuk lóghat.',
-                '[FIXED] Hozzászólás-lánc: a hibás kép-, avatar- és link-URL-ek nem szakítják meg a popup megjelenítését.',
+                '[FIXED] Hozzászólás-lánc: a hibás kép-, avatar- és link-URL-ek nem szakítják meg a popup megjelenítését. A beágyazott YouTube-videók a popupban is megjelennek és lejátszhatók.',
             ]
         },
         {
@@ -4015,6 +4015,24 @@
                 max-width: 100% !important;
                 height: auto;
             }
+            /* Csak ellenorzott YouTube-beagyazasok kerulhetnek a popupba.
+               A lejatszo a kartya szelessegehez igazodik, mobilon sem log ki. */
+            #${MODAL_ID} .ph-pt-chain-youtube {
+                display: block;
+                width: 100%;
+                max-width: 720px;
+                aspect-ratio: 16 / 9;
+                margin: 8px 0;
+                overflow: hidden;
+                border-radius: 8px;
+                background: #000;
+            }
+            #${MODAL_ID} .ph-pt-chain-youtube iframe {
+                display: block;
+                width: 100% !important;
+                height: 100% !important;
+                border: 0 !important;
+            }
             #${MODAL_ID} .ph-pt-chain-post-content pre,
             #${MODAL_ID} .ph-pt-chain-post-content code {
                 max-width: 100%;
@@ -4234,13 +4252,107 @@
             return null;
         }
 
+        // Csak a YouTube valodi videohivatkozasait engedjuk be a popupba.
+        // Az eredeti iframe-et soha nem masoljuk at, az URL-bol ujraepitjuk.
+        function resolveChainYoutubeUrl(rawValue, sourceUrl) {
+            const href = resolveChainUrl(rawValue, sourceUrl);
+            if (!href) return null;
+            const url = new URL(href);
+            if (url.username || url.password || url.port) return null;
+
+            const host = url.hostname.toLowerCase().replace(/^www\./, '');
+            let videoId = '';
+            let embedHost = 'www.youtube.com';
+            if (['youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtube-nocookie.com'].includes(host)) {
+                const pathId = url.pathname.match(/^\/(?:embed|v|shorts|live)\/([\w-]{11})\/?$/i);
+                videoId = pathId?.[1] || (url.pathname === '/watch' ? url.searchParams.get('v') || '' : '');
+                if (host === 'youtube-nocookie.com') embedHost = 'www.youtube-nocookie.com';
+            } else if (host === 'youtu.be') {
+                videoId = url.pathname.match(/^\/([\w-]{11})\/?$/)?.[1] || '';
+            }
+            if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return null;
+
+            const embedUrl = new URL(`https://${embedHost}/embed/${videoId}`);
+            const start = url.searchParams.get('start') || url.searchParams.get('t') || '';
+            const seconds = start.match(/^(\d{1,8})s?$/i)?.[1];
+            if (seconds && Number(seconds) > 0) embedUrl.searchParams.set('start', String(Number(seconds)));
+            return embedUrl.href;
+        }
+
+        function getChainYoutubeSource(el, sourceUrl) {
+            // A forum a videolejatszot kozvetlen iframe-kent es lusta
+            // (data-src/data-video-id) placeholderkent is kirajzolhatja.
+            for (const name of [
+                'src', 'data-src', 'data-lazy-src', 'data-url',
+                'data-embed', 'data-embed-url', 'data-video-url', 'data-youtube-url'
+            ]) {
+                const url = resolveChainYoutubeUrl(el.getAttribute(name), sourceUrl);
+                if (url) return url;
+            }
+            for (const name of ['data-youtube-id', 'data-yt-id', 'videoid']) {
+                const id = el.getAttribute(name) || '';
+                if (/^[a-zA-Z0-9_-]{11}$/.test(id)) return `https://www.youtube.com/embed/${id}`;
+            }
+            // A genericus data-video-id csak YouTube-hoz tartozo konteneren ervenyes.
+            const className = typeof el.className === 'string' ? el.className : '';
+            const videoId = el.getAttribute('data-video-id') || '';
+            if (/(?:youtube|yt-|video-embed)/i.test(className) && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+                return `https://www.youtube.com/embed/${videoId}`;
+            }
+            if (el.tagName !== 'IFRAME') {
+                for (const inner of el.querySelectorAll('iframe[src], iframe[data-src], a[href]')) {
+                    const raw = inner.getAttribute('src') || inner.getAttribute('data-src') || inner.getAttribute('href');
+                    const url = resolveChainYoutubeUrl(raw, sourceUrl);
+                    if (url) return url;
+                }
+            }
+            return null;
+        }
+
+        function makeChainYoutubeEmbed(embedUrl) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'ph-pt-chain-youtube';
+            const iframe = document.createElement('iframe');
+            iframe.src = embedUrl;
+            iframe.title = 'YouTube-videó';
+            iframe.loading = 'lazy';
+            iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+            iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+            iframe.setAttribute('allowfullscreen', '');
+            iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+            wrapper.appendChild(iframe);
+            return wrapper;
+        }
+
         // Másolat az oldalon már megjelenített tartalomból, újrahasznosított
         // DOM-azonosítók, eseményattribútumok és űrlapvezérlők nélkül.
         function cloneMessageContent(original, sourceUrl = location.href) {
             const clone = original.cloneNode(true);
             clone.removeAttribute('id');
             clone.className = 'ph-pt-chain-post-content';
-            clone.querySelectorAll('script, style, iframe, object, embed, form, input, textarea, select, button, audio, video, canvas').forEach(el => el.remove());
+
+            // Az iframe-eket es a lusta YouTube-placeholderokat csak egy semleges
+            // jelolovel tartjuk meg a tisztitas soran. Utana biztonsagos iframe
+            // epul a szigoruan ellenorzott videohivatkozasbol.
+            const youtubeEmbeds = [];
+            function reserveYoutubeEmbed(el) {
+                const embedUrl = getChainYoutubeSource(el, sourceUrl);
+                if (!embedUrl) return;
+                const marker = document.createElement('span');
+                el.replaceWith(marker);
+                youtubeEmbeds.push({marker, embedUrl});
+            }
+            const placeholders = clone.querySelectorAll([
+                'lite-youtube', '[data-youtube-id]', '[data-yt-id]',
+                '[data-youtube-url]', '[data-video-url]', '[data-embed-url]',
+                '[class*="youtube"]', '[class*="yt-embed"]', '[class*="video-embed"]'
+            ].join(', '));
+            for (const el of [...placeholders]) {
+                if (clone.contains(el)) reserveYoutubeEmbed(el);
+            }
+            for (const iframe of [...clone.querySelectorAll('iframe')]) reserveYoutubeEmbed(iframe);
+
+            clone.querySelectorAll('script, style, iframe, object, embed, form, input, textarea, select, button, audio, video, canvas, lite-youtube').forEach(el => el.remove());
             for (const el of [clone, ...clone.querySelectorAll('*')]) {
                 for (const attr of [...el.attributes]) {
                     const name = attr.name.toLowerCase();
@@ -4267,6 +4379,9 @@
                     if (resolvedSrc) el.setAttribute('src', resolvedSrc);
                     else el.removeAttribute('src');
                 }
+            }
+            for (const {marker, embedUrl} of youtubeEmbeds) {
+                if (clone.contains(marker)) marker.replaceWith(makeChainYoutubeEmbed(embedUrl));
             }
             return clone;
         }
@@ -4762,6 +4877,8 @@
         function closeModal() {
             const modal = document.getElementById(MODAL_ID);
             if (!modal || modal.style.display !== 'flex') return;
+            // Rejtett modalban se szoljon tovabb a mar elinditott YouTube-video.
+            modal.querySelectorAll('.ph-pt-chain-youtube iframe').forEach(frame => frame.removeAttribute('src'));
             chainSession?.controller?.abort();
             chainSession = null;
             connectorObserver?.disconnect();
