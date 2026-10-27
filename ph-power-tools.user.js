@@ -152,6 +152,8 @@
                 '[ADDED] A változásnapló bejegyzései színes ADDED, CHANGED és FIXED címkéket kaptak.',
                 '[ADDED] Az aktuális topik kiemelése a fix oldalsávoktól függetlenül kapcsolható.',
 
+                '[CHANGED] A beállítások menüje átláthatóbb felépítést kapott: a funkciók Megjelenés, Hozzászólások, Navigáció és Eszközök kategóriákba kerültek.',
+
                 '[FIXED] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
                 '[FIXED] Fix oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető. Az oldalsávok a fejléc mozgásától függetlenül állandó pozícióban maradnak, így a fejléc rájuk lóghat.',
                 '[FIXED] Hozzászólás-lánc: a hibás kép-, avatar- és link-URL-ek nem szakítják meg a popup megjelenítését. A beágyazott YouTube-videók a popupban is megjelennek és lejátszhatók.',
@@ -196,18 +198,43 @@
     const settingGroups = {
         appearance: {
             label: 'Megjelenés',
-            keys: ['colorize', 'sortThreadListsByNewPosts', 'markNewPosts',
-                'wideView', 'threadView', 'modernView', 'stickySidebar', 'currentTopicHighlight'],
+            keys: [
+                'colorize',
+                'markNewPosts',
+                'currentTopicHighlight',
+                'stickySidebar',
+                'sortThreadListsByNewPosts',
+                'wideView',
+                'threadView',
+                'modernView',
+            ],
             defaultOpen: true,
         },
-        filtering: {
-            label: 'Szűrés',
-            keys: ['offHider', 'hideUsers', 'messageChainPopup'],
+        posts: {
+            label: 'Hozzászólások',
+            keys: [
+                'msgAnchorHighlight',
+                'messageChainPopup',
+                'offHider',
+                'hideUsers',
+            ],
         },
-        interaction: {
-            label: 'Interakció',
-            keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight',
-                'keyboardNavigation', 'mobileScrollNav', 'smoothScrolling', 'giveawayAnswerChecker'],
+        navigation: {
+            label: 'Navigáció',
+            keys: [
+                'linkRedirect',
+                'keyboardNavigation',
+                'mobileScrollNav',
+                'smoothScrolling',
+            ],
+        },
+        tools: {
+            label: 'Eszközök',
+            keys: [
+                'extraSmilies',
+                'kekShUploader',
+                'giveawayAnswerChecker',
+            ],
         }
     };
 
