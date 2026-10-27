@@ -172,26 +172,34 @@
     ];
 
     const defaultSettings = {
+        // Megjelenés
         colorize: true,
-        linkRedirect: false,
-        msgAnchorHighlight: true,
-        offHider: true,
-        messageChainPopup: true,
+        markNewPosts: true,
+        currentTopicHighlight: true,
+        stickySidebar: false,
+        sortThreadListsByNewPosts: false,
         wideView: true,
         threadView: true,
         modernView: true,
-        keyboardNavigation: false,
+
+        // Hozzászólások
+        msgAnchorHighlight: true,
+        messageChainPopup: true,
+        offHider: true,
         hideUsers: true,
-        markNewPosts: true,
+
+        // Navigáció
+        linkRedirect: false,
+        keyboardNavigation: false,
+        mobileScrollNav: false,
+        smoothScrolling: false,
+
+        // Eszközök
         extraSmilies: true,
         kekShUploader: true,
         giveawayAnswerChecker: true,
-        stickySidebar: false,
-        currentTopicHighlight: true,
-        mobileScrollNav: false,
-        smoothScrolling: false,
-        sortThreadListsByNewPosts: false,
 
+        // Színbeállítások
         colorizePalette: DEFAULT_COLORIZE_PALETTE,
     };
 
