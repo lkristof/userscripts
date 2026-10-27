@@ -149,18 +149,18 @@
             version: '2.5.2',
             title: '2026.10.26',
             changes: [
-                '[NEW] A változásnapló bejegyzései színes NEW, FIX és CHANGE címkéket kaptak.',
-                '[FIX] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
-                '[FIX] Fix oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető. Az oldalsávok a fejléc mozgásától függetlenül állandó pozícióban maradnak, így a fejléc rájuk lóghat.',
+                '[ADDED] A változásnapló bejegyzései színes ADDED, CHANGED és FIXED címkéket kaptak.',
+                '[FIXED] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
+                '[FIXED] Fix oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető. Az oldalsávok a fejléc mozgásától függetlenül állandó pozícióban maradnak, így a fejléc rájuk lóghat.',
             ]
         },
         {
             version: '2.5.1',
             title: '2026.10.22',
             changes: [
-                '[CHANGE] Egyes funkciók alapértelmezett beállításai módosultak. A korábban mentett beállításokat a változás nem érinti.',
-                '[NEW] Új változásnapló: frissítés után megjelennek az újdonságok, amelyek később a verziószámra kattintva is megtekinthetők.',
-                '[NEW] Új beállítás: animált görgetés a hozzászólások közötti navigációhoz, alapértelmezetten kikapcsolva.',
+                '[CHANGED] Egyes funkciók alapértelmezett beállításai módosultak. A korábban mentett beállításokat a változás nem érinti.',
+                '[ADDED] Új változásnapló: frissítés után megjelennek az újdonságok, amelyek később a verziószámra kattintva is megtekinthetők.',
+                '[ADDED] Új beállítás: animált görgetés a hozzászólások közötti navigációhoz, alapértelmezetten kikapcsolva.',
             ]
         },
     ];
@@ -1700,16 +1700,16 @@
                 for (const change of entry.changes) {
                     const item = document.createElement('li');
                     const changeText = String(change);
-                    const typeMatch = changeText.match(/^\[(NEW|FIX|CHANGE)\]\s*/i);
+                    const typeMatch = changeText.match(/^\[(ADDED|CHANGED|FIXED)\]\s*/i);
 
-                    // Az ismert [NEW]/[FIX]/[CHANGE] előtagokat kis színes címkévé alakítjuk.
+                    // Az ismert [ADDED]/[CHANGED]/[FIXED] előtagokat kis színes címkévé alakítjuk.
                     // A szöveget textContenttel adjuk hozzá, hogy ne legyen HTML-beszúrás.
                     if (typeMatch) {
                         const type = typeMatch[1].toLowerCase();
                         const label = document.createElement('span');
                         label.className = `ph-changelog-type ph-changelog-type-${type}`;
                         label.textContent = type.toUpperCase();
-                        label.title = { new: 'Új funkció', fix: 'Hibajavítás', change: 'Módosítás' }[type];
+                        label.title = { added: 'Új funkció', changed: 'Módosítás', fixed: 'Hibajavítás' }[type];
                         item.appendChild(label);
                     }
 
@@ -2964,7 +2964,7 @@
                 align-items: center;
                 justify-content: center;
                 flex: 0 0 auto;
-                min-width: 53px;
+                min-width: 64px;
                 margin-top: 1px;
                 padding: 2px 6px;
                 border: 1px solid transparent;
@@ -2975,32 +2975,32 @@
                 letter-spacing: 0.03em;
                 white-space: nowrap;
             }
-            #ph-changelog-modal .ph-changelog-type-new {
+            #ph-changelog-modal .ph-changelog-type-added {
                 color: #136342;
                 background: #e7f4eb;
                 border-color: #b9ddc7;
             }
-            #ph-changelog-modal .ph-changelog-type-fix {
+            #ph-changelog-modal .ph-changelog-type-fixed {
                 color: #8e4c0a;
                 background: #fff0da;
                 border-color: #edd1a8;
             }
-            #ph-changelog-modal .ph-changelog-type-change {
+            #ph-changelog-modal .ph-changelog-type-changed {
                 color: #1b57a2;
                 background: #e8f1ff;
                 border-color: #bfd4f3;
             }
-            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-new {
+            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-added {
                 color: #a5f4c7;
                 background: rgba(30, 160, 94, 0.18);
                 border-color: rgba(100, 230, 155, 0.35);
             }
-            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-fix {
+            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-fixed {
                 color: #ffd195;
                 background: rgba(217, 129, 25, 0.18);
                 border-color: rgba(243, 171, 86, 0.35);
             }
-            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-change {
+            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-changed {
                 color: #bdd5ff;
                 background: rgba(67, 119, 221, 0.19);
                 border-color: rgba(139, 173, 255, 0.35);
