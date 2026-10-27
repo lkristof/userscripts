@@ -150,6 +150,8 @@
             title: '2026.10.27',
             changes: [
                 '[ADDED] A változásnapló bejegyzései színes ADDED, CHANGED és FIXED címkéket kaptak.',
+                '[ADDED] Az aktuális topik kiemelése a fix oldalsávoktól függetlenül kapcsolható.',
+
                 '[FIXED] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
                 '[FIXED] Fix oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető. Az oldalsávok a fejléc mozgásától függetlenül állandó pozícióban maradnak, így a fejléc rájuk lóghat.',
                 '[FIXED] Hozzászólás-lánc: a hibás kép-, avatar- és link-URL-ek nem szakítják meg a popup megjelenítését. A beágyazott YouTube-videók a popupban is megjelennek és lejátszhatók.',
@@ -159,9 +161,10 @@
             version: '2.5.1',
             title: '2026.10.22',
             changes: [
-                '[CHANGED] Egyes funkciók alapértelmezett beállításai módosultak. A korábban mentett beállításokat a változás nem érinti.',
                 '[ADDED] Új változásnapló: frissítés után megjelennek az újdonságok, amelyek később a verziószámra kattintva is megtekinthetők.',
                 '[ADDED] Új beállítás: animált görgetés a hozzászólások közötti navigációhoz, alapértelmezetten kikapcsolva.',
+
+                '[CHANGED] Egyes funkciók alapértelmezett beállításai módosultak. A korábban mentett beállításokat a változás nem érinti.',
             ]
         },
     ];
@@ -182,6 +185,7 @@
         kekShUploader: true,
         giveawayAnswerChecker: true,
         stickySidebar: false,
+        currentTopicHighlight: true,
         mobileScrollNav: false,
         smoothScrolling: false,
         sortThreadListsByNewPosts: false,
@@ -193,7 +197,7 @@
         appearance: {
             label: 'Megjelenés',
             keys: ['colorize', 'sortThreadListsByNewPosts', 'markNewPosts',
-                'wideView', 'threadView', 'modernView', 'stickySidebar'],
+                'wideView', 'threadView', 'modernView', 'stickySidebar', 'currentTopicHighlight'],
             defaultOpen: true,
         },
         filtering: {
@@ -207,11 +211,12 @@
         }
     };
 
+
     const tooltips = {
         colorize: 'Saját / válasz / #akció + avatar fókusz. Színek a 🎨 menüben.',
         linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
         msgAnchorHighlight: 'Az URL-ben megadott #msg hozzászóláshoz görget és kiemeli azt. Színek a 🎨 menüben.',
-        offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
+        offHider: 'OFF hozzászólások elrejtése/megjelenítése.',
         messageChainPopup: 'A Lánc gombbal felugró ablakban megtekintheted a hozzászólás előzményeit és válaszait.',
         wideView: 'Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.',
         threadView: 'Reddit-szerű válaszfa folytonos, kiemelhető ágvonalakkal és összecsukható hozzászólásokkal. A Thread nézet gomb lenyíló menüjében minden ág összecsukható vagy kibontható.',
@@ -222,6 +227,7 @@
         extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
         kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
         stickySidebar: 'Asztali nézetben mindkét oldalsáv, tablet nézetben a jobb oldalsáv rögzített és külön görgethető.',
+        currentTopicHighlight: 'A megnyitott topikot kiemeli az oldalsó és a fejlécben lévő témalistában.',
         mobileScrollNav: 'Lebegő panel a hozzászólások közti lépkedéshez.',
         smoothScrolling: 'Finom, animált görgetés a hozzászólások közötti léptetéskor (billentyűzet, mobil panel, válasznavigáció).',
         giveawayAnswerChecker: 'A játék lezárása után ellenőrzi a válaszaidat, ✅/❌ jelöli őket, és kiemeli a neved a nyerteslistában.',
@@ -245,6 +251,7 @@
             kekShUploader: 'kek.sh képfeltöltő',
             giveawayAnswerChecker: 'Nyereményjáték válasz ellenőrző',
             stickySidebar: 'Fix oldalsávok',
+            currentTopicHighlight: 'Aktuális topik kiemelése',
             mobileScrollNav: 'Mobil navigációs panel',
             smoothScrolling: 'Animált görgetés',
             sortThreadListsByNewPosts: 'Témalisták rendezése',
@@ -3534,6 +3541,7 @@
             { name: "kekShUploader", when: () => (isTema || isPrivat) && savedSettings.kekShUploader, fn: kekShUploader },
             { name: "giveawayAnswerChecker", when: () => isNyeremenyjatek && savedSettings.giveawayAnswerChecker, fn: giveawayAnswerChecker },
             { name: "stickySidebar", when: () => savedSettings.stickySidebar, fn: stickySidebar },
+            { name: "highlightCurrentTopic", when: () => isTema && savedSettings.currentTopicHighlight, fn: highlightCurrentTopic },
             { name: "mobileScrollNav", when: () => isTema && savedSettings.mobileScrollNav, fn: mobileScrollNav },
             { name: "sortThreadListsByNewPosts", when: () => hasThreadLists && savedSettings.sortThreadListsByNewPosts, fn: sortThreadListsByNewPosts },
         ];
@@ -11057,13 +11065,6 @@
         // A 768-991 px széles tablet nézetben csak a jobb oldalsáv látható.
         const tabletSidebarQuery = window.matchMedia('(min-width: 768px)');
         const desktopSidebarQuery = window.matchMedia('(min-width: 992px)');
-        // A Fix oldalsavok sajat animacioja NEM fugg a hozzaszolas-
-        // navigaciohoz tartozo smoothScrolling beallitastol.
-        // A rendszer csokkentett mozgas preferenciajat megtartjuk.
-        function sidebarScrollBehavior() {
-            return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-                ? 'instant' : 'smooth';
-        }
         const leftSidebar = document.querySelector('#left');
         const rightSidebar = document.querySelector('#right.slotSingleColumn');
         const sidebars = [leftSidebar, rightSidebar].filter(Boolean);
@@ -11086,34 +11087,6 @@
                 background-color: #ccc;
                 border-radius: 10px;
             }
-            .active-topic-sidebar {
-                background-color: #e9e0c9 !important;
-                font-weight: bold !important;
-                box-shadow: inset 5px 0px 0 0;
-                padding-left: 10px !important;
-            }
-            .active-topic-sidebar a { color: #000 !important; }
-            body[data-theme="dark"] .active-topic-sidebar {
-                background-color: #3a352a !important;
-                box-shadow: inset 5px 0px 0 0 #e0e0e0;
-            }
-            body[data-theme="dark"] .active-topic-sidebar a {
-                color: var(--ph-ui-fg) !important;
-            }
-            .active-topic-header {
-                background-color: #e9e0c9 !important;
-                font-weight: bold !important;
-                box-shadow: inset 5px 0px 0 0 #000000;
-            }
-            .active-topic-header a { color: #000 !important; }
-            body[data-theme="dark"] .active-topic-header {
-                background-color: #3a352a !important;
-                box-shadow: inset 5px 0px 0 0 #e0e0e0;
-            }
-            body[data-theme="dark"] .active-topic-header a {
-                color: var(--ph-ui-fg) !important;
-            }
-
             /* Az oldalsavok a fejlec 40 px-es nyitasatol/csukodasatol
                fuggetlen, allando top erteket kapnak. A sticky szulohatar
                tovabbra is megallitja oket a footer elott, a belso gorgetes
@@ -11230,10 +11203,56 @@
             if (query.addEventListener) query.addEventListener('change', onBreakpointChange);
             else if (query.addListener) query.addListener(onBreakpointChange);
         }
+    }
 
+    // A kiemeles onallo; a sticky savok nelkul is mukodik.
+    function highlightCurrentTopic() {
+        injectStyleOnce('ph-current-topic-highlight-style', `
+            .active-topic-sidebar {
+                background-color: #e9e0c9 !important;
+                font-weight: bold !important;
+                box-shadow: inset 5px 0px 0 0;
+                padding-left: 10px !important;
+            }
+            .active-topic-sidebar a { color: #000 !important; }
+            body[data-theme="dark"] .active-topic-sidebar {
+                background-color: #3a352a !important;
+                box-shadow: inset 5px 0px 0 0 #e0e0e0;
+            }
+            body[data-theme="dark"] .active-topic-sidebar a {
+                color: var(--ph-ui-fg) !important;
+            }
+            .active-topic-header {
+                background-color: #e9e0c9 !important;
+                font-weight: bold !important;
+                box-shadow: inset 5px 0px 0 0 #000000;
+            }
+            .active-topic-header a { color: #000 !important; }
+            body[data-theme="dark"] .active-topic-header {
+                background-color: #3a352a !important;
+                box-shadow: inset 5px 0px 0 0 #e0e0e0;
+            }
+            body[data-theme="dark"] .active-topic-header a {
+                color: var(--ph-ui-fg) !important;
+            }
+        `);
+
+        // A listan beluli odagorgetes onallo animacio, a hozzaszolas-
+        // navigacio smoothScrolling beallitasatol fuggetlenul mukodik.
+        // A rendszer csokkentett mozgas preferenciajat megtartjuk.
+        function sidebarScrollBehavior() {
+            return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                ? 'instant' : 'smooth';
+        }
         const currentMatch = window.location.pathname.match(/\/tema\/[^/]+\//);
         if (!currentMatch) return;
         const currentTopicId = currentMatch[0];
+
+        const rightSidebar = document.querySelector('#right.slotSingleColumn');
+        const canScrollSidebar = savedSettings.stickySidebar
+            && window.matchMedia('(min-width: 768px)').matches
+            && rightSidebar
+            && rightSidebar.getClientRects().length > 0;
 
         // Az aktív téma eredeti kijelölése és a jobb listán belüli görgetése.
         document.querySelectorAll('.user-thread-list a').forEach(link => {
@@ -11242,7 +11261,7 @@
                 const li = link.closest('li');
                 if (li) {
                     li.classList.add('active-topic-sidebar');
-                    if (rightSidebar && tabletSidebarQuery.matches && rightSidebar.getClientRects().length > 0) {
+                    if (canScrollSidebar) {
                         const liRect = li.getBoundingClientRect();
                         const sidebarRect = rightSidebar.getBoundingClientRect();
                         const scrollTarget = rightSidebar.scrollTop
