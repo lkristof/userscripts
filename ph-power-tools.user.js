@@ -150,6 +150,7 @@
             title: '2026.10.28',
             changes: [
                 '[CHANGED] Felhasználók elrejtése: a Modern és Thread nézetben is kompakt, kattintható fejléc jelenik meg; a hozzászólás a fejlécére kattintva megjeleníthető és visszarejthető.',
+                '[CHANGED] Thread nézet: az összecsukott válaszágak fejlécéből kikerült a felesleges pluszjel.',
                 '[FIXED] Hozzászólás-lánc: a rejtett felhasználók hozzászólásai a popupban is el vannak rejtve, a fejlécükre kattintva megjeleníthetők és visszarejthetők.',
                 '[FIXED] Rejtett felhasználók: a hozzászólásfejlécek hover-kiemelése rejtett és felfedett állapotban is egységes.',
                 '[FIXED] Üzenet kiemelés: a rejtett hozzászólások fejlécének szövege is a kiemelőszínhez igazodó kontraszttal jelenik meg.',
@@ -7320,19 +7321,6 @@
                 background: color-mix(in srgb, var(--ph-tv-line-hover) 10%, var(--ph-tv-surface));
                 outline-offset: 2px;
             }
-            .ph-tv-summary-icon {
-                flex: 0 0 auto;
-                width: 19px;
-                height: 19px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: 50%;
-                background: color-mix(in srgb, var(--ph-tv-line-hover) 15%, var(--ph-tv-surface));
-                color: var(--ph-tv-line-hover);
-                font-size: 15px;
-                font-weight: 700;
-            }
             .ph-tv-summary-author {
                 font-size: 12px;
                 font-weight: 700;
@@ -7545,16 +7533,12 @@
 
             const summary = makeButton('ph-tv-summary', 'Hozzászólás kibontása', () => toggleFold(id));
             summary.setAttribute('aria-expanded', 'false');
-            const icon = document.createElement('span');
-            icon.className = 'ph-tv-summary-icon';
-            icon.setAttribute('aria-hidden', 'true');
-            icon.textContent = '+';
             const author = document.createElement('span');
             author.className = 'ph-tv-summary-author';
             author.textContent = getAuthor(li);
             const meta = document.createElement('span');
             meta.className = 'ph-tv-summary-meta';
-            summary.append(icon, author, meta);
+            summary.append(author, meta);
             li.append(collapse, summary);
         }
 
