@@ -149,6 +149,7 @@
             version: '2.5.3',
             title: '2026.10.28',
             changes: [
+                '[ADDED] Rejtett felhasználók: a szerkesztőlistában kis méretben megjelennek a témában elérhető profilképek.',
                 '[CHANGED] Felhasználók elrejtése: a Modern és Thread nézetben is kompakt, kattintható fejléc jelenik meg; a hozzászólás a fejlécére kattintva megjeleníthető és visszarejthető.',
                 '[CHANGED] Thread nézet: az összecsukott válaszágak fejlécéből kikerült a felesleges pluszjel.',
                 '[FIXED] Hozzászólás-lánc: a rejtett felhasználók hozzászólásai a popupban is el vannak rejtve, a fejlécükre kattintva megjeleníthetők és visszarejthetők.',
@@ -3277,7 +3278,11 @@
                 text-align: center;
             }
             .dual-list-item {
-                padding: 6px 7px;
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                min-height: 34px;
+                padding: 5px 7px;
                 cursor: pointer;
                 border: 1px solid transparent;
                 border-radius: 6px;
@@ -3286,6 +3291,32 @@
                 font-size: 12px;
                 line-height: 1.2;
                 transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+            }
+            .dual-list-avatar {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex: 0 0 24px;
+                width: 24px;
+                height: 24px;
+                overflow: hidden;
+                border: 1px solid var(--ph-ui-border);
+                border-radius: 6px;
+                background: var(--ph-ui-soft);
+                color: var(--ph-ui-muted);
+                box-sizing: border-box;
+                font-size: 11px;
+            }
+            .dual-list-avatar img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+            }
+            .dual-list-avatar:has(img) > .fas { display: none; }
+            .dual-list-user-name {
+                flex: 1;
+                min-width: 0;
+                overflow-wrap: anywhere;
             }
             .dual-list-item + .dual-list-item {
                 margin-top: 3px;
@@ -3514,9 +3545,14 @@
                     padding: 4px;
                 }
                 .dual-list-item {
+                    gap: 5px;
                     padding: 5px 4px;
                     font-size: 11px;
-                    overflow-wrap: anywhere;
+                }
+                .dual-list-avatar {
+                    flex-basis: 22px;
+                    width: 22px;
+                    height: 22px;
                 }
             }
             @media (min-width: 520px) and (max-width: 991.98px) {
@@ -9561,30 +9597,69 @@
             // ===== Ideiglenes lista a szerkesztéshez =====
             let tempHiddenUsers = [...hiddenUsers];
 
+            // A megnyitott téma HTML-jéből vesszük az avatarokat. Nem kérünk le
+            // külön profiloldalakat; a más témából rejtett, itt nem szereplő
+            // szerzőknél egy semleges felhasználóikon jelenik meg.
+            const authorAvatars = new Map();
+            for (const li of getPosts()) {
+                const msg = li.querySelector(':scope > .message');
+                if (!msg) continue;
+                const author = getAuthor(msg);
+                if (!author || authorAvatars.has(author)) continue;
+                const avatar = msg.querySelector(
+                    '.message-head-user .user-face img, .message-body-user .user-face img');
+                const rawSrc = avatar?.getAttribute('data-src') || avatar?.currentSrc
+                    || avatar?.getAttribute('src');
+                if (!rawSrc) continue;
+                try {
+                    const url = new URL(rawSrc, document.baseURI);
+                    if (url.protocol === 'https:' || url.protocol === 'http:') {
+                        authorAvatars.set(author, url.href);
+                    }
+                } catch { /* Hiányzó vagy hibás avatar: marad az alapikon. */ }
+            }
+
+            function makeUserListItem(user) {
+                const row = document.createElement('div');
+                row.className = 'dual-list-item';
+                row.dataset.user = user;
+
+                const face = document.createElement('span');
+                face.className = 'dual-list-avatar';
+                face.setAttribute('aria-hidden', 'true');
+                const fallback = document.createElement('span');
+                fallback.className = 'fas fa-user';
+                face.appendChild(fallback);
+                const avatarUrl = authorAvatars.get(user);
+                if (avatarUrl) {
+                    const image = document.createElement('img');
+                    image.src = avatarUrl;
+                    image.alt = '';
+                    image.loading = 'lazy';
+                    image.decoding = 'async';
+                    image.addEventListener('error', () => image.remove(), {once: true});
+                    face.appendChild(image);
+                }
+
+                const name = document.createElement('span');
+                name.className = 'dual-list-user-name';
+                name.textContent = user;
+                row.append(face, name);
+                row.addEventListener('click', () => row.classList.toggle('selected'));
+                return row;
+            }
+
             // ===== Kitöltjük a listákat =====
             function refreshLists() {
-                leftList.innerHTML = "";
-                rightList.innerHTML = "";
+                leftList.replaceChildren();
+                rightList.replaceChildren();
 
                 const domAuthors = Array.from(new Set(getPosts().map(li => getAuthor(li))))
                     .filter(a => !tempHiddenUsers.includes(a))
                     .sort((a,b) => a.localeCompare(b));
 
-                domAuthors.forEach(user => {
-                    const div = document.createElement("div");
-                    div.className = "dual-list-item";
-                    div.textContent = user;
-                    div.addEventListener("click", () => div.classList.toggle("selected"));
-                    leftList.appendChild(div);
-                });
-
-                tempHiddenUsers.forEach(user => {
-                    const div = document.createElement("div");
-                    div.className = "dual-list-item";
-                    div.textContent = user;
-                    div.addEventListener("click", () => div.classList.toggle("selected"));
-                    rightList.appendChild(div);
-                });
+                domAuthors.forEach(user => leftList.appendChild(makeUserListItem(user)));
+                tempHiddenUsers.forEach(user => rightList.appendChild(makeUserListItem(user)));
 
                 summary.textContent = tempHiddenUsers.length
                     ? `${tempHiddenUsers.length} rejtett felhasználó`
@@ -9597,7 +9672,7 @@
             btnRight.addEventListener("click", () => {
                 Array.from(leftList.querySelectorAll(".dual-list-item.selected")).forEach(div => {
                     div.classList.remove("selected");
-                    if (!tempHiddenUsers.includes(div.textContent)) tempHiddenUsers.push(div.textContent);
+                    if (!tempHiddenUsers.includes(div.dataset.user)) tempHiddenUsers.push(div.dataset.user);
                 });
                 refreshLists();
             });
@@ -9605,7 +9680,7 @@
             btnLeft.addEventListener("click", () => {
                 Array.from(rightList.querySelectorAll(".dual-list-item.selected")).forEach(div => {
                     div.classList.remove("selected");
-                    tempHiddenUsers = tempHiddenUsers.filter(u => u !== div.textContent);
+                    tempHiddenUsers = tempHiddenUsers.filter(u => u !== div.dataset.user);
                 });
                 refreshLists();
             });
