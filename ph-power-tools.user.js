@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prohardver Fórum – Power Tools
 // @namespace    https://github.com/lkristof/userscripts
-// @version      2.5.1
+// @version      2.5.2
 // @description  PH Fórum extra funkciók, fejlécbe épített beállításokkal.
 // @icon         https://cdn.rios.hu/design/ph/logo-favicon.png
 //
@@ -146,62 +146,113 @@
     const CHANGELOG_SEEN_KEY = 'ph_power_tools_last_seen_changelog_version';
     const CHANGELOG = [
         {
+            version: '2.5.2',
+            title: '2026.10.28',
+            changes: [
+                '[ADDED] A változásnapló bejegyzései színes ADDED, CHANGED és FIXED címkéket kaptak.',
+                '[ADDED] Az aktuális topik kiemelése a fix oldalsávoktól függetlenül kapcsolható.',
+
+                '[CHANGED] A beállítások menüje átláthatóbb felépítést kapott: a funkciók Megjelenés, Hozzászólások, Navigáció és Eszközök kategóriákba kerültek.',
+                '[CHANGED] A „Fix oldalsávok” funkció „Külön görgethető oldalsávok” néven érhető el a működés egyértelműbb jelzésére.',
+
+                '[FIXED] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
+                '[FIXED] Külön görgethető oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető. Az oldalsávok a fejléc mozgásától függetlenül állandó pozícióban maradnak, így a fejléc rájuk lóghat.',
+                '[FIXED] Hozzászólás-lánc: a hibás kép-, avatar- és link-URL-ek nem szakítják meg a popup megjelenítését. A beágyazott YouTube-videók a popupban is megjelennek és lejátszhatók.',
+            ]
+        },
+        {
             version: '2.5.1',
             title: '2026.10.22',
             changes: [
-                'Egyes funkciók alapértelmezett beállításai módosultak. A korábban mentett beállításokat a változás nem érinti.',
-                'Új változásnapló: frissítés után megjelennek az újdonságok, amelyek később a verziószámra kattintva is megtekinthetők.',
-                'Új beállítás: animált görgetés a hozzászólások közötti navigációhoz, alapértelmezetten kikapcsolva.',
+                '[ADDED] Új változásnapló: frissítés után megjelennek az újdonságok, amelyek később a verziószámra kattintva is megtekinthetők.',
+                '[ADDED] Új beállítás: animált görgetés a hozzászólások közötti navigációhoz, alapértelmezetten kikapcsolva.',
+
+                '[CHANGED] Egyes funkciók alapértelmezett beállításai módosultak. A korábban mentett beállításokat a változás nem érinti.',
             ]
         },
     ];
 
     const defaultSettings = {
+        // Megjelenés
         colorize: true,
-        linkRedirect: false,
-        msgAnchorHighlight: true,
-        offHider: true,
-        messageChainPopup: true,
+        markNewPosts: true,
+        currentTopicHighlight: true,
+        stickySidebar: false,
+        sortThreadListsByNewPosts: false,
         wideView: true,
         threadView: true,
         modernView: true,
-        keyboardNavigation: false,
+
+        // Hozzászólások
+        msgAnchorHighlight: true,
+        messageChainPopup: true,
+        offHider: true,
         hideUsers: true,
-        markNewPosts: true,
+
+        // Navigáció
+        linkRedirect: false,
+        keyboardNavigation: false,
+        mobileScrollNav: false,
+        smoothScrolling: false,
+
+        // Eszközök
         extraSmilies: true,
         kekShUploader: true,
         giveawayAnswerChecker: true,
-        stickySidebar: false,
-        mobileScrollNav: false,
-        smoothScrolling: false,
-        sortThreadListsByNewPosts: false,
 
+        // Színbeállítások
         colorizePalette: DEFAULT_COLORIZE_PALETTE,
     };
 
     const settingGroups = {
         appearance: {
             label: 'Megjelenés',
-            keys: ['colorize', 'sortThreadListsByNewPosts', 'markNewPosts',
-                'wideView', 'threadView', 'modernView', 'stickySidebar'],
+            keys: [
+                'colorize',
+                'markNewPosts',
+                'currentTopicHighlight',
+                'stickySidebar',
+                'sortThreadListsByNewPosts',
+                'wideView',
+                'threadView',
+                'modernView',
+            ],
             defaultOpen: true,
         },
-        filtering: {
-            label: 'Szűrés',
-            keys: ['offHider', 'hideUsers', 'messageChainPopup'],
+        posts: {
+            label: 'Hozzászólások',
+            keys: [
+                'msgAnchorHighlight',
+                'messageChainPopup',
+                'offHider',
+                'hideUsers',
+            ],
         },
-        interaction: {
-            label: 'Interakció',
-            keys: ['kekShUploader', 'extraSmilies', 'linkRedirect', 'msgAnchorHighlight',
-                'keyboardNavigation', 'mobileScrollNav', 'smoothScrolling', 'giveawayAnswerChecker'],
+        navigation: {
+            label: 'Navigáció',
+            keys: [
+                'linkRedirect',
+                'keyboardNavigation',
+                'mobileScrollNav',
+                'smoothScrolling',
+            ],
+        },
+        tools: {
+            label: 'Eszközök',
+            keys: [
+                'extraSmilies',
+                'kekShUploader',
+                'giveawayAnswerChecker',
+            ],
         }
     };
+
 
     const tooltips = {
         colorize: 'Saját / válasz / #akció + avatar fókusz. Színek a 🎨 menüben.',
         linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
         msgAnchorHighlight: 'Az URL-ben megadott #msg hozzászóláshoz görget és kiemeli azt. Színek a 🎨 menüben.',
-        offHider: 'OFF hozzászólások elrejtése/kibontása gombbal.',
+        offHider: 'OFF hozzászólások elrejtése/megjelenítése.',
         messageChainPopup: 'A Lánc gombbal felugró ablakban megtekintheted a hozzászólás előzményeit és válaszait.',
         wideView: 'Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.',
         threadView: 'Reddit-szerű válaszfa folytonos, kiemelhető ágvonalakkal és összecsukható hozzászólásokkal. A Thread nézet gomb lenyíló menüjében minden ág összecsukható vagy kibontható.',
@@ -211,7 +262,8 @@
         markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
         extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
         kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
-        stickySidebar: 'A bal és jobb oldalsáv a képernyőn marad.',
+        stickySidebar: 'Az oldalsávok az oldaltól függetlenül, külön görgethetők. Asztali nézetben mindkét oldalsáv, tablet nézetben a jobb oldalsáv érintett.',
+        currentTopicHighlight: 'A megnyitott topikot kiemeli az oldalsó és a fejlécben lévő témalistában.',
         mobileScrollNav: 'Lebegő panel a hozzászólások közti lépkedéshez.',
         smoothScrolling: 'Finom, animált görgetés a hozzászólások közötti léptetéskor (billentyűzet, mobil panel, válasznavigáció).',
         giveawayAnswerChecker: 'A játék lezárása után ellenőrzi a válaszaidat, ✅/❌ jelöli őket, és kiemeli a neved a nyerteslistában.',
@@ -234,7 +286,8 @@
             extraSmilies: 'Extra smiley-k',
             kekShUploader: 'kek.sh képfeltöltő',
             giveawayAnswerChecker: 'Nyereményjáték válasz ellenőrző',
-            stickySidebar: 'Fix oldalsávok',
+            stickySidebar: 'Külön görgethető oldalsávok',
+            currentTopicHighlight: 'Aktuális topik kiemelése',
             mobileScrollNav: 'Mobil navigációs panel',
             smoothScrolling: 'Animált görgetés',
             sortThreadListsByNewPosts: 'Témalisták rendezése',
@@ -1690,7 +1743,25 @@
                 items.className = 'ph-changelog-items';
                 for (const change of entry.changes) {
                     const item = document.createElement('li');
-                    item.textContent = change;
+                    const changeText = String(change);
+                    const typeMatch = changeText.match(/^\[(ADDED|CHANGED|FIXED)\]\s*/i);
+
+                    // Az ismert [ADDED]/[CHANGED]/[FIXED] előtagokat kis színes címkévé alakítjuk.
+                    // A szöveget textContenttel adjuk hozzá, hogy ne legyen HTML-beszúrás.
+                    if (typeMatch) {
+                        const type = typeMatch[1].toLowerCase();
+                        const label = document.createElement('span');
+                        label.className = `ph-changelog-type ph-changelog-type-${type}`;
+                        label.textContent = type.toUpperCase();
+                        label.title = { added: 'Új funkció', changed: 'Módosítás', fixed: 'Hibajavítás' }[type];
+                        item.appendChild(label);
+                    }
+
+                    const description = document.createElement('span');
+                    description.className = 'ph-changelog-item-text';
+                    description.textContent = typeMatch
+                        ? changeText.slice(typeMatch[0].length) : changeText;
+                    item.appendChild(description);
                     items.appendChild(item);
                 }
                 section.appendChild(items);
@@ -2915,12 +2986,69 @@
             }
             #ph-changelog-modal .ph-changelog-items {
                 margin: 0;
-                padding-left: 18px;
+                padding: 0;
+                list-style: none;
                 color: var(--ph-ui-fg);
                 font-size: 12px;
                 line-height: 1.55;
             }
-            #ph-changelog-modal .ph-changelog-items li + li { margin-top: 5px; }
+            #ph-changelog-modal .ph-changelog-items li {
+                display: flex;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            #ph-changelog-modal .ph-changelog-items li + li { margin-top: 8px; }
+            #ph-changelog-modal .ph-changelog-item-text {
+                min-width: 0;
+                flex: 1 1 auto;
+                overflow-wrap: anywhere;
+            }
+            #ph-changelog-modal .ph-changelog-type {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex: 0 0 auto;
+                min-width: 64px;
+                margin-top: 1px;
+                padding: 2px 6px;
+                border: 1px solid transparent;
+                border-radius: 5px;
+                font-size: 9.5px;
+                font-weight: 700;
+                line-height: 1.4;
+                letter-spacing: 0.03em;
+                white-space: nowrap;
+            }
+            #ph-changelog-modal .ph-changelog-type-added {
+                color: #136342;
+                background: #e7f4eb;
+                border-color: #b9ddc7;
+            }
+            #ph-changelog-modal .ph-changelog-type-fixed {
+                color: #8e4c0a;
+                background: #fff0da;
+                border-color: #edd1a8;
+            }
+            #ph-changelog-modal .ph-changelog-type-changed {
+                color: #1b57a2;
+                background: #e8f1ff;
+                border-color: #bfd4f3;
+            }
+            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-added {
+                color: #a5f4c7;
+                background: rgba(30, 160, 94, 0.18);
+                border-color: rgba(100, 230, 155, 0.35);
+            }
+            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-fixed {
+                color: #ffd195;
+                background: rgba(217, 129, 25, 0.18);
+                border-color: rgba(243, 171, 86, 0.35);
+            }
+            body[data-theme="dark"] #ph-changelog-modal .ph-changelog-type-changed {
+                color: #bdd5ff;
+                background: rgba(67, 119, 221, 0.19);
+                border-color: rgba(139, 173, 255, 0.35);
+            }
 
             /* Beállítások importálása / exportálása. */
             .ph-backup-body {
@@ -3449,6 +3577,7 @@
             { name: "kekShUploader", when: () => (isTema || isPrivat) && savedSettings.kekShUploader, fn: kekShUploader },
             { name: "giveawayAnswerChecker", when: () => isNyeremenyjatek && savedSettings.giveawayAnswerChecker, fn: giveawayAnswerChecker },
             { name: "stickySidebar", when: () => savedSettings.stickySidebar, fn: stickySidebar },
+            { name: "highlightCurrentTopic", when: () => isTema && savedSettings.currentTopicHighlight, fn: highlightCurrentTopic },
             { name: "mobileScrollNav", when: () => isTema && savedSettings.mobileScrollNav, fn: mobileScrollNav },
             { name: "sortThreadListsByNewPosts", when: () => hasThreadLists && savedSettings.sortThreadListsByNewPosts, fn: sortThreadListsByNewPosts },
         ];
@@ -3930,6 +4059,24 @@
                 max-width: 100% !important;
                 height: auto;
             }
+            /* Csak ellenorzott YouTube-beagyazasok kerulhetnek a popupba.
+               A lejatszo a kartya szelessegehez igazodik, mobilon sem log ki. */
+            #${MODAL_ID} .ph-pt-chain-youtube {
+                display: block;
+                width: 100%;
+                max-width: 720px;
+                aspect-ratio: 16 / 9;
+                margin: 8px 0;
+                overflow: hidden;
+                border-radius: 8px;
+                background: #000;
+            }
+            #${MODAL_ID} .ph-pt-chain-youtube iframe {
+                display: block;
+                width: 100% !important;
+                height: 100% !important;
+                border: 0 !important;
+            }
             #${MODAL_ID} .ph-pt-chain-post-content pre,
             #${MODAL_ID} .ph-pt-chain-post-content code {
                 max-width: 100%;
@@ -4133,13 +4280,123 @@
             return {items, hasMissingParent, missingParentId, direction};
         }
 
+        // Egy hozzaszolasban elofordulhat csonka (pl. "https://" vagy "//")
+        // kep-/link-URL. A new URL() ilyenkor kivetelt dobna, es az egesz
+        // hozzaszolas-lanc popup megjeleniteset megszakitana.
+        function resolveChainUrl(rawValue, sourceUrl, allowDataImage = false) {
+            const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+            if (!value) return null;
+            try {
+                const resolved = new URL(value, sourceUrl);
+                if (resolved.protocol === 'http:' || resolved.protocol === 'https:') return resolved.href;
+                if (allowDataImage && resolved.protocol === 'data:' && /^data:image\//i.test(value)) {
+                    return resolved.href;
+                }
+            } catch { /* Ervenytelen URL: csak ezt a hivatkozast hagyjuk ki. */ }
+            return null;
+        }
+
+        // Csak a YouTube valodi videohivatkozasait engedjuk be a popupba.
+        // Az eredeti iframe-et soha nem masoljuk at, az URL-bol ujraepitjuk.
+        function resolveChainYoutubeUrl(rawValue, sourceUrl) {
+            const href = resolveChainUrl(rawValue, sourceUrl);
+            if (!href) return null;
+            const url = new URL(href);
+            if (url.username || url.password || url.port) return null;
+
+            const host = url.hostname.toLowerCase().replace(/^www\./, '');
+            let videoId = '';
+            let embedHost = 'www.youtube.com';
+            if (['youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtube-nocookie.com'].includes(host)) {
+                const pathId = url.pathname.match(/^\/(?:embed|v|shorts|live)\/([\w-]{11})\/?$/i);
+                videoId = pathId?.[1] || (url.pathname === '/watch' ? url.searchParams.get('v') || '' : '');
+                if (host === 'youtube-nocookie.com') embedHost = 'www.youtube-nocookie.com';
+            } else if (host === 'youtu.be') {
+                videoId = url.pathname.match(/^\/([\w-]{11})\/?$/)?.[1] || '';
+            }
+            if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return null;
+
+            const embedUrl = new URL(`https://${embedHost}/embed/${videoId}`);
+            const start = url.searchParams.get('start') || url.searchParams.get('t') || '';
+            const seconds = start.match(/^(\d{1,8})s?$/i)?.[1];
+            if (seconds && Number(seconds) > 0) embedUrl.searchParams.set('start', String(Number(seconds)));
+            return embedUrl.href;
+        }
+
+        function getChainYoutubeSource(el, sourceUrl) {
+            // A forum a videolejatszot kozvetlen iframe-kent es lusta
+            // (data-src/data-video-id) placeholderkent is kirajzolhatja.
+            for (const name of [
+                'src', 'data-src', 'data-lazy-src', 'data-url',
+                'data-embed', 'data-embed-url', 'data-video-url', 'data-youtube-url'
+            ]) {
+                const url = resolveChainYoutubeUrl(el.getAttribute(name), sourceUrl);
+                if (url) return url;
+            }
+            for (const name of ['data-youtube-id', 'data-yt-id', 'videoid']) {
+                const id = el.getAttribute(name) || '';
+                if (/^[a-zA-Z0-9_-]{11}$/.test(id)) return `https://www.youtube.com/embed/${id}`;
+            }
+            // A genericus data-video-id csak YouTube-hoz tartozo konteneren ervenyes.
+            const className = typeof el.className === 'string' ? el.className : '';
+            const videoId = el.getAttribute('data-video-id') || '';
+            if (/(?:youtube|yt-|video-embed)/i.test(className) && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+                return `https://www.youtube.com/embed/${videoId}`;
+            }
+            if (el.tagName !== 'IFRAME') {
+                for (const inner of el.querySelectorAll('iframe[src], iframe[data-src], a[href]')) {
+                    const raw = inner.getAttribute('src') || inner.getAttribute('data-src') || inner.getAttribute('href');
+                    const url = resolveChainYoutubeUrl(raw, sourceUrl);
+                    if (url) return url;
+                }
+            }
+            return null;
+        }
+
+        function makeChainYoutubeEmbed(embedUrl) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'ph-pt-chain-youtube';
+            const iframe = document.createElement('iframe');
+            iframe.src = embedUrl;
+            iframe.title = 'YouTube-videó';
+            iframe.loading = 'lazy';
+            iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+            iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+            iframe.setAttribute('allowfullscreen', '');
+            iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+            wrapper.appendChild(iframe);
+            return wrapper;
+        }
+
         // Másolat az oldalon már megjelenített tartalomból, újrahasznosított
         // DOM-azonosítók, eseményattribútumok és űrlapvezérlők nélkül.
         function cloneMessageContent(original, sourceUrl = location.href) {
             const clone = original.cloneNode(true);
             clone.removeAttribute('id');
             clone.className = 'ph-pt-chain-post-content';
-            clone.querySelectorAll('script, style, iframe, object, embed, form, input, textarea, select, button, audio, video, canvas').forEach(el => el.remove());
+
+            // Az iframe-eket es a lusta YouTube-placeholderokat csak egy semleges
+            // jelolovel tartjuk meg a tisztitas soran. Utana biztonsagos iframe
+            // epul a szigoruan ellenorzott videohivatkozasbol.
+            const youtubeEmbeds = [];
+            function reserveYoutubeEmbed(el) {
+                const embedUrl = getChainYoutubeSource(el, sourceUrl);
+                if (!embedUrl) return;
+                const marker = document.createElement('span');
+                el.replaceWith(marker);
+                youtubeEmbeds.push({marker, embedUrl});
+            }
+            const placeholders = clone.querySelectorAll([
+                'lite-youtube', '[data-youtube-id]', '[data-yt-id]',
+                '[data-youtube-url]', '[data-video-url]', '[data-embed-url]',
+                '[class*="youtube"]', '[class*="yt-embed"]', '[class*="video-embed"]'
+            ].join(', '));
+            for (const el of [...placeholders]) {
+                if (clone.contains(el)) reserveYoutubeEmbed(el);
+            }
+            for (const iframe of [...clone.querySelectorAll('iframe')]) reserveYoutubeEmbed(iframe);
+
+            clone.querySelectorAll('script, style, iframe, object, embed, form, input, textarea, select, button, audio, video, canvas, lite-youtube').forEach(el => el.remove());
             for (const el of [clone, ...clone.querySelectorAll('*')]) {
                 for (const attr of [...el.attributes]) {
                     const name = attr.name.toLowerCase();
@@ -4148,9 +4405,11 @@
                     }
                 }
                 if (el.tagName === 'A') {
-                    const href = el.getAttribute('href') || '';
-                    if (/^(https?:\/\/|\/|#)/i.test(href)) {
-                        el.setAttribute('href', new URL(href, sourceUrl).href);
+                    const href = (el.getAttribute('href') || '').trim();
+                    const resolvedHref = /^(https?:\/\/|\/|#)/i.test(href)
+                        ? resolveChainUrl(href, sourceUrl) : null;
+                    if (resolvedHref) {
+                        el.setAttribute('href', resolvedHref);
                         el.target = '_blank';
                         el.rel = 'noopener noreferrer';
                     } else el.removeAttribute('href');
@@ -4158,11 +4417,15 @@
                 // A mas oldalrol letoltott tartalom relativ kephivatkozasai
                 // ne az aktualis temaoldal vagy az about:blank alapjat kapjak.
                 if (el.tagName === 'IMG') {
-                    const src = el.getAttribute('src') || '';
-                    if (/^(https?:\/\/|\/|data:image\/)/i.test(src)) {
-                        el.setAttribute('src', new URL(src, sourceUrl).href);
-                    } else if (src) el.removeAttribute('src');
+                    const src = (el.getAttribute('src') || '').trim();
+                    const resolvedSrc = /^(https?:\/\/|\/|data:image\/)/i.test(src)
+                        ? resolveChainUrl(src, sourceUrl, true) : null;
+                    if (resolvedSrc) el.setAttribute('src', resolvedSrc);
+                    else el.removeAttribute('src');
                 }
+            }
+            for (const {marker, embedUrl} of youtubeEmbeds) {
+                if (clone.contains(marker)) marker.replaceWith(makeChainYoutubeEmbed(embedUrl));
             }
             return clone;
         }
@@ -4191,10 +4454,10 @@
             header.className = 'ph-pt-chain-item-head';
             const face = document.createElement('span');
             face.className = 'ph-pt-chain-avatar';
-            if (avatar?.getAttribute('src')) {
+            const avatarSrc = resolveChainUrl(avatar?.getAttribute('src'), sourceUrl, true);
+            if (avatarSrc) {
                 const img = document.createElement('img');
-                const imageSrc = avatar.getAttribute('src');
-                img.src = new URL(imageSrc, sourceUrl).href;
+                img.src = avatarSrc;
                 img.alt = '';
                 img.loading = 'lazy';
                 face.appendChild(img);
@@ -4658,6 +4921,8 @@
         function closeModal() {
             const modal = document.getElementById(MODAL_ID);
             if (!modal || modal.style.display !== 'flex') return;
+            // Rejtett modalban se szoljon tovabb a mar elinditott YouTube-video.
+            modal.querySelectorAll('.ph-pt-chain-youtube iframe').forEach(frame => frame.removeAttribute('src'));
             chainSession?.controller?.abort();
             chainSession = null;
             connectorObserver?.disconnect();
@@ -4915,23 +5180,46 @@
         const l = pal?.light?.hashHighlight || DEFAULT_COLORIZE_PALETTE.light.hashHighlight;
         const d = pal?.dark?.hashHighlight  || DEFAULT_COLORIZE_PALETTE.dark.hashHighlight;
 
+        // A Fototrend szines (pl. zold) uzenetfejleceiben gyakori a feher
+        // szoveg. Vilagos hash-kiemeles utan ezt kulon korrigalni kell.
+        // Az egyeni szinpaletta miatt nem eleg csak a light/dark temat nezni:
+        // a tenyleges kiemeloszinhez a nagyobb kontrasztu feliratot valasztjuk.
+        function hashHighlightInk(background) {
+            const bg = phPtParseRgb(background);
+            if (!bg) return '#202124';
+            return phPtContrast(bg, [32, 33, 36]) >= phPtContrast(bg, [255, 255, 255])
+                ? '#202124' : '#ffffff';
+        }
+        const lightInk = hashHighlightInk(l);
+        const darkInk = hashHighlightInk(d);
+
         injectStyleOnce("ph-pt-msg-anchor-highlight-style", `
             body[data-theme="light"] {
                 --ph-pt-hash-highlight: ${l};
+                --ph-pt-hash-highlight-ink: ${lightInk};
             }
             body[data-theme="dark"] {
                 --ph-pt-hash-highlight: ${d};
+                --ph-pt-hash-highlight-ink: ${darkInk};
             }
             li[data-id] .message-head.hash-highlight {
                 background-color: var(--ph-pt-hash-highlight) !important;
                 transition: none !important;
+            }
+            /* A kiemelt fejlec szerzoje, rangja, azonositoja, datuma es
+               muveleti ikonjai ugyanazon a hatteren jol olvashatoak legyenek.
+               A lenyilo menuket nem szinezzuk at. A szabaly a klasszikus,
+               Modern es Thread nezetben is felulirja az eredeti fejlecszint. */
+            body[data-theme] li[data-id] .message-head.hash-highlight,
+            body[data-theme] li[data-id] .message-head.hash-highlight :where(*):not(.dropdown-menu, .dropdown-menu *) {
+                color: var(--ph-pt-hash-highlight-ink) !important;
             }
             /* A rejtett szerzok osszecsukott uzeneteinel a kijelolt fejlec
                nem latszik: ilyenkor a lathato Rejtett savot is kiemeljuk.
                A CSS a fejlec allapotat koveti, uj sav beszurasakor is. */
             li[data-id]:has(> :is(.message, .message-off) > .message-head.hash-highlight) > .hidden-bar {
                 background: var(--ph-pt-hash-highlight) !important;
-                color: var(--ph-ui-fg) !important;
+                color: var(--ph-pt-hash-highlight-ink) !important;
             }
         `);
 
@@ -10810,25 +11098,159 @@
     }
 
     function stickySidebar() {
+        // A 768-991 px széles tablet nézetben csak a jobb oldalsáv látható.
+        const tabletSidebarQuery = window.matchMedia('(min-width: 768px)');
+        const desktopSidebarQuery = window.matchMedia('(min-width: 992px)');
+        const leftSidebar = document.querySelector('#left');
+        const rightSidebar = document.querySelector('#right.slotSingleColumn');
+        const sidebars = [leftSidebar, rightSidebar].filter(Boolean);
+
         injectStyleOnce('ph-sticky-sidebar-style', `
-            #right.slotSingleColumn::-webkit-scrollbar,
-            #left::-webkit-scrollbar {
-                width: 4px;
+            /* A bal es jobb sav megorzi a sajat oszlopat es kulon scrollbarjat. */
+            #right.slotSingleColumn::-webkit-scrollbar { width: 8px; }
+            #right.slotSingleColumn::-webkit-scrollbar-thumb {
+                background: color-mix(in srgb, var(--ph-ui-muted) 55%, transparent);
+                border: 1px solid transparent;
+                background-clip: padding-box;
+                border-radius: 10px;
             }
-            #right.slotSingleColumn::-webkit-scrollbar-thumb,
+            #right.slotSingleColumn::-webkit-scrollbar-thumb:hover {
+                background: var(--ph-ui-muted);
+                background-clip: padding-box;
+            }
+            #left::-webkit-scrollbar { width: 4px; }
             #left::-webkit-scrollbar-thumb {
                 background-color: #ccc;
                 border-radius: 10px;
             }
+            /* Az oldalsavok a fejlec 40 px-es nyitasatol/csukodasatol
+               fuggetlen, allando top erteket kapnak. A sticky szulohatar
+               tovabbra is megallitja oket a footer elott, a belso gorgetes
+               es a 2 px also rahagyas megmarad. A fejlec lehet felul. */
+            @media (min-width: 768px) {
+                #header-sticky {
+                    z-index: 1050 !important;
+                }
+                #right.slotSingleColumn {
+                    position: sticky !important;
+                    top: 45px !important;
+                    align-self: flex-start;
+                    height: auto !important;
+                    max-height: calc(100dvh - 47px) !important;
+                    overflow-y: auto !important;
+                    overflow-x: hidden !important;
+                    overscroll-behavior-y: contain;
+                    overscroll-behavior-x: auto;
+                    scrollbar-width: thin;
+                    -webkit-overflow-scrolling: touch;
+                    scroll-behavior: smooth !important;
+                    z-index: auto !important;
+                    padding-left: 4px;
+                    margin-left: -4px;
+                    scrollbar-color: var(--ph-ui-muted) transparent;
+                }
+            }
+            /* Asztalon mindket sav 45 px-nel marad, akarhol is all a fejlec. */
+            @media (min-width: 992px) {
+                #left {
+                    position: sticky !important;
+                    top: 45px !important;
+                    align-self: flex-start;
+                    height: auto !important;
+                    max-height: calc(100dvh - 47px) !important;
+                    overflow-y: auto !important;
+                    overflow-x: hidden !important;
+                    overscroll-behavior-y: contain;
+                    overscroll-behavior-x: auto;
+                    scrollbar-width: thin;
+                    -webkit-overflow-scrolling: touch;
+                    scroll-behavior: smooth !important;
+                    z-index: auto !important;
+                }
+            }
+            /* Tableten csak a jobb sav rögzített: allando 9 px-es felso tavolsag. */
+            @media (min-width: 768px) and (max-width: 991.98px) {
+                #right.slotSingleColumn {
+                    top: 9px !important;
+                    max-height: calc(100dvh - 11px) !important;
+                }
+            }
+            /* A felhasznalo kisegitő mozgaspreferenciaja mindket oldalt erinti. */
+            @media (prefers-reduced-motion: reduce) {
+                #right.slotSingleColumn,
+                #left {
+                    transition: none !important;
+                    scroll-behavior: auto !important;
+                }
+            }
+            /* Tableten a bal sáv már nem sticky (jellemzően rejtett). */
+            @media (max-width: 991.98px) {
+                #left {
+                    position: static !important;
+                    top: auto !important;
+                    bottom: auto !important;
+                    height: auto !important;
+                    max-height: none !important;
+                    overflow: visible !important;
+                    overscroll-behavior: auto !important;
+                    scroll-behavior: auto !important;
+                    transition: none !important;
+                }
+            }
+            /* Telefonon a jobb sáv is visszatér a normál dokumentumgörgetéshez. */
+            @media (max-width: 767.98px) {
+                #right.slotSingleColumn {
+                    position: static !important;
+                    top: auto !important;
+                    bottom: auto !important;
+                    height: auto !important;
+                    max-height: none !important;
+                    overflow: visible !important;
+                    overscroll-behavior: auto !important;
+                    scroll-behavior: auto !important;
+                    transition: none !important;
+                    padding-left: 0 !important;
+                    margin-left: 0 !important;
+                }
+            }
+        `);
+
+        // A magassag a viewporthoz igazodik, nem a sor aljahoz.
+        // A CSS sticky a szulo tartalmi sor vege elott automatikusan
+        // felfele tolja a teljes panelt, hogy ne fedje at a footer teruletet.
+        // Tableten csak a jobb sav sticky; telefonon egyik sem.
+        function getStickySidebars() {
+            if (desktopSidebarQuery.matches) return sidebars;
+            return tabletSidebarQuery.matches && rightSidebar ? [rightSidebar] : [];
+        }
+
+        function resetInactiveSidebarScroll() {
+            const active = getStickySidebars();
+            for (const sidebar of sidebars) {
+                if (!active.includes(sidebar) && sidebar.scrollTop !== 0) {
+                    sidebar.scrollTop = 0;
+                }
+            }
+        }
+
+        resetInactiveSidebarScroll();
+        const onBreakpointChange = () => resetInactiveSidebarScroll();
+        for (const query of [tabletSidebarQuery, desktopSidebarQuery]) {
+            if (query.addEventListener) query.addEventListener('change', onBreakpointChange);
+            else if (query.addListener) query.addListener(onBreakpointChange);
+        }
+    }
+
+    // A kiemeles onallo; a sticky savok nelkul is mukodik.
+    function highlightCurrentTopic() {
+        injectStyleOnce('ph-current-topic-highlight-style', `
             .active-topic-sidebar {
                 background-color: #e9e0c9 !important;
                 font-weight: bold !important;
                 box-shadow: inset 5px 0px 0 0;
                 padding-left: 10px !important;
             }
-            .active-topic-sidebar a {
-                color: #000 !important;
-            }
+            .active-topic-sidebar a { color: #000 !important; }
             body[data-theme="dark"] .active-topic-sidebar {
                 background-color: #3a352a !important;
                 box-shadow: inset 5px 0px 0 0 #e0e0e0;
@@ -10841,9 +11263,7 @@
                 font-weight: bold !important;
                 box-shadow: inset 5px 0px 0 0 #000000;
             }
-            .active-topic-header a {
-                color: #000 !important;
-            }
+            .active-topic-header a { color: #000 !important; }
             body[data-theme="dark"] .active-topic-header {
                 background-color: #3a352a !important;
                 box-shadow: inset 5px 0px 0 0 #e0e0e0;
@@ -10851,94 +11271,46 @@
             body[data-theme="dark"] .active-topic-header a {
                 color: var(--ph-ui-fg) !important;
             }
-            /* Asztalon megmarad a sticky oldalsav es a kulon gorgetes. */
-            @media (min-width: 992px) {
-                #right.slotSingleColumn {
-                    padding-left: 4px;
-                    margin-left: -4px;
-                }
-                #right.slotSingleColumn,
-                #left {
-                    position: sticky;
-                    top: 85px;
-                    max-height: calc(100vh - 55px);
-                    overflow-y: auto;
-                    overscroll-behavior-y: contain;
-                    overscroll-behavior-x: auto;
-                    transition: top 0.3s ease, max-height 0.3s ease;
-                }
-                html.scroll-down #right.slotSingleColumn,
-                html.scroll-down #left {
-                    top: 45px;
-                    max-height: calc(100vh - 10px);
-                }
-            }
-            /* Mobilon es tableten a dokumentum az egyetlen fuggoleges scroller.
-               A webhely sajat magassagi/overflow beallitasait is felulirjuk. */
-            @media (max-width: 991.98px) {
-                #right.slotSingleColumn,
-                #left {
-                    position: static !important;
-                    top: auto !important;
-                    bottom: auto !important;
-                    height: auto !important;
-                    max-height: none !important;
-                    overflow: visible !important;
-                    overscroll-behavior: auto !important;
-                    transition: none !important;
-                }
-                #right.slotSingleColumn {
-                    padding-left: 0 !important;
-                    margin-left: 0 !important;
-                }
-            }
         `);
 
-        const desktopSidebarQuery = window.matchMedia('(min-width: 992px)');
-
-        // Szelesbol mobilnezetbe valtaskor a desktop sidebar korabbi
-        // belso scroll pozicioja sem tarthatja vissza a tartalmat.
-        function resetMobileSidebarScroll() {
-            if (desktopSidebarQuery.matches) return;
-            for (const sidebar of document.querySelectorAll('#right.slotSingleColumn, #left')) {
-                if (sidebar.scrollTop !== 0) sidebar.scrollTop = 0;
-            }
+        // A listan beluli odagorgetes onallo animacio, a hozzaszolas-
+        // navigacio smoothScrolling beallitasatol fuggetlenul mukodik.
+        // A rendszer csokkentett mozgas preferenciajat megtartjuk.
+        function sidebarScrollBehavior() {
+            return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                ? 'instant' : 'smooth';
         }
-        resetMobileSidebarScroll();
-        if (desktopSidebarQuery.addEventListener) {
-            desktopSidebarQuery.addEventListener('change', resetMobileSidebarScroll);
-        } else if (desktopSidebarQuery.addListener) {
-            desktopSidebarQuery.addListener(resetMobileSidebarScroll);
-        }
-
         const currentMatch = window.location.pathname.match(/\/tema\/[^/]+\//);
         if (!currentMatch) return;
-
         const currentTopicId = currentMatch[0];
 
-        // Sidebar (#right) - desktop
+        const rightSidebar = document.querySelector('#right.slotSingleColumn');
+        const canScrollSidebar = savedSettings.stickySidebar
+            && window.matchMedia('(min-width: 768px)').matches
+            && rightSidebar
+            && rightSidebar.getClientRects().length > 0;
+
+        // Az aktív téma eredeti kijelölése és a jobb listán belüli görgetése.
         document.querySelectorAll('.user-thread-list a').forEach(link => {
             const href = link.getAttribute('href');
             if (href && href.includes(currentTopicId)) {
                 const li = link.closest('li');
                 if (li) {
                     li.classList.add('active-topic-sidebar');
-                    const sidebar = document.querySelector('#right.slotSingleColumn');
-                    if (sidebar && desktopSidebarQuery.matches) {
+                    if (canScrollSidebar) {
                         const liRect = li.getBoundingClientRect();
-                        const sidebarRect = sidebar.getBoundingClientRect();
-                        const scrollTarget = sidebar.scrollTop
+                        const sidebarRect = rightSidebar.getBoundingClientRect();
+                        const scrollTarget = rightSidebar.scrollTop
                             + liRect.top
                             - sidebarRect.top
-                            - (sidebar.clientHeight / 2)
+                            - (rightSidebar.clientHeight / 2)
                             + (li.clientHeight / 2);
-                        sidebar.scrollTo({ top: scrollTarget, behavior: phPtNavigationScrollBehavior() });
+                        rightSidebar.scrollTo({ top: scrollTarget, behavior: sidebarScrollBehavior() });
                     }
                 }
             }
         });
 
-        // Header dropdown list - mobil/tablet
         document.querySelectorAll('.header-thread-list a').forEach(link => {
             const href = link.getAttribute('href');
             if (href && href.includes(currentTopicId)) {
