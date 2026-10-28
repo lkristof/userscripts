@@ -151,6 +151,7 @@
             changes: [
                 '[CHANGED] Felhasználók elrejtése: a Modern és Thread nézetben is kompakt, kattintható fejléc jelenik meg; a hozzászólás a fejlécére kattintva megjeleníthető és visszarejthető.',
                 '[FIXED] Hozzászólás-lánc: a rejtett felhasználók hozzászólásai a popupban is el vannak rejtve, a fejlécükre kattintva megjeleníthetők és visszarejthetők.',
+                '[FIXED] Rejtett felhasználók: a hozzászólásfejlécek hover-kiemelése rejtett és felfedett állapotban is egységes.',
             ]
         },
         {
@@ -3895,18 +3896,20 @@
                Az avatar az athuzott szem ikon mogott latszik, a hozzaszolas
                tobbi kepe es videoja csak felfedeskor jon letre. */
             #${MODAL_ID} .ph-pt-chain-item[data-user-collapsed="true"] {
-                background: color-mix(in srgb, var(--ph-ui-muted) 5%, var(--ph-ui-bg));
+                background: var(--ph-ui-bg);
             }
             #${MODAL_ID} .ph-pt-chain-item[data-selected="true"][data-user-collapsed="true"] {
                 border-color: var(--ph-ui-border);
                 border-left: 4px solid var(--ph-ui-accent);
+                background: color-mix(in srgb, var(--ph-ui-accent) 7%, var(--ph-ui-bg));
             }
             #${MODAL_ID} .ph-pt-chain-item[data-user-collapsed="true"] > .ph-pt-chain-item-head {
                 min-height: 52px;
                 box-sizing: border-box;
                 padding: 8px 11px;
                 border-bottom: none;
-                background: transparent;
+                /* background shorthand elnyomna a fejlec hover background-image retegét. */
+                background-color: transparent;
             }
             #${MODAL_ID} .ph-pt-chain-hidden-face {
                 position: relative;
@@ -3994,7 +3997,8 @@
             }
             #${MODAL_ID} .ph-pt-chain-toggle-head:hover,
             #${MODAL_ID} .ph-pt-chain-toggle-head:focus-visible {
-                background-image: linear-gradient(var(--ph-ui-hover), var(--ph-ui-hover));
+                /* Rejtve es felfedve azonos hover reteg, kijelolt/szinezett fejlecnel is. */
+                background-image: linear-gradient(var(--ph-ui-hover), var(--ph-ui-hover)) !important;
             }
             #${MODAL_ID} .ph-pt-chain-toggle-head:focus-visible {
                 outline: 2px solid var(--ph-ui-accent-ink);
@@ -7114,7 +7118,8 @@
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured):not(.msg-editor) > .message:has(> .message-body.ph-pt-colorize:is(
                 .ph-pt-akcio, .ph-pt-own, .ph-pt-reply, .ph-pt-focus-author, .ph-pt-focus-reply
             )) > .message-head:not(.hash-highlight) {
-                background: color-mix(in srgb, var(--ph-pt-card-mark) 62%, var(--ph-tv-card-head)) !important;
+                /* Csak a hatterszint allitjuk, hogy a hover hatterreteg latszodjon. */
+                background-color: color-mix(in srgb, var(--ph-pt-card-mark) 62%, var(--ph-tv-card-head)) !important;
             }
             /* Csak a ket kartyas nezetben tartjuk a torzset az alap forum
                eredeti, keveretlen szinevel. A #msg-kiemeles megelozi a fejlecszint. */
@@ -8782,17 +8787,20 @@
                     padding: 8px 11px;
                     border: 1px solid var(--ph-tv-card-edge, var(--ph-ui-border));
                     border-radius: 11px;
-                    background: color-mix(in srgb, var(--ph-ui-muted) 5%, var(--ph-ui-bg)) !important;
+                    /* Azonos alapszin a felfedett Modern/Thread fejleccel. */
+                    background: var(--ph-tv-card-head) !important;
                     color: var(--ph-ui-fg) !important;
                     box-shadow: 0 2px 9px rgba(0, 0, 0, .05);
                     text-align: left;
-                    transition: background 120ms ease;
+                    /* A hagyomanyos rejtosav animacioja ne kesleltesse az uj hover reteget. */
+                    transition: none;
                 }
                 ul:is(.ph-mv-active:not(.ph-tv-active), .ph-tv-active) > li[data-id] > .hidden-bar[data-ph-card-collapsed="false"] {
                     display: none !important;
                 }
                 ul:is(.ph-mv-active:not(.ph-tv-active), .ph-tv-active) > li[data-id] > .hidden-bar:is(:hover, :focus-visible) {
-                    background: color-mix(in srgb, var(--ph-ui-muted) 12%, var(--ph-ui-bg)) !important;
+                    /* Pontosan ugyanaz a kiemelo reteg, mint a felfedett fejlecen. */
+                    background-image: linear-gradient(var(--ph-ui-hover), var(--ph-ui-hover)) !important;
                 }
                 ul:is(.ph-mv-active:not(.ph-tv-active), .ph-tv-active) > li[data-id] > .hidden-bar:focus-visible {
                     outline: 2px solid var(--ph-ui-accent-ink);
@@ -8886,7 +8894,8 @@
                     cursor: pointer;
                 }
                 ul:is(.ph-mv-active:not(.ph-tv-active), .ph-tv-active) > li[data-id] > .message > .message-head.ph-hu-card-toggle-head:is(:hover, :focus-visible) {
-                    background-image: linear-gradient(var(--ph-ui-hover), var(--ph-ui-hover));
+                    /* A colorize fejlec !important hatteret is megtartja, es erre kerul a hover. */
+                    background-image: linear-gradient(var(--ph-ui-hover), var(--ph-ui-hover)) !important;
                 }
                 ul:is(.ph-mv-active:not(.ph-tv-active), .ph-tv-active) > li[data-id] > .message > .message-head.ph-hu-card-toggle-head:focus-visible {
                     outline: 2px solid var(--ph-ui-accent-ink);
