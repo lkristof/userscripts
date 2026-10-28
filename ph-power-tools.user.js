@@ -147,15 +147,16 @@
     const CHANGELOG = [
         {
             version: '2.5.2',
-            title: '2026.10.27',
+            title: '2026.10.28',
             changes: [
                 '[ADDED] A változásnapló bejegyzései színes ADDED, CHANGED és FIXED címkéket kaptak.',
                 '[ADDED] Az aktuális topik kiemelése a fix oldalsávoktól függetlenül kapcsolható.',
 
                 '[CHANGED] A beállítások menüje átláthatóbb felépítést kapott: a funkciók Megjelenés, Hozzászólások, Navigáció és Eszközök kategóriákba kerültek.',
+                '[CHANGED] A „Fix oldalsávok” funkció „Külön görgethető oldalsávok” néven érhető el a működés egyértelműbb jelzésére.',
 
                 '[FIXED] Üzenet kiemelés: a kijelölt hozzászólások fejléce a Fototrenden is jól olvasható.',
-                '[FIXED] Fix oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető. Az oldalsávok a fejléc mozgásától függetlenül állandó pozícióban maradnak, így a fejléc rájuk lóghat.',
+                '[FIXED] Külön görgethető oldalsávok: tablet nézetben a jobb oldalsáv is rögzített és külön görgethető. Az oldalsávok a fejléc mozgásától függetlenül állandó pozícióban maradnak, így a fejléc rájuk lóghat.',
                 '[FIXED] Hozzászólás-lánc: a hibás kép-, avatar- és link-URL-ek nem szakítják meg a popup megjelenítését. A beágyazott YouTube-videók a popupban is megjelennek és lejátszhatók.',
             ]
         },
@@ -261,7 +262,7 @@
         markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
         extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
         kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
-        stickySidebar: 'Asztali nézetben mindkét oldalsáv, tablet nézetben a jobb oldalsáv rögzített és külön görgethető.',
+        stickySidebar: 'Az oldalsávok az oldaltól függetlenül, külön görgethetők. Asztali nézetben mindkét oldalsáv, tablet nézetben a jobb oldalsáv érintett.',
         currentTopicHighlight: 'A megnyitott topikot kiemeli az oldalsó és a fejlécben lévő témalistában.',
         mobileScrollNav: 'Lebegő panel a hozzászólások közti lépkedéshez.',
         smoothScrolling: 'Finom, animált görgetés a hozzászólások közötti léptetéskor (billentyűzet, mobil panel, válasznavigáció).',
@@ -285,7 +286,7 @@
             extraSmilies: 'Extra smiley-k',
             kekShUploader: 'kek.sh képfeltöltő',
             giveawayAnswerChecker: 'Nyereményjáték válasz ellenőrző',
-            stickySidebar: 'Fix oldalsávok',
+            stickySidebar: 'Külön görgethető oldalsávok',
             currentTopicHighlight: 'Aktuális topik kiemelése',
             mobileScrollNav: 'Mobil navigációs panel',
             smoothScrolling: 'Animált görgetés',
