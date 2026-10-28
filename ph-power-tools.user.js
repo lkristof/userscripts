@@ -149,12 +149,10 @@
             version: '2.5.3',
             title: '2026.10.28',
             changes: [
-                '[ADDED] Rejtett felhasználók: a szerkesztőlistában kis méretben megjelennek a témában elérhető profilképek.',
+                '[CHANGED] Rejtett felhasználók: a szerkesztőlistában a felhasználónevek mellett a témában elérhető profilképek is megjelennek.',
                 '[CHANGED] Felhasználók elrejtése: a Modern és Thread nézetben is kompakt, kattintható fejléc jelenik meg; a hozzászólás a fejlécére kattintva megjeleníthető és visszarejthető.',
                 '[CHANGED] Thread nézet: az összecsukott válaszágak fejlécéből kikerült a felesleges pluszjel.',
                 '[FIXED] Hozzászólás-lánc: a rejtett felhasználók hozzászólásai a popupban is el vannak rejtve, a fejlécükre kattintva megjeleníthetők és visszarejthetők.',
-                '[FIXED] Rejtett felhasználók: a hozzászólásfejlécek hover-kiemelése rejtett és felfedett állapotban is egységes.',
-                '[FIXED] Üzenet kiemelés: a rejtett hozzászólások fejlécének szövege is a kiemelőszínhez igazodó kontraszttal jelenik meg.',
             ]
         },
         {
