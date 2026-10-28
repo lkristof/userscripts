@@ -152,6 +152,7 @@
                 '[CHANGED] Felhasználók elrejtése: a Modern és Thread nézetben is kompakt, kattintható fejléc jelenik meg; a hozzászólás a fejlécére kattintva megjeleníthető és visszarejthető.',
                 '[FIXED] Hozzászólás-lánc: a rejtett felhasználók hozzászólásai a popupban is el vannak rejtve, a fejlécükre kattintva megjeleníthetők és visszarejthetők.',
                 '[FIXED] Rejtett felhasználók: a hozzászólásfejlécek hover-kiemelése rejtett és felfedett állapotban is egységes.',
+                '[FIXED] Üzenet kiemelés: a rejtett hozzászólások fejlécének szövege is a kiemelőszínhez igazodó kontraszttal jelenik meg.',
             ]
         },
         {
@@ -5459,11 +5460,23 @@
             body[data-theme] li[data-id] .message-head.hash-highlight :where(*):not(.dropdown-menu, .dropdown-menu *) {
                 color: var(--ph-pt-hash-highlight-ink) !important;
             }
-            /* A rejtett szerzok osszecsukott uzeneteinel a kijelolt fejlec
-               nem latszik: ilyenkor a lathato Rejtett savot is kiemeljuk.
-               A CSS a fejlec allapotat koveti, uj sav beszurasakor is. */
-            li[data-id]:has(> :is(.message, .message-off) > .message-head.hash-highlight) > .hidden-bar {
-                background: var(--ph-pt-hash-highlight) !important;
+            /* Osszecsukott hozzaszolasnal az eredeti fejlec nem latszik,
+               ezert a rejtett kartya fejlece ugyanazt a kiemelest kapja.
+               Csak a hatterszint allitjuk, hogy a Modern/Thread hover-reteg
+               ugyanugy mukodjon, mint a felfedett hozzaszolas fejlecen. */
+            body[data-theme] li[data-id]:has(> :is(.message, .message-off) > .message-head.hash-highlight) > .hidden-bar {
+                background-color: var(--ph-pt-hash-highlight) !important;
+                color: var(--ph-pt-hash-highlight-ink) !important;
+                transition: none !important;
+            }
+            /* A kompakt kartya szerzoneve, allapotfelirata es lenyito nyila
+               sajat szint hasznal, igy a szulo color-ja onmagaban nem eleg.
+               Az avataron levo feher szem ikont meghagyjuk, hogy a kepen
+               tovabbra is jol lathato legyen. */
+            body[data-theme] li[data-id]:has(> :is(.message, .message-off) > .message-head.hash-highlight) > .hidden-bar :is(
+                .ph-hu-bar-label, .ph-hu-card-author, .ph-hu-card-status,
+                .ph-hu-card-chevron, .ph-hu-card-face:not(.has-avatar)
+            ) {
                 color: var(--ph-pt-hash-highlight-ink) !important;
             }
         `);
