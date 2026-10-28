@@ -3891,9 +3891,9 @@
                 border-left: 4px solid var(--ph-ui-accent);
                 background: color-mix(in srgb, var(--ph-ui-accent) 7%, var(--ph-ui-bg));
             }
-            /* A rejtett szerzo a tobbi kartyaval azonos fejlecelrendezest kap,
-               kulon csik vagy duplikalt nev nelkul. Nincs avatar- vagy
-               mediabetoltes, amig a hozzaszolas rejtett. */
+            /* A rejtett szerzo a tobbi kartyaval azonos fejlecelrendezest kap.
+               Az avatar az athuzott szem ikon mogott latszik, a hozzaszolas
+               tobbi kepe es videoja csak felfedeskor jon letre. */
             #${MODAL_ID} .ph-pt-chain-item[data-user-collapsed="true"] {
                 background: color-mix(in srgb, var(--ph-ui-muted) 5%, var(--ph-ui-bg));
             }
@@ -3909,18 +3909,47 @@
                 background: transparent;
             }
             #${MODAL_ID} .ph-pt-chain-hidden-face {
+                position: relative;
                 display: inline-flex;
                 width: 32px;
                 height: 32px;
                 flex: 0 0 32px;
                 align-items: center;
                 justify-content: center;
+                overflow: hidden;
                 border: 1px solid var(--ph-ui-border);
                 border-radius: 8px;
                 background: var(--ph-ui-soft);
                 color: var(--ph-ui-muted);
                 font-size: 13px;
                 box-sizing: border-box;
+            }
+            #${MODAL_ID} .ph-pt-chain-hidden-face.has-avatar { background: #fff; }
+            #${MODAL_ID} .ph-pt-chain-hidden-avatar {
+                position: absolute;
+                inset: 0;
+                display: block;
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                pointer-events: none;
+            }
+            #${MODAL_ID} .ph-pt-chain-hidden-face.has-avatar::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                z-index: 1;
+                background: rgba(15, 23, 32, .27);
+                pointer-events: none;
+            }
+            #${MODAL_ID} .ph-pt-chain-hidden-face .fa-eye-slash {
+                position: relative;
+                z-index: 2;
+                pointer-events: none;
+            }
+            #${MODAL_ID} .ph-pt-chain-hidden-face.has-avatar .fa-eye-slash {
+                color: #fff;
+                text-shadow: 0 1px 3px rgba(0, 0, 0, .85);
             }
             #${MODAL_ID} .ph-pt-chain-hidden-author {
                 color: var(--ph-ui-fg);
@@ -4549,6 +4578,7 @@
             const isRevealed = isHiddenAuthor && session.revealedHiddenPosts.has(id);
             const rank = qs(msg, '.message-head-user .user-class');
             const avatar = qs(msg, '.message-head-user .user-face img');
+            const avatarSrc = resolveChainUrl(avatar?.getAttribute('src'), sourceUrl, true);
             const time = qs(msg, '.message-head-infos time');
             const content = qs(msg, '.message-body-main > .rtif-content.message-content')
                 || qs(msg, '.message-body-main > .message-content');
@@ -4574,6 +4604,20 @@
                 hiddenHead.title = 'Kattints a fejlécre a hozzászólás megjelenítéséhez';
                 const hiddenFace = document.createElement('span');
                 hiddenFace.className = 'ph-pt-chain-hidden-face';
+                if (avatarSrc) {
+                    const hiddenAvatar = document.createElement('img');
+                    hiddenAvatar.className = 'ph-pt-chain-hidden-avatar';
+                    hiddenAvatar.src = avatarSrc;
+                    hiddenAvatar.alt = '';
+                    hiddenAvatar.loading = 'lazy';
+                    hiddenAvatar.decoding = 'async';
+                    hiddenAvatar.addEventListener('error', () => {
+                        hiddenAvatar.remove();
+                        hiddenFace.classList.remove('has-avatar');
+                    }, {once: true});
+                    hiddenFace.classList.add('has-avatar');
+                    hiddenFace.appendChild(hiddenAvatar);
+                }
                 const hiddenIcon = document.createElement('span');
                 hiddenIcon.className = 'fas fa-eye-slash';
                 hiddenIcon.setAttribute('aria-hidden', 'true');
@@ -4599,7 +4643,7 @@
                 indicator.setAttribute('aria-hidden', 'true');
                 hiddenHead.appendChild(indicator);
                 article.appendChild(hiddenHead);
-                // Nem epul fel a tartalom: kep/video/iframe csak felfedeskor jon letre.
+                // Az avatart kiveve a tartalom es a media csak felfedeskor jon letre.
                 return article;
             }
             const header = document.createElement('div');
@@ -4615,7 +4659,6 @@
             }
             const face = document.createElement('span');
             face.className = 'ph-pt-chain-avatar';
-            const avatarSrc = resolveChainUrl(avatar?.getAttribute('src'), sourceUrl, true);
             if (avatarSrc) {
                 const img = document.createElement('img');
                 img.src = avatarSrc;
@@ -8766,17 +8809,46 @@
                     gap: 9px;
                 }
                 .ph-hu-card-face {
+                    position: relative;
                     display: inline-flex;
                     flex: 0 0 32px;
                     justify-content: center;
                     align-items: center;
                     height: 32px;
+                    overflow: hidden;
                     border: 1px solid var(--ph-ui-border);
                     border-radius: 8px;
                     background: var(--ph-ui-soft);
                     color: var(--ph-ui-muted);
                     box-sizing: border-box;
                     font-size: 13px;
+                }
+                .ph-hu-card-face.has-avatar { background: #fff; }
+                .ph-hu-card-avatar {
+                    position: absolute;
+                    inset: 0;
+                    display: block;
+                    width: 100%;
+                    height: 100%;
+                    object-fit: contain;
+                    pointer-events: none;
+                }
+                .ph-hu-card-face.has-avatar::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    z-index: 1;
+                    background: rgba(15, 23, 32, .27);
+                    pointer-events: none;
+                }
+                .ph-hu-card-face .fa-eye-slash {
+                    position: relative;
+                    z-index: 2;
+                    pointer-events: none;
+                }
+                .ph-hu-card-face.has-avatar .fa-eye-slash {
+                    color: #fff;
+                    text-shadow: 0 1px 3px rgba(0, 0, 0, .85);
                 }
                 .ph-hu-card-copy {
                     display: flex;
@@ -9034,7 +9106,28 @@
             summary.className = 'ph-hu-card-summary';
             const face = document.createElement('span');
             face.className = 'ph-hu-card-face';
-            face.innerHTML = '<span class="fas fa-eye-slash" aria-hidden="true"></span>';
+            // A forumban levo avatar kepet mutatjuk a szem ikon alatt.
+            const sourceAvatar = msg.querySelector(
+                '.message-head-user .user-face img, .message-body-user .user-face img');
+            const avatarSrc = sourceAvatar?.currentSrc || sourceAvatar?.getAttribute('src');
+            if (avatarSrc) {
+                const hiddenAvatar = document.createElement('img');
+                hiddenAvatar.className = 'ph-hu-card-avatar';
+                hiddenAvatar.src = avatarSrc;
+                hiddenAvatar.alt = '';
+                hiddenAvatar.loading = 'lazy';
+                hiddenAvatar.decoding = 'async';
+                hiddenAvatar.addEventListener('error', () => {
+                    hiddenAvatar.remove();
+                    face.classList.remove('has-avatar');
+                }, {once: true});
+                face.classList.add('has-avatar');
+                face.appendChild(hiddenAvatar);
+            }
+            const hiddenIcon = document.createElement('span');
+            hiddenIcon.className = 'fas fa-eye-slash';
+            hiddenIcon.setAttribute('aria-hidden', 'true');
+            face.appendChild(hiddenIcon);
             const copy = document.createElement('span');
             copy.className = 'ph-hu-card-copy';
             const name = document.createElement('strong');
