@@ -147,11 +147,12 @@
     const CHANGELOG = [
         {
             version: '2.5.3',
-            title: '2026.10.28',
+            title: '2026.10.31',
             changes: [
                 '[CHANGED] Rejtett felhasználók: a szerkesztőlistában a felhasználónevek mellett a témában elérhető profilképek is megjelennek.',
                 '[CHANGED] Felhasználók elrejtése: a Modern és Thread nézetben is kompakt, kattintható fejléc jelenik meg; a hozzászólás a fejlécére kattintva megjeleníthető és visszarejthető.',
                 '[CHANGED] Thread nézet: az összecsukott válaszágak fejlécéből kikerült a felesleges pluszjel.',
+                '[CHANGED] Modern nézet: a hozzászóláskártyák szögletesek, térköz nélkül, közös vékony elválasztással csatlakoznak egymáshoz.',
                 '[FIXED] Hozzászólás-lánc: a rejtett felhasználók hozzászólásai a popupban is el vannak rejtve, a fejlécükre kattintva megjeleníthetők és visszarejthetők.',
             ]
         },
@@ -4040,13 +4041,6 @@
                 outline: 2px solid var(--ph-ui-accent-ink);
                 outline-offset: -2px;
             }
-            @media (max-width: 540px) {
-                #${MODAL_ID} .ph-pt-chain-hidden-face {
-                    width: 28px;
-                    height: 28px;
-                    flex-basis: 28px;
-                }
-            }
             #${MODAL_ID} .ph-pt-chain-item-head {
                 display: flex;
                 align-items: center;
@@ -5823,7 +5817,7 @@
 
             // Az animált height:0 mellett is a teljes tartalomméretet kapjuk.
             const fullHeight = Math.max(row.scrollHeight, row.getBoundingClientRect().height);
-            const fullGap = 9; // Mindkét kártyás nézet alapértelmezett térköze.
+            const fullGap = inThread ? 9 : 0; // Thread: 9px; Modern: egymáshoz csatlakozó kártyák.
             const startHeight = previous ? fromHeight : (hide ? fullHeight : 0);
             const startGap = previous ? fromGap
                 : (hide ? parseFloat(getComputedStyle(row).marginBottom) || fullGap : 0);
@@ -8266,27 +8260,50 @@
         // eredeti elemei, linkjei és eseménykezelői változatlanok maradnak.
         injectPostCardStyles();
         injectStyleOnce('ph-pt-modern-view-style', `
-            ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured) {
+            /* A Modern nezet kartyai szogletesek es egyetlen, folytonos listat alkotnak.
+               A kozos Thread-stilus es a hagyomanyos forumnezet valtozatlan. */
+            ul.ph-mv-active:not(.ph-tv-active) {
+                row-gap: 0 !important;
+            }
+            ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured, .msg-editor) {
                 position: relative !important;
                 box-sizing: border-box;
                 min-width: 0;
-                margin: 0 0 9px !important;
+                margin: 0 !important;
                 padding: 0 !important;
             }
-            ul.ph-mv-active:not(.ph-tv-active) > li.msg-editor {
-                margin: 0 0 9px !important;
-                padding: 0 !important;
+            /* Az egymas alatt levo kartyak 1px-es kerete kozos valasztovonal
+               legyen; a ket szomszedos keret ne adodjon ossze 2px-re. */
+            ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured, .msg-editor)
+                + li:is([data-id], .message-featured, .msg-editor) {
+                margin-top: -1px !important;
             }
-            /* Az OFF-elrejtés a .message-off elemen (ami gyakran maga az LI),
-               illetve egy belső .message elemen hagyhat off-post-hidden osztályt.
-               Ne csak a kártya törzse tűnjön el: a teljes sor kikerül a layoutból,
-               különben a Modern nézet 9px-es LI-margója üres réseket hagy. */
+            /* Az elrejtett hozzaszolas fejlece es a valaszszerkeszto is illeszkedik.
+               A nagyobb specificitas felulirja a rejtett szerzok kesobb beszurt CSS-et. */
+            body ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured, .msg-editor) > :is(.message, .message-off, .hidden-bar) {
+                border-radius: 0 !important;
+                box-shadow: none !important;
+            }
+            body ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured, .msg-editor) > :is(.message, .message-off) > :is(.message-head, .message-body) {
+                border-radius: 0 !important;
+            }
+            /* Csak a gombok feletti res szukul 2px-szel, a gombok
+               magassaga es kattinthato felulete valtozatlan marad. */
+            ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured) > :is(.message, .message-off) > .message-head {
+                row-gap: 2px !important;
+            }
+            ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured) > :is(.message, .message-off) > .message-head > .message-head-btns {
+                padding-top: 2px !important;
+            }
+            /* Az OFF-elrejtes a .message-off elemen (ami gyakran maga az LI),
+               illetve egy belso .message elemen hagyhat off-post-hidden osztalyt.
+               Ne csak a kartya torzse tunjon el: a teljes sor keruljon ki. */
             ul.ph-mv-active:not(.ph-tv-active) > li.off-post-hidden,
             ul.ph-mv-active:not(.ph-tv-active) > li:has(> :is(.message, .message-off).off-post-hidden) {
                 display: none !important;
             }
-            /* Az összefoglalónál nincs gombsor: a kártyafejléc egyetlen soros.
-               A témacímet és a frissítés dátumát a jobb oldali oszlop tartja. */
+            /* Az osszefoglalonal nincs gombsor: a kartyafejlec egyetlen soros.
+               A temacimet es a frissites datumat a jobb oldali oszlop tartja. */
             ul.ph-mv-active:not(.ph-tv-active) > li.message-featured:not([data-id]) > .message > .message-head {
                 grid-template-rows: auto !important;
                 grid-template-areas: 'author info' !important;
@@ -8931,9 +8948,6 @@
                 ul:is(.ph-mv-active:not(.ph-tv-active), .ph-tv-active) > li[data-id] > .message > .message-head.ph-hu-card-toggle-head:focus-visible {
                     outline: 2px solid var(--ph-ui-accent-ink);
                     outline-offset: -2px;
-                }
-                @media (max-width: 540px) {
-                    .ph-hu-card-face { flex-basis: 28px; height: 28px; }
                 }
                 .ph-collapsible {
                     transition: max-height 0.4s ease;
