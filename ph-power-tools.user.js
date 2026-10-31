@@ -149,10 +149,9 @@
             version: '2.5.3',
             title: '2026.10.31',
             changes: [
-                '[CHANGED] Rejtett felhasználók: a szerkesztőlistában a felhasználónevek mellett a témában elérhető profilképek is megjelennek.',
-                '[CHANGED] Felhasználók elrejtése: a Modern és Thread nézetben is kompakt, kattintható fejléc jelenik meg; a hozzászólás a fejlécére kattintva megjeleníthető és visszarejthető.',
+                '[CHANGED] Rejtett felhasználók: profilképes lista és egységes, lenyitható fejlécek a Modern, Thread és Lánc nézetben.',
+                '[CHANGED] Modern nézet: szögletes, hézagmentes kártyák, egysoros fejléc középen lévő műveletgombokkal.',
                 '[CHANGED] Thread nézet: az összecsukott válaszágak fejlécéből kikerült a felesleges pluszjel.',
-                '[CHANGED] Modern nézet: a hozzászóláskártyák szögletesek, térköz nélkül, közös vékony elválasztással csatlakoznak egymáshoz.',
                 '[FIXED] Hozzászólás-lánc: a rejtett felhasználók hozzászólásai a popupban is el vannak rejtve, a fejlécükre kattintva megjeleníthetők és visszarejthetők.',
             ]
         },
@@ -3936,35 +3935,53 @@
                 background: var(--ph-ui-bg);
             }
             #${MODAL_ID} .ph-pt-chain-item[data-selected="true"][data-user-collapsed="true"] {
-                border-color: var(--ph-ui-border);
+                /* A kivalasztott, rejtett kartya teljes kerete ugyanolyan
+                   kiemelt, mint a megnyitott kartyaje. */
+                border-color: var(--ph-ui-accent);
                 border-left: 4px solid var(--ph-ui-accent);
                 background: color-mix(in srgb, var(--ph-ui-accent) 7%, var(--ph-ui-bg));
             }
             #${MODAL_ID} .ph-pt-chain-item[data-user-collapsed="true"] > .ph-pt-chain-item-head {
-                min-height: 52px;
+                min-height: 0;
                 box-sizing: border-box;
-                padding: 8px 11px;
-                border-bottom: none;
+                /* Same dimensions as the expanded chain header. */
+                padding: 10px 11px;
+                border-bottom: 1px solid transparent;
                 /* background shorthand elnyomna a fejlec hover background-image retegét. */
                 background-color: transparent;
             }
             #${MODAL_ID} .ph-pt-chain-hidden-face {
                 position: relative;
                 display: inline-flex;
-                width: 32px;
-                height: 32px;
-                flex: 0 0 32px;
+                flex: 0 0 40px;
+                width: 40px;
+                height: 40px;
+                min-width: 40px;
+                max-width: 40px;
+                min-height: 40px;
+                max-height: 40px;
                 align-items: center;
                 justify-content: center;
                 overflow: hidden;
-                border: 1px solid var(--ph-ui-border);
-                border-radius: 8px;
+                /* Overlay border instead of shrinking the avatar image. */
+                border: 0;
+                border-radius: 9px;
                 background: var(--ph-ui-soft);
                 color: var(--ph-ui-muted);
                 font-size: 13px;
                 box-sizing: border-box;
             }
             #${MODAL_ID} .ph-pt-chain-hidden-face.has-avatar { background: #fff; }
+            #${MODAL_ID} .ph-pt-chain-hidden-face::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                z-index: 3;
+                box-sizing: border-box;
+                border: 1px solid color-mix(in srgb, var(--ph-ui-muted) 64%, var(--ph-ui-bg));
+                border-radius: inherit;
+                pointer-events: none;
+            }
             #${MODAL_ID} .ph-pt-chain-hidden-avatar {
                 position: absolute;
                 inset: 0;
@@ -3996,7 +4013,8 @@
             }
             #${MODAL_ID} .ph-pt-chain-hidden-status {
                 color: var(--ph-ui-muted);
-                font-size: 10.5px;
+                /* Match the ordinary author's secondary line. */
+                font-size: 11px;
                 line-height: 1.25;
             }
             /* Az osszecsukott es felfedett kartyak fejlece egyarant
@@ -4098,7 +4116,7 @@
             }
             /* Ugyanaz a mobilos torespont (640 px), mint a kartyanezetekben. */
             @media (max-width: 640px) {
-                #${MODAL_ID} .ph-pt-chain-avatar {
+                #${MODAL_ID} :is(.ph-pt-chain-avatar, .ph-pt-chain-hidden-face) {
                     flex-basis: 34px !important;
                     width: 34px !important;
                     height: 34px !important;
@@ -4318,6 +4336,11 @@
                     margin-left: min(var(--ph-pt-chain-indent, 0px), 66px);
                 }
                 #${MODAL_ID} .ph-pt-chain-item-head { padding: 8px; gap: 7px; }
+                /* The collapsed chain header follows the same mobile spacing. */
+                #${MODAL_ID} .ph-pt-chain-item[data-user-collapsed="true"] > .ph-pt-chain-item-head {
+                    padding: 8px;
+                    gap: 7px;
+                }
                 #${MODAL_ID} .ph-pt-chain-post-content { padding: 8px; font-size: 12.5px; }
                 #${MODAL_ID} .ph-pt-chain-hint { font-size: 10px; }
             }
@@ -8264,6 +8287,8 @@
                A kozos Thread-stilus es a hagyomanyos forumnezet valtozatlan. */
             ul.ph-mv-active:not(.ph-tv-active) {
                 row-gap: 0 !important;
+                /* Kozos meretlekerdezes a normal es a rejtett fejlecnek. */
+                container: ph-hu-list / inline-size;
             }
             ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured, .msg-editor) {
                 position: relative !important;
@@ -8287,13 +8312,98 @@
             body ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured, .msg-editor) > :is(.message, .message-off) > :is(.message-head, .message-body) {
                 border-radius: 0 !important;
             }
-            /* Csak a gombok feletti res szukul 2px-szel, a gombok
-               magassaga es kattinthato felulete valtozatlan marad. */
-            ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured) > :is(.message, .message-off) > .message-head {
-                row-gap: 2px !important;
+            /* A Modern nezetben a szerzo, az akciogombok es az ID/datum
+               MINDEN kartya-szelessegen ugyanabban az egyetlen sorban vannak.
+               Csak CSS-t valtoztatunk; az eredeti gombok es kezelok megmaradnak. */
+            ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > :is(.message, .message-off) > .message-head {
+                grid-template-columns: minmax(82px, 1fr) max-content max-content !important;
+                grid-template-rows: auto !important;
+                grid-template-areas: 'author actions info' !important;
+                gap: 0 8px !important;
+                padding: 6px 10px !important;
+                /* Ha rendkivul szuk a kartya, ne tores vagy atfedes legyen:
+                   a fejlec vizszintesen gorgetheto, minden gomb elerheto marad. */
+                overflow-x: auto !important;
+                overflow-y: hidden !important;
+                scrollbar-width: thin;
+                overscroll-behavior-x: contain;
             }
-            ul.ph-mv-active:not(.ph-tv-active) > li:is([data-id], .message-featured) > :is(.message, .message-off) > .message-head > .message-head-btns {
-                padding-top: 2px !important;
+            /* A forum dropdown-menu eleme a fejlecbol lefele nyilik.
+               A bezart allapotban szukseges overflow-x:auto + overflow-y:hidden
+               scrollport az ABSZOLUT pozicionalt menut is levagna. Csak nyitott
+               menunel engedjuk el a vagast, egyebkent megmarad az egysoros,
+               szuk kepernyon oldalra gorgetheto fejlec. A li sajat retegrendje
+               megakadalyozza, hogy a kovetkezo kartya elfedje a menut. */
+            ul.ph-mv-active:not(.ph-tv-active) > li[data-id]:has(
+                .message-head .dropdown-menu.show, .message-head .dropdown.show
+            ) {
+                z-index: 60 !important;
+            }
+            ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > :is(.message, .message-off) > .message-head:has(
+                .dropdown-menu.show, .dropdown.show
+            ) {
+                position: relative !important;
+                z-index: 60 !important;
+                overflow-x: visible !important;
+                overflow-y: visible !important;
+            }
+            ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .message-head-btns .dropdown-menu.show {
+                z-index: 1060 !important;
+                max-width: calc(100vw - 16px);
+            }
+            ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > :is(.message, .message-off) > .message-head > .message-head-btns {
+                display: flex !important;
+                flex-wrap: nowrap !important;
+                justify-content: flex-end !important;
+                justify-self: end !important;
+                align-self: center !important;
+                gap: 0 4px !important;
+                width: max-content !important;
+                min-width: max-content !important;
+                max-width: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border-top: 0 !important;
+                white-space: nowrap !important;
+            }
+            ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .message-head-btns > :is(a, button, .dropdown, .btn-group) {
+                flex: 0 0 auto !important;
+                white-space: nowrap !important;
+            }
+            /* A kezelofeluletek nem zsugorodnak, a feliratok sem tornek. */
+            ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .message-head-btns :is(a.message-btn, button.message-btn),
+            ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .message-head-btns > :is(a, button) {
+                min-height: 28px !important;
+                padding: 3px 7px !important;
+                white-space: nowrap !important;
+                overflow-wrap: normal !important;
+            }
+            /* Hosszu szerzonev/rang helyett harompontos rovidites, nem uj sor. */
+            ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .message-head-user > .user-text {
+                overflow: hidden;
+            }
+            ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .message-head-user .user-class {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap !important;
+            }
+            /* Szuk kartyan csokken a belso hezag, de a harom fejlecblokk
+               es a gombok tovabbra sem kerulhetnek masodik sorba. */
+            @container ph-tv-card (max-width: 639px) {
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > :is(.message, .message-off) > .message-head {
+                    gap: 0 4px !important;
+                    padding: 5px 6px !important;
+                }
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > :is(.message, .message-off) > .message-head > .message-head-user {
+                    gap: 4px !important;
+                }
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > :is(.message, .message-off) > .message-head > .message-head-btns {
+                    gap: 0 2px !important;
+                }
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .message-head-btns :is(a.message-btn, button.message-btn),
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .message-head-btns > :is(a, button) {
+                    padding-inline: 5px !important;
+                }
             }
             /* Az OFF-elrejtes a .message-off elemen (ami gyakran maga az LI),
                illetve egy belso .message elemen hagyhat off-post-hidden osztalyt.
@@ -8937,6 +9047,113 @@
                     color: var(--ph-ui-muted);
                     font-size: 11px;
                     pointer-events: none;
+                }
+
+                /* Thread: collapsed author details match the normal card header.
+                   The avatar, author offset, line spacing and rank-sized status
+                   are identical; only the action-button row remains hidden. */
+                ul.ph-tv-active:not(.ph-mv-active) > li[data-id] > .hidden-bar {
+                    min-height: 0;
+                    gap: 8px;
+                    padding: 7px 11px 6px;
+                }
+                ul.ph-tv-active:not(.ph-mv-active) > li[data-id] > .hidden-bar > .ph-hu-card-summary {
+                    gap: 8px;
+                }
+                ul.ph-tv-active > li[data-id] .ph-hu-card-face {
+                    flex: 0 0 40px;
+                    width: 40px;
+                    height: 40px;
+                    border: 0;
+                    border-radius: 9px;
+                }
+                /* Keep the image full size; draw its frame as an overlay. */
+                ul.ph-tv-active > li[data-id] .ph-hu-card-face::after {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    z-index: 3;
+                    box-sizing: border-box;
+                    border: 1px solid var(--ph-ui-border);
+                    border-radius: inherit;
+                    pointer-events: none;
+                }
+                ul.ph-tv-active > li[data-id] .ph-hu-card-copy {
+                    gap: 3px;
+                }
+                ul.ph-tv-active > li[data-id] :is(.ph-hu-card-author, .ph-hu-card-status) {
+                    min-width: 0;
+                    max-width: 100%;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                ul.ph-tv-active > li[data-id] .ph-hu-card-status {
+                    font-size: 12px;
+                }
+                @media (max-width: 640px) {
+                    ul.ph-tv-active > li[data-id] .ph-hu-card-face {
+                        flex-basis: 34px;
+                        width: 34px;
+                        height: 34px;
+                    }
+                }
+
+                /* Modern: preserve the previously verified single-row sizing. */
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > .hidden-bar {
+                    min-height: 54px;
+                    gap: 8px;
+                    padding: 6px 10px;
+                }
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > .hidden-bar > .ph-hu-card-summary {
+                    gap: 8px;
+                }
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .ph-hu-card-face {
+                    flex: 0 0 40px;
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 9px;
+                }
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .ph-hu-card-copy {
+                    /* A normal fejlec nev/rang blokkjaval megegyezo sorkoz.
+                       Nincs kulon fuggoleges eltolás: az avatarhoz igazodik. */
+                    gap: 3px;
+                }
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] :is(.ph-hu-card-author, .ph-hu-card-status) {
+                    min-width: 0;
+                    max-width: 100%;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .ph-hu-card-status {
+                    font-size: 12px;
+                }
+                /* A Modern kartyak sajat szelessege iranyitja a normal fejlec
+                   kontenerlekerdezeset. Ugyanazt a kuszobot hasznaljuk a rejtett
+                   fejlechez is, igy szuk asztali oldalsavnal sem lesz 2px ugras. */
+                @container ph-hu-list (max-width: 639px) {
+                    ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > .hidden-bar {
+                        min-height: 52px;
+                        padding: 5px 6px;
+                    }
+                    ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > .hidden-bar > .ph-hu-card-summary {
+                        gap: 4px;
+                    }
+                }
+                @media (max-width: 640px) {
+                    ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > .hidden-bar {
+                        min-height: 46px;
+                        padding: 5px 6px;
+                    }
+                    ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .ph-hu-card-face {
+                        flex-basis: 34px;
+                        width: 34px;
+                        height: 34px;
+                    }
+                    ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > .hidden-bar > .ph-hu-card-summary {
+                        gap: 4px;
+                    }
                 }
                 ul:is(.ph-mv-active:not(.ph-tv-active), .ph-tv-active) > li[data-id] > .message > .message-head.ph-hu-card-toggle-head {
                     cursor: pointer;
