@@ -100,7 +100,7 @@
     const DEFAULT_GIST_FILENAME = "ph_forum_settings.json";
     let GIST_TOKEN = (secrets.gistToken || "").trim();
     let GIST_ID = (secrets.gistId || "").trim();
-    let GIST_FILENAME = ((secrets.gistFilename || DEFAULT_GIST_FILENAME)).trim();
+    let GIST_FILENAME = (secrets.gistFilename || DEFAULT_GIST_FILENAME).trim();
     let ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
     let KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
 
@@ -738,7 +738,6 @@
     }
 
     function createSyncedStorage() {
-        let gistCache = null;
         let pushTimer = null;
         let inited = false;
         let syncSuspended = false;
@@ -798,16 +797,16 @@
             if (remoteVal == null) return localVal;
             if (localVal == null) return remoteVal;
 
-            if (key === KEYS.STATE.TOPIC_MAX_ID_MAP) {
+            if (key === KEYS.STATE.TOPIC_MAX_ID_MAP || key === KEYS.KEK.GALLERY_DELETED) {
                 const r = (remoteVal && typeof remoteVal === "object") ? remoteVal : {};
                 const l = (localVal && typeof localVal === "object") ? localVal : {};
                 const out = { ...r };
 
-                for (const [slug, id] of Object.entries(l)) {
-                    const li = parseInt(id, 10);
-                    const ri = parseInt(out[slug], 10);
-                    if (!Number.isFinite(li)) continue;
-                    if (!Number.isFinite(ri) || li > ri) out[slug] = li;
+                for (const [name, value] of Object.entries(l)) {
+                    const localNumber = parseInt(value, 10);
+                    const remoteNumber = parseInt(out[name], 10);
+                    if (!Number.isFinite(localNumber)) continue;
+                    if (!Number.isFinite(remoteNumber) || localNumber > remoteNumber) out[name] = localNumber;
                 }
                 return out;
             }
@@ -835,20 +834,6 @@
 
                 const deleted = safeJsonParse(localStorage.getItem(KEYS.KEK.GALLERY_DELETED) || "{}", {});
                 return merged.filter(it => it?.url && !deleted[it.url]);
-            }
-
-            if (key === KEYS.KEK.GALLERY_DELETED) {
-                const r = (remoteVal && typeof remoteVal === "object") ? remoteVal : {};
-                const l = (localVal && typeof localVal === "object") ? localVal : {};
-                const out = { ...r };
-
-                for (const [url, ts] of Object.entries(l)) {
-                    const lt = parseInt(ts, 10);
-                    const rt = parseInt(out[url], 10);
-                    if (!Number.isFinite(lt)) continue;
-                    if (!Number.isFinite(rt) || lt > rt) out[url] = lt;
-                }
-                return out;
             }
 
             if (key === KEYS.KEK.GALLERY_RESET_TS) {
@@ -912,7 +897,6 @@
                 localStorage.setItem(KEYS.KEK.GALLERY_SEEN_RESET_TS, String(remoteResetTs));
             }
 
-            gistCache = remote;
             const gallery = readLocalValue(KEYS.KEK.GALLERY);
             return {
                 galleryCount: Array.isArray(gallery) ? gallery.length : 0,
@@ -957,7 +941,6 @@
                     const remote = normalizeRemoteBlob(fetchedRemote);
 
                     if (!dirtyWrites.size && !dirtyDeletes.size) {
-                        gistCache = remote;
                         return { ok: true, changed: false };
                     }
 
@@ -989,7 +972,6 @@
 
                     dirtyWrites.clear();
                     dirtyDeletes.clear();
-                    gistCache = after;
                     return { ok: true, changed: true };
                 } catch (e) {
                     lastError = e;
@@ -1611,10 +1593,6 @@
             document.body.appendChild(changelogEl);
         }
 
-        function applyColorsTheme() {
-            phPtSyncThemeAttr();
-        }
-
         function renderColorsModal(settings) {
             const modal = document.getElementById("ph-colors-modal");
             const body = modal?.querySelector("#ph-colors-body");
@@ -1672,10 +1650,6 @@
                     `).join("")}
                 </div>
             `;
-        }
-
-        function applySecretsTheme() {
-            phPtSyncThemeAttr();
         }
 
         container.prepend(li);
@@ -2007,7 +1981,7 @@
 
         function openColorsModal() {
             if (!colorsModal) return;
-            applyColorsTheme();
+            phPtSyncThemeAttr();
 
             const currentSettings = getMergedSettings();
             colorsDraftPalette = structuredClone(currentSettings.colorizePalette || DEFAULT_COLORIZE_PALETTE);
@@ -2077,7 +2051,7 @@
 
         async function openSecretsModal() {
             if (!modal) return;
-            applySecretsTheme();
+            phPtSyncThemeAttr();
 
             const s = await loadSecrets();
 
@@ -2969,8 +2943,6 @@
             #ph-changelog-modal .ph-changelog-feedback a {
                 color: var(--ph-ui-accent-ink);
                 font-weight: 600;
-                // text-decoration: underline;
-                // text-underline-offset: 2px;
             }
             #ph-changelog-modal .ph-changelog-feedback a:focus-visible {
                 outline: 2px solid var(--ph-ui-accent-ink);
@@ -4335,8 +4307,8 @@
                 #${MODAL_ID} .ph-pt-chain-item {
                     margin-left: min(var(--ph-pt-chain-indent, 0px), 66px);
                 }
-                #${MODAL_ID} .ph-pt-chain-item-head { padding: 8px; gap: 7px; }
                 /* The collapsed chain header follows the same mobile spacing. */
+                #${MODAL_ID} .ph-pt-chain-item-head,
                 #${MODAL_ID} .ph-pt-chain-item[data-user-collapsed="true"] > .ph-pt-chain-item-head {
                     padding: 8px;
                     gap: 7px;
@@ -7110,7 +7082,10 @@
                 color: var(--ph-ui-accent-ink) !important;
                 outline-offset: 2px;
             }
+            /* A törzs foglalja el a megszűnő profil-oszlop helyét is. A
+               szerzői adatok a DOM-ban maradnak: nézetváltáskor visszaállnak. */
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) > .message > .message-body {
+                display: block !important;
                 box-sizing: border-box;
                 width: 100%;
                 min-width: 0;
@@ -7131,11 +7106,6 @@
                Modern ÉS Thread nézetben csak a fejlécben jelenjenek meg. */
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) > .message > .message-body > .message-body-user {
                 display: none !important;
-            }
-            /* A törzs foglalja el a megszűnő profil-oszlop helyét is. A
-               szerzői adatok a DOM-ban maradnak: nézetváltáskor visszaállnak. */
-            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) > .message > .message-body {
-                display: block !important;
             }
             ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) > .message > .message-body > .message-body-main {
                 display: block;
@@ -7387,10 +7357,8 @@
                 white-space: nowrap;
                 text-overflow: ellipsis;
             }
-            ul.ph-tv-active > li.ph-tv-branch-hidden {
-                display: none !important;
-            }
             /* An OFF-hidden message must not leave a +/- button or an empty LI. */
+            ul.ph-tv-active > li.ph-tv-branch-hidden,
             ul.ph-tv-active > li.ph-tv-off-hidden {
                 display: none !important;
             }
@@ -10694,7 +10662,7 @@
             injectStyleOnce("ph-pt-kek-sh-uploader-style", `
                 #ph-kek-upload {
                     width: 100%; min-width: 0; margin: 16px 0 4px; overflow: hidden;
-                    box-sizing: border-box; border: 1px solid var(--ph-ui-border, rgba(0,0,0,.12));
+                    border: 1px solid var(--ph-ui-border, rgba(0,0,0,.12));
                     border-radius: 12px; color: var(--ph-ui-fg, #202124);
                     background: var(--ph-ui-bg, #fff);
                     font: inherit; font-size: 12px;
@@ -10970,9 +10938,8 @@
                     #ph-kek-upload .ph-kek-tab { min-width: 37px; padding-inline: 7px; }
                     #ph-kek-upload .ph-kek-tab-label,
                     #ph-kek-upload .ph-kek-toolbar-label { display: none; }
-                    #ph-kek-upload .ph-kek-toolbar-btn { width: 36px; min-width: 36px; padding: 0; }
+                    #ph-kek-upload .ph-kek-toolbar-btn { width: 36px; min-width: 36px; min-height: 35px; padding: 0; }
                     #ph-kek-upload .ph-kek-sync-badge { margin-left: auto; }
-                    #ph-kek-upload .ph-kek-toolbar-btn { min-height: 35px; }
                     #ph-kek-upload .ph-kek-list-row { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 6px; padding: 6px; }
                     #ph-kek-upload .ph-kek-list-thumb { width: 44px; height: 44px; }
                     #ph-kek-upload .ph-kek-list-actions { gap: 2px; }
@@ -12086,30 +12053,26 @@
     // A kiemeles onallo; a sticky savok nelkul is mukodik.
     function highlightCurrentTopic() {
         injectStyleOnce('ph-current-topic-highlight-style', `
-            .active-topic-sidebar {
-                background-color: #e9e0c9 !important;
-                font-weight: bold !important;
-                box-shadow: inset 5px 0px 0 0;
-                padding-left: 10px !important;
-            }
-            .active-topic-sidebar a { color: #000 !important; }
-            body[data-theme="dark"] .active-topic-sidebar {
-                background-color: #3a352a !important;
-                box-shadow: inset 5px 0px 0 0 #e0e0e0;
-            }
-            body[data-theme="dark"] .active-topic-sidebar a {
-                color: var(--ph-ui-fg) !important;
-            }
+            .active-topic-sidebar,
             .active-topic-header {
                 background-color: #e9e0c9 !important;
                 font-weight: bold !important;
+            }
+            .active-topic-sidebar {
+                box-shadow: inset 5px 0px 0 0;
+                padding-left: 10px !important;
+            }
+            .active-topic-header {
                 box-shadow: inset 5px 0px 0 0 #000000;
             }
+            .active-topic-sidebar a,
             .active-topic-header a { color: #000 !important; }
+            body[data-theme="dark"] .active-topic-sidebar,
             body[data-theme="dark"] .active-topic-header {
                 background-color: #3a352a !important;
                 box-shadow: inset 5px 0px 0 0 #e0e0e0;
             }
+            body[data-theme="dark"] .active-topic-sidebar a,
             body[data-theme="dark"] .active-topic-header a {
                 color: var(--ph-ui-fg) !important;
             }
@@ -12395,10 +12358,6 @@
         // -------------------------------------------------------
         // FontAwesome ikon segédek
         // -------------------------------------------------------
-        function iconHtml(iconClass) {
-            return `<span class="fas ${iconClass} fa-fw"></span>`;
-        }
-
         function setIcon(el, iconClass) {
             // A vizuális feliratot is megtartjuk ikonfrissítéskor (pl. lapozásnál).
             let icon = el.querySelector(':scope > .ph-scroll-control-icon');
@@ -12702,7 +12661,6 @@
                 opacity: .42;
                 box-shadow: 0 5px 0 currentColor;
             }
-            #ph-scroll-tab:active { cursor: grabbing; }
             #ph-scroll-btn-wrap.side-right #ph-scroll-tab {
                 border-radius: 11px 0 0 11px;
                 border-right: 0;
@@ -12716,6 +12674,7 @@
                 outline-offset: 2px;
             }
             #ph-scroll-tab:active {
+                cursor: grabbing;
                 background: color-mix(in srgb, var(--ph-ui-accent) 11%, var(--ph-scroll-glass-tab));
             }
 
@@ -12858,7 +12817,7 @@
             }
             #ph-scroll-back-depth[hidden] { display: none !important; }
             @media (prefers-reduced-motion: reduce) {
-                #ph-scroll-btn-wrap { transition: none; }
+                #ph-scroll-btn-wrap,
                 #ph-scroll-panel :is(.ph-nav-btn, .ph-scroll-reply-btn) { transition: none; }
             }
         `);
