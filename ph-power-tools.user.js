@@ -147,10 +147,10 @@
     const CHANGELOG = [
         {
             version: '2.5.3',
-            title: '2026.10.31',
+            title: '2026.11.02',
             changes: [
-                '[CHANGED] Rejtett felhasználók: profilképes lista és egységes, lenyitható fejlécek a Modern, Thread és Lánc nézetben.',
-                '[CHANGED] Modern nézet: szögletes, hézagmentes kártyák, egysoros fejléc középen lévő műveletgombokkal.',
+                '[CHANGED] Rejtett felhasználók: profilképes lista, egységes lenyitható fejlécek a Modern, Thread és Lánc nézetben.',
+                '[CHANGED] Modern nézet: szögletes, hézagmentes kártyák, egysoros fejléc.',
                 '[CHANGED] Thread nézet: az összecsukott válaszágak fejlécéből kikerült a felesleges pluszjel.',
                 '[FIXED] Hozzászólás-lánc: a rejtett felhasználók hozzászólásai a popupban is el vannak rejtve, a fejlécükre kattintva megjeleníthetők és visszarejthetők.',
             ]
