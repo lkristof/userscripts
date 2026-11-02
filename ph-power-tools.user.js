@@ -2718,9 +2718,6 @@
                 justify-content: center;
                 padding: 14px;
                 background: rgba(0, 0, 0, 0.48);
-                /* Az elsotetites marad, de a teljes oldalas elmosast mellozzuk. */
-                -webkit-backdrop-filter: none;
-                backdrop-filter: none;
             }
             .ph-pt-dialog {
                 width: min(520px, calc(100vw - 28px));
@@ -12640,8 +12637,6 @@
                 border: 1px solid var(--ph-scroll-dock-border);
                 background: var(--ph-scroll-glass-tab);
                 color: var(--ph-ui-accent-ink, #245d92);
-                -webkit-backdrop-filter: none;
-                backdrop-filter: none;
                 font-size: 14px;
                 line-height: 1;
                 box-shadow: 0 5px 13px rgba(0, 0, 0, .13);
@@ -12691,9 +12686,6 @@
                 background: var(--ph-scroll-glass-panel);
                 color: var(--ph-ui-fg, #202124);
                 box-shadow: 0 6px 19px rgba(0, 0, 0, .14);
-                /* A panel attetszo marad, a mogottes tartalmat nem mossuk el. */
-                -webkit-backdrop-filter: none;
-                backdrop-filter: none;
                 overflow: hidden;
             }
             #ph-scroll-btn-wrap.side-right #ph-scroll-panel {
