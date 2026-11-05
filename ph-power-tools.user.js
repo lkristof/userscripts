@@ -47,6 +47,8 @@
             WIDE_VIEW: 'ph_wide_view',
             THREAD_VIEW: 'ph_thread_view',
             MODERN_VIEW: 'ph_modern_view',
+            WIDE_VIEW_CENTER_PX: 'ph_wide_view_center_px',
+            MOBILE_SCROLL_NAV_POSITION: 'ph_mobile_scroll_nav_position',
             TOPIC_MAX_ID_MAP: 'ph_topic_max_id_map',
         },
 
@@ -59,6 +61,8 @@
 
         SECRETS: 'ph_power_tools_secrets',
     };
+
+    const VIEW_STATUS = { ON: 'enabled', OFF: 'disabled' };
 
     const SYNC_KEYS = [
         KEYS.SETTINGS,
@@ -84,8 +88,8 @@
         KEYS.STATE.WIDE_VIEW,
         KEYS.STATE.THREAD_VIEW,
         KEYS.STATE.MODERN_VIEW,
-        'ph_wide_view_center_px',
-        'ph_mobile_scroll_nav_position',
+        KEYS.STATE.WIDE_VIEW_CENTER_PX,
+        KEYS.STATE.MOBILE_SCROLL_NAV_POSITION,
     ];
     const BACKUP_EXTRA_KEYS = [
         KEYS.STATE.TOPIC_MAX_ID_MAP,
@@ -95,14 +99,14 @@
         KEYS.KEK.GALLERY_SEEN_RESET_TS,
     ];
 
-    const secrets = await loadSecrets();
-
     const DEFAULT_GIST_FILENAME = "ph_forum_settings.json";
-    let GIST_TOKEN = (secrets.gistToken || "").trim();
-    let GIST_ID = (secrets.gistId || "").trim();
-    let GIST_FILENAME = (secrets.gistFilename || DEFAULT_GIST_FILENAME).trim();
-    let ENABLE_GIST_SYNC = !!(GIST_TOKEN && GIST_ID && GIST_FILENAME);
-    let KEK_SH_API_KEY = (secrets.kekShApiKey || "").trim();
+    let GIST_TOKEN = '';
+    let GIST_ID = '';
+    let GIST_FILENAME = DEFAULT_GIST_FILENAME;
+    let ENABLE_GIST_SYNC = false;
+    let KEK_SH_API_KEY = '';
+
+    activateSecrets(await loadSecrets());
 
     // Importkor a memóriában használt Gist-hozzáférést is átállítjuk,
     // különben az új beállítások még a korábban megadott Gistbe kerülhetnének.
@@ -147,8 +151,9 @@
     const CHANGELOG = [
         {
             version: '2.5.3',
-            title: '2026.11.02',
+            title: '2026.11.05',
             changes: [
+                '[CHANGED] Belső kódtisztítás: egységes beállításdefiníciók, közös segédfüggvények és egyszerűbb CSS, a funkciók megőrzésével.',
                 '[CHANGED] Rejtett felhasználók: profilképes lista, egységes lenyitható fejlécek a Modern, Thread és Lánc nézetben.',
                 '[CHANGED] Modern nézet: szögletes, hézagmentes kártyák, egysoros fejléc.',
                 '[CHANGED] Thread nézet: az összecsukott válaszágak fejlécéből kikerült a felesleges pluszjel.',
@@ -182,126 +187,156 @@
         },
     ];
 
+    // Új kapcsolóhoz itt add meg a csoportot, alapértéket és feliratokat.
+    // A modul indítását a runEnabledModules() regisztrációja vezérli.
+    const settingDefinitions = {
+        colorize: {
+            group: 'appearance',
+            defaultEnabled: true,
+            label: "Hozzászólások színezése",
+            tooltip: "Saját / válasz / #akció + avatar fókusz. Színek a 🎨 menüben.",
+        },
+        markNewPosts: {
+            group: 'appearance',
+            defaultEnabled: true,
+            label: "Új hozzászólás jelölése",
+            tooltip: "Az új hozzászólások fejléce kap egy kis jelölést.",
+        },
+        currentTopicHighlight: {
+            group: 'appearance',
+            defaultEnabled: true,
+            label: "Aktuális topik kiemelése",
+            tooltip: "A megnyitott topikot kiemeli az oldalsó és a fejlécben lévő témalistában.",
+        },
+        stickySidebar: {
+            group: 'appearance',
+            defaultEnabled: false,
+            label: "Külön görgethető oldalsávok",
+            tooltip: "Az oldalsávok az oldaltól függetlenül, külön görgethetők. Asztali nézetben mindkét oldalsáv, tablet nézetben a jobb oldalsáv érintett.",
+        },
+        sortThreadListsByNewPosts: {
+            group: 'appearance',
+            defaultEnabled: false,
+            label: "Témalisták rendezése",
+            tooltip: "A „Kedvenc fórumtémáim” és „Itt szóltam hozzá” listákat az új hozzászólások száma szerint rendezi, csökkenő sorrendben.",
+        },
+        wideView: {
+            group: 'appearance',
+            defaultEnabled: true,
+            label: "Széles nézet",
+            tooltip: "Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.",
+        },
+        threadView: {
+            group: 'appearance',
+            defaultEnabled: true,
+            label: "Thread nézet",
+            tooltip: "Reddit-szerű válaszfa folytonos, kiemelhető ágvonalakkal és összecsukható hozzászólásokkal. A Thread nézet gomb lenyíló menüjében minden ág összecsukható vagy kibontható.",
+        },
+        modernView: {
+            group: 'appearance',
+            defaultEnabled: true,
+            label: "Modern nézet",
+            tooltip: "A hozzászólásokat a Thread nézet kártyás stílusában jeleníti meg, időrendi sorrendben, behúzások és válaszfa-vonalak nélkül. A hozzászóláslista feletti Modern nézet gombbal kapcsolható.",
+        },
+        msgAnchorHighlight: {
+            group: 'posts',
+            defaultEnabled: true,
+            label: "Üzenet kiemelés",
+            tooltip: "Az URL-ben megadott #msg hozzászóláshoz görget és kiemeli azt. Színek a 🎨 menüben.",
+        },
+        messageChainPopup: {
+            group: 'posts',
+            defaultEnabled: true,
+            label: "Hozzászólás-lánc popup",
+            tooltip: "A Lánc gombbal felugró ablakban megtekintheted a hozzászólás előzményeit és válaszait.",
+        },
+        offHider: {
+            group: 'posts',
+            defaultEnabled: true,
+            label: "OFF hozzászólások elrejtése",
+            tooltip: "OFF hozzászólások elrejtése/megjelenítése.",
+        },
+        hideUsers: {
+            group: 'posts',
+            defaultEnabled: true,
+            label: "Felhasználók elrejtése",
+            tooltip: "Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.",
+        },
+        linkRedirect: {
+            group: 'navigation',
+            defaultEnabled: false,
+            label: "Link átirányítás",
+            tooltip: "PH! lapcsalád linkjeit az aktuális oldalra irányítja.",
+        },
+        keyboardNavigation: {
+            group: 'navigation',
+            defaultEnabled: false,
+            label: "Billentyűzetes navigáció",
+            tooltip: "Billentyű navigáció a hozzászólások között\n← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő\nR előzmény\nshift + R vissza az R-el bejárt útvonalon",
+        },
+        mobileScrollNav: {
+            group: 'navigation',
+            defaultEnabled: false,
+            label: "Mobil navigációs panel",
+            tooltip: "Lebegő panel a hozzászólások közti lépkedéshez.",
+        },
+        smoothScrolling: {
+            group: 'navigation',
+            defaultEnabled: false,
+            label: "Animált görgetés",
+            tooltip: "Finom, animált görgetés a hozzászólások közötti léptetéskor (billentyűzet, mobil panel, válasznavigáció).",
+        },
+        extraSmilies: {
+            group: 'tools',
+            defaultEnabled: true,
+            label: "Extra smiley-k",
+            tooltip: "Extra emojik/smiliek listája a szerkesztőben.",
+        },
+        kekShUploader: {
+            group: 'tools',
+            defaultEnabled: true,
+            label: "kek.sh képfeltöltő",
+            tooltip: "kek.sh-ra képfeltöltés, API kulcs szükséges.",
+        },
+        giveawayAnswerChecker: {
+            group: 'tools',
+            defaultEnabled: true,
+            label: "Nyereményjáték válasz ellenőrző",
+            tooltip: "A játék lezárása után ellenőrzi a válaszaidat, ✅/❌ jelöli őket, és kiemeli a neved a nyerteslistában.",
+        },
+    };
+
     const defaultSettings = {
-        // Megjelenés
-        colorize: true,
-        markNewPosts: true,
-        currentTopicHighlight: true,
-        stickySidebar: false,
-        sortThreadListsByNewPosts: false,
-        wideView: true,
-        threadView: true,
-        modernView: true,
-
-        // Hozzászólások
-        msgAnchorHighlight: true,
-        messageChainPopup: true,
-        offHider: true,
-        hideUsers: true,
-
-        // Navigáció
-        linkRedirect: false,
-        keyboardNavigation: false,
-        mobileScrollNav: false,
-        smoothScrolling: false,
-
-        // Eszközök
-        extraSmilies: true,
-        kekShUploader: true,
-        giveawayAnswerChecker: true,
-
-        // Színbeállítások
+        ...Object.fromEntries(Object.entries(settingDefinitions).map(
+            ([key, definition]) => [key, definition.defaultEnabled]
+        )),
         colorizePalette: DEFAULT_COLORIZE_PALETTE,
     };
 
     const settingGroups = {
         appearance: {
-            label: 'Megjelenés',
-            keys: [
-                'colorize',
-                'markNewPosts',
-                'currentTopicHighlight',
-                'stickySidebar',
-                'sortThreadListsByNewPosts',
-                'wideView',
-                'threadView',
-                'modernView',
-            ],
+            label: "Megjelenés",
             defaultOpen: true,
         },
         posts: {
-            label: 'Hozzászólások',
-            keys: [
-                'msgAnchorHighlight',
-                'messageChainPopup',
-                'offHider',
-                'hideUsers',
-            ],
+            label: "Hozzászólások",
         },
         navigation: {
-            label: 'Navigáció',
-            keys: [
-                'linkRedirect',
-                'keyboardNavigation',
-                'mobileScrollNav',
-                'smoothScrolling',
-            ],
+            label: "Navigáció",
         },
         tools: {
-            label: 'Eszközök',
-            keys: [
-                'extraSmilies',
-                'kekShUploader',
-                'giveawayAnswerChecker',
-            ],
-        }
+            label: "Eszközök",
+        },
     };
 
-
-    const tooltips = {
-        colorize: 'Saját / válasz / #akció + avatar fókusz. Színek a 🎨 menüben.',
-        linkRedirect: 'PH! lapcsalád linkjeit az aktuális oldalra irányítja.',
-        msgAnchorHighlight: 'Az URL-ben megadott #msg hozzászóláshoz görget és kiemeli azt. Színek a 🎨 menüben.',
-        offHider: 'OFF hozzászólások elrejtése/megjelenítése.',
-        messageChainPopup: 'A Lánc gombbal felugró ablakban megtekintheted a hozzászólás előzményeit és válaszait.',
-        wideView: 'Szélesebb tartalom, kevesebb oldalsó margó. Bekapcsolva a tartalom jobb szélét húzva állítható a szélesség, dupla kattintással pedig visszaáll az automatikus méret.',
-        threadView: 'Reddit-szerű válaszfa folytonos, kiemelhető ágvonalakkal és összecsukható hozzászólásokkal. A Thread nézet gomb lenyíló menüjében minden ág összecsukható vagy kibontható.',
-        modernView: 'A hozzászólásokat a Thread nézet kártyás stílusában jeleníti meg, időrendi sorrendben, behúzások és válaszfa-vonalak nélkül. A hozzászóláslista feletti Modern nézet gombbal kapcsolható.',
-        keyboardNavigation: 'Billentyű navigáció a hozzászólások között\n← első\n→ utolsó\n↑ előző\n↓ következő\nshift + ↑ sorban előző\nshift + ↓ sorban következő\nR előzmény\nshift + R vissza az R-el bejárt útvonalon',
-        hideUsers: 'Megadhatod, mely felhasználók hozzászólásai legyenek elrejtve.',
-        markNewPosts: 'Az új hozzászólások fejléce kap egy kis jelölést.',
-        extraSmilies: 'Extra emojik/smiliek listája a szerkesztőben.',
-        kekShUploader: 'kek.sh-ra képfeltöltés, API kulcs szükséges.',
-        stickySidebar: 'Az oldalsávok az oldaltól függetlenül, külön görgethetők. Asztali nézetben mindkét oldalsáv, tablet nézetben a jobb oldalsáv érintett.',
-        currentTopicHighlight: 'A megnyitott topikot kiemeli az oldalsó és a fejlécben lévő témalistában.',
-        mobileScrollNav: 'Lebegő panel a hozzászólások közti lépkedéshez.',
-        smoothScrolling: 'Finom, animált görgetés a hozzászólások közötti léptetéskor (billentyűzet, mobil panel, válasznavigáció).',
-        giveawayAnswerChecker: 'A játék lezárása után ellenőrzi a válaszaidat, ✅/❌ jelöli őket, és kiemeli a neved a nyerteslistában.',
-        sortThreadListsByNewPosts: 'A „Kedvenc fórumtémáim” és „Itt szóltam hozzá” listákat az új hozzászólások száma szerint rendezi, csökkenő sorrendben.',
-    };
+    for (const [groupKey, group] of Object.entries(settingGroups)) {
+        group.keys = Object.keys(settingDefinitions).filter(
+            key => settingDefinitions[key].group === groupKey
+        );
+    }
 
     function prettyName(key) {
-        return {
-            colorize: 'Hozzászólások színezése',
-            linkRedirect: 'Link átirányítás',
-            msgAnchorHighlight: 'Üzenet kiemelés',
-            offHider: 'OFF hozzászólások elrejtése',
-            messageChainPopup: 'Hozzászólás-lánc popup',
-            wideView: 'Széles nézet',
-            threadView: 'Thread nézet',
-            modernView: 'Modern nézet',
-            keyboardNavigation: 'Billentyűzetes navigáció',
-            hideUsers: 'Felhasználók elrejtése',
-            markNewPosts: 'Új hozzászólás jelölése',
-            extraSmilies: 'Extra smiley-k',
-            kekShUploader: 'kek.sh képfeltöltő',
-            giveawayAnswerChecker: 'Nyereményjáték válasz ellenőrző',
-            stickySidebar: 'Külön görgethető oldalsávok',
-            currentTopicHighlight: 'Aktuális topik kiemelése',
-            mobileScrollNav: 'Mobil navigációs panel',
-            smoothScrolling: 'Animált görgetés',
-            sortThreadListsByNewPosts: 'Témalisták rendezése',
-        }[key] || key;
+        return settingDefinitions[key]?.label || key;
     }
 
     const storage = createSyncedStorage();
@@ -522,17 +557,17 @@
             return JSON.stringify([...new Set(value.map(user => user.trim()))]);
         }
         if ([KEYS.STATE.HIDE_OFF, KEYS.STATE.WIDE_VIEW, KEYS.STATE.THREAD_VIEW, KEYS.STATE.MODERN_VIEW].includes(key)) {
-            if (value !== 'enabled' && value !== 'disabled') {
+            if (value !== VIEW_STATUS.ON && value !== VIEW_STATUS.OFF) {
                 throw new Error(`Érvénytelen nézetállapot: ${key}`);
             }
             return value;
         }
-        if (key === 'ph_wide_view_center_px') {
+        if (key === KEYS.STATE.WIDE_VIEW_CENTER_PX) {
             const px = validatedBackupInteger(value, key);
             if (px < 100 || px > 20000) throw new Error('Érvénytelen szélesnézet-szélesség.');
             return String(px);
         }
-        if (key === 'ph_mobile_scroll_nav_position') {
+        if (key === KEYS.STATE.MOBILE_SCROLL_NAV_POSITION) {
             if (!isBackupObject(value) || !['left', 'right'].includes(value.side)
                 || typeof value.hidden !== 'boolean') {
                 throw new Error('Érvénytelen mobilnavigáció-beállítás.');
@@ -632,7 +667,7 @@
             el.id = id;
             document.head.appendChild(el);
         }
-        el.textContent = cssText;
+        if (el.textContent !== cssText) el.textContent = cssText;
         return el;
     }
 
@@ -1070,6 +1105,51 @@
         return regex.test(location.pathname);
     }
 
+    // Közös, állapotmentes segédek. A funkciók saját állapota a moduljukban marad.
+    function getCurrentUserName() {
+        const user = document.querySelector('.dropdown-menu h6 a[href^="/tag/"]');
+        return user ? user.textContent.trim() : '__NINCS_BEJELENTKEZVE__';
+    }
+
+    function getForumPostAuthor(message) {
+        return message.querySelector('.message-head-user .user-title .user-link')?.textContent?.trim() || '';
+    }
+
+    function getForumPosts() {
+        return [...document.querySelectorAll('li[data-id]')];
+    }
+
+    function findClosestForumPost(posts, targetId) {
+        let closest = null;
+        let minDifference = Infinity;
+        for (const post of posts) {
+            const id = parseInt(post.dataset.id, 10);
+            if (Number.isNaN(id)) continue;
+            const difference = Math.abs(id - targetId);
+            if (difference < minDifference) {
+                minDifference = difference;
+                closest = post;
+            }
+        }
+        return closest;
+    }
+
+    // Az !important prioritást és az eredetileg hiányzó tulajdonságot is megőrizzük.
+    function snapshotInlineStyles(element, properties) {
+        return properties.map(property => [
+            property,
+            element.style.getPropertyValue(property),
+            element.style.getPropertyPriority(property),
+        ]);
+    }
+
+    function restoreInlineStyles(element, snapshot) {
+        for (const [property, value, priority] of snapshot) {
+            if (value) element.style.setProperty(property, value, priority);
+            else element.style.removeProperty(property);
+        }
+    }
+
     function insertHtmlIntoEditor(editorEl, html) {
         const ed = window.tinyMCE?.activeEditor;
         if (ed && typeof ed.insertContent === "function") {
@@ -1207,18 +1287,23 @@
         return isDark;
     }
 
-    function waitForHeader(cb) {
-        const el = document.querySelector('#header-sticky .navbar-buttons');
-        if (el) return cb(el);
-
-        const obs = new MutationObserver(() => {
-            const el = document.querySelector('#header-sticky .navbar-buttons');
-            if (el) {
-                obs.disconnect();
-                cb(el);
+    function waitForHeader() {
+        return new Promise(resolve => {
+            const selector = '#header-sticky .navbar-buttons';
+            const header = document.querySelector(selector);
+            if (header) {
+                resolve(header);
+                return;
             }
+
+            const observer = new MutationObserver(() => {
+                const header = document.querySelector(selector);
+                if (!header) return;
+                observer.disconnect();
+                resolve(header);
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
         });
-        obs.observe(document.body, {childList: true, subtree: true});
     }
 
     function bindTooltips(rootEl) {
@@ -1330,7 +1415,7 @@
                                             <span class="ph-setting-copy">
                                                 <span class="ph-setting-label">
                                                     ${prettyName(key)}
-                                                    ${tooltips[key] ? `<i class="fas fa-info-circle ph-tooltip-icon" data-tooltip="${tooltips[key]}"></i>` : ''}
+                                                    ${settingDefinitions[key].tooltip ? `<i class="fas fa-info-circle ph-tooltip-icon" data-tooltip="${settingDefinitions[key].tooltip}"></i>` : ''}
                                                 </span>
                                             </span>
                                             <span class="ph-toggle-state" aria-hidden="true">
@@ -2295,16 +2380,17 @@
     function initThemeSync() {
         phPtSyncThemeAttr();
 
+        function notifyThemeChange() {
+            phPtSyncThemeAttr();
+            document.dispatchEvent(new Event("ph-pt-theme-changed"));
+        }
+
         // 1) matchMedia listener: bind-once
         if (!document.documentElement.dataset.phPtThemeMqBound) {
             document.documentElement.dataset.phPtThemeMqBound = '1';
             const mq = window.matchMedia("(prefers-color-scheme: dark)");
-            const onChange = () => {
-                phPtSyncThemeAttr();
-                document.dispatchEvent(new Event("ph-pt-theme-changed"));
-            };
-            if (mq.addEventListener) mq.addEventListener('change', onChange);
-            else if (mq.addListener) mq.addListener(onChange);
+            if (mq.addEventListener) mq.addEventListener('change', notifyThemeChange);
+            else if (mq.addListener) mq.addListener(notifyThemeChange);
         }
 
         // 2) dark_base observer: attach when link exists, also bind-once
@@ -2313,10 +2399,7 @@
         if (!phPtDarkLink) return;
 
         document.documentElement.dataset.phPtThemeDarkLinkBound = '1';
-        const obs = new MutationObserver(() => {
-            phPtSyncThemeAttr();
-            document.dispatchEvent(new Event("ph-pt-theme-changed"));
-        });
+        const obs = new MutationObserver(notifyThemeChange);
         obs.observe(phPtDarkLink, {attributes: true, attributeFilter: ["media"]});
     }
 
@@ -2760,13 +2843,13 @@
             .ph-dialog-note,
             .ph-dialog-status {
                 font-size: 10.5px;
-                color: var(--ph-ui-muted);
             }
             .ph-dialog-status {
                 color: var(--ph-ui-accent-ink);
                 font-weight: 600;
             }
             .ph-dialog-note {
+                color: var(--ph-ui-muted);
                 margin-left: auto;
             }
             .ph-dialog-buttons {
@@ -3545,12 +3628,8 @@
         `);
     }
 
-    function waitForHeaderAsync() {
-        return new Promise(resolve => waitForHeader(resolve));
-    }
-
     async function mountHeaderUi() {
-        const headerEl = await waitForHeaderAsync();
+        const headerEl = await waitForHeader();
         insertSettingsDropdown(headerEl);
     }
 
@@ -3607,10 +3686,7 @@
         /**********************
          * BEÁLLÍTÁSOK
          **********************/
-        const FELHASZNALO = (() => {
-            const el = document.querySelector('.dropdown-menu h6 a[href^="/tag/"]');
-            return el ? el.textContent.trim() : "__NINCS_BEJELENTKEZVE__";
-        })();
+        const FELHASZNALO = getCurrentUserName();
         const AKCIO_KEYWORDS = ["#akció", "#akcio"];
 
         let selectedUser = null;
@@ -3659,10 +3735,6 @@
         /**********************
          * SEGÉDEK
          **********************/
-        function getAuthor(msg) {
-            return msg.querySelector(".message-head-user .user-title .user-link")?.textContent?.trim() || "";
-        }
-
         function getRepliedTo(msg) {
             return msg.querySelector(".message-head-infos .message-reply .user-title .user-link")?.textContent?.trim() || "";
         }
@@ -3690,7 +3762,7 @@
                 const bodyClone = body.cloneNode(true);
                 bodyClone.querySelector('.message-content-replied')?.remove();
                 const text = lower(bodyClone.textContent);
-                const author = getAuthor(msg);
+                const author = getForumPostAuthor(msg);
                 const replied = getRepliedTo(msg);
 
                 // 1) #akció
@@ -3741,7 +3813,7 @@
             const msg = e.target.closest(".message");
             if (!msg) return;
 
-            const author = getAuthor(msg);
+            const author = getForumPostAuthor(msg);
             if (!author) return;
 
             selectedUser = (selectedUser === author) ? null : author;
@@ -4878,7 +4950,7 @@
         function colorizeFetchedPost(msg, body) {
             const author = qs(msg, '.message-head-user .user-title .user-link')?.textContent?.trim() || '';
             const replyTo = qs(msg, '.message-head-infos .message-reply .user-title .user-link')?.textContent?.trim() || '';
-            const currentName = document.querySelector('.dropdown-menu h6 a[href^="/tag/"]')?.textContent?.trim() || '__NINCS_BEJELENTKEZVE__';
+            const currentName = getCurrentUserName() || '__NINCS_BEJELENTKEZVE__';
             const focusedBody = document.querySelector('.message-body.ph-pt-focus-author');
             const focusedName = focusedBody?.closest('.message')?.querySelector('.message-head-user .user-title .user-link')?.textContent?.trim() || '';
             const textClone = body.cloneNode(true);
@@ -5510,28 +5582,6 @@
         let lastHashMsgId = null;
         let lastHash = null;
 
-        function getPosts() {
-            return [...document.querySelectorAll('li[data-id]')];
-        }
-
-        function findClosestPost(posts, targetId) {
-            let closest = null;
-            let minDiff = Infinity;
-
-            posts.forEach(li => {
-                const id = parseInt(li.dataset.id, 10);
-                if (Number.isNaN(id)) return;
-
-                const diff = Math.abs(id - targetId);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    closest = li;
-                }
-            });
-
-            return closest;
-        }
-
         function highlightHashMsg() {
             const hash = window.location.hash;
             let msgId = null;
@@ -5551,7 +5601,7 @@
                 .forEach(head => head.classList.remove('hash-highlight'));
 
             const post = document.querySelector(`li[data-id="${msgId}"]`)
-                ?? findClosestPost(getPosts(), msgId);
+                ?? findClosestForumPost(getForumPosts(), msgId);
 
             const head = post?.querySelector(
                 ':scope > :is(.message, .message-off) > .message-head'
@@ -5678,7 +5728,7 @@
     // azonnal visszakerülhetnek a navigálható elemek közé.
     function isOffExcludedFromNavigation(li) {
         if (!li || !savedSettings.offHider ||
-            storage.getItem(KEYS.STATE.HIDE_OFF) !== 'enabled') return false;
+            storage.getItem(KEYS.STATE.HIDE_OFF) !== VIEW_STATUS.ON) return false;
 
         // A fórum az OFF-jelölést gyakran közvetlenül a LI-n tárolja;
         // máskor a belső .message/.message-off elem hordozza.
@@ -5732,9 +5782,8 @@
         `);
 
         const STORAGE_KEY = KEYS.STATE.HIDE_OFF;
-        const STATUS = { ON: 'enabled', OFF: 'disabled' };
 
-        let offHidden = storage.getItem(STORAGE_KEY) === STATUS.ON;
+        let offHidden = storage.getItem(STORAGE_KEY) === VIEW_STATUS.ON;
         const buttons = [];
 
         function getOffPosts() {
@@ -5765,19 +5814,6 @@
             post.style.maxHeight = '';
         }
 
-        function saveAnimatedStyle(row) {
-            return animatedProperties.map(name => [
-                name, row.style.getPropertyValue(name), row.style.getPropertyPriority(name)
-            ]);
-        }
-
-        function restoreAnimatedStyle(row, entries) {
-            for (const [name, value, priority] of entries) {
-                if (value) row.style.setProperty(name, value, priority);
-                else row.style.removeProperty(name);
-            }
-        }
-
         function animateCardRow(row, posts, hide) {
             const inThread = row.parentElement?.classList.contains('ph-tv-active');
             const transitionClass = inThread ? 'ph-tv-off-transitioning' : 'ph-mv-off-transitioning';
@@ -5788,7 +5824,7 @@
                 : (hide ? parseFloat(getComputedStyle(row).marginBottom) || 0 : 0);
             const fromOpacity = previous ? parseFloat(getComputedStyle(row).opacity)
                 : (hide ? 1 : 0);
-            const original = previous ? previous.original : saveAnimatedStyle(row);
+            const original = previous ? previous.original : snapshotInlineStyles(row, animatedProperties);
             if (previous) previous.cancel();
 
             // A Thread nézet a teljes LI-t display:none-ra állítja a rejtés
@@ -5804,7 +5840,7 @@
                 window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
                 posts.forEach(post => setPostHidden(post, hide));
                 if (inThread) row.classList.toggle('ph-tv-off-hidden', hide);
-                restoreAnimatedStyle(row, original);
+                restoreInlineStyles(row, original);
                 row.classList.remove('ph-mv-off-transitioning', 'ph-tv-off-transitioning');
                 return;
             }
@@ -5841,7 +5877,7 @@
                     // A rejtett sor csak a magassági animáció végén kerül ki
                     // a Thread fából, ekkor már nincs hirtelen layout-ugrás.
                     if (inThread) row.classList.toggle('ph-tv-off-hidden', hide);
-                    restoreAnimatedStyle(row, original);
+                    restoreInlineStyles(row, original);
                     row.classList.remove(transitionClass);
                     // Több tucat OFF kártyánál elég a végén egyszer értesíteni
                     // a navigációt és a Thread nézet összekötőinek rajzolóját.
@@ -5942,7 +5978,7 @@
                 offHidden = !offHidden;
                 storage.setItem(
                     STORAGE_KEY,
-                    offHidden ? STATUS.ON : STATUS.OFF
+                    offHidden ? VIEW_STATUS.ON : VIEW_STATUS.OFF
                 );
                 applyVisibility();
                 updateAllButtons();
@@ -5981,9 +6017,8 @@
         const ROW_CLASS = 'ph-center-row';
         const HANDLE_CLASS = 'ph-wide-resize-handle';
         const STORAGE_KEY = KEYS.STATE.WIDE_VIEW;
-        const WIDTH_STORAGE_KEY = 'ph_wide_view_center_px';
+        const WIDTH_STORAGE_KEY = KEYS.STATE.WIDE_VIEW_CENTER_PX;
 
-        const STATUS = { ON: 'enabled', OFF: 'disabled' };
         const buttons = [];
 
         function clamp(value, min, max) {
@@ -6209,11 +6244,11 @@
         }
 
         function saveState(active) {
-            storage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
+            storage.setItem(STORAGE_KEY, active ? VIEW_STATUS.ON : VIEW_STATUS.OFF);
         }
 
         function shouldBeActive() {
-            return storage.getItem(STORAGE_KEY) === STATUS.ON;
+            return storage.getItem(STORAGE_KEY) === VIEW_STATUS.ON;
         }
 
         function ensureResizeHandle() {
@@ -6422,33 +6457,6 @@
                 box-shadow: none !important;
                 pointer-events: none !important;
             }
-            /* A saját, kattintható rejtéssáv azonos behúzással és szélességgel
-               jelenjen meg, mint a Thread nézet többi kártyája. */
-            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) > .hidden-bar {
-                position: relative;
-                z-index: 3;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                box-sizing: border-box;
-                width: 100%;
-                min-width: 0;
-                min-height: 35px;
-                margin: 0;
-                padding: 7px 10px;
-                border: 1px solid var(--ph-tv-card-edge);
-                border-radius: 10px;
-                background: color-mix(in srgb, var(--ph-ui-fg) 85%, var(--ph-ui-bg)) !important;
-                color: var(--ph-ui-bg) !important;
-                font-size: 12px;
-                font-weight: 600;
-                line-height: 1.25;
-                text-align: center;
-                overflow-wrap: anywhere;
-            }
-            ul:is(.ph-tv-active, .ph-mv-active) > li:is(.ph-thread, [data-id], .message-featured) > .hidden-bar:hover {
-                background: color-mix(in srgb, var(--ph-ui-fg) 72%, var(--ph-ui-bg)) !important;
-            }
             /* A fórum az AJAX-os válaszszerkesztőt külön LI-ként beszúrja az UL-be.
                Ez nem "ph-thread", ezért külön igazítjuk a célhozzászólás gyermekének
                behúzásához. A bal oldali válaszág-sín így nem megy át a szerkesztőn. */
@@ -6612,7 +6620,6 @@
                 color: var(--ph-ui-muted);
                 font-size: 12px !important;
             }
-            :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) > .message > .message-body,
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .message-body-main,
             :is(ul.ph-tv-active > li.msg-editor.ph-tv-inline-editor, ul.ph-mv-active > li.msg-editor) .msg-editor-wrapper {
                 box-sizing: border-box;
@@ -6690,6 +6697,7 @@
                 box-sizing: border-box;
                 width: 100% !important;
                 min-width: 0 !important;
+                max-width: 100%;
                 height: auto !important;
                 margin: 0 !important;
                 padding: 0 !important;
@@ -7188,7 +7196,6 @@
         // A kapcsolatok egyetlen, pozíciók alapján rajzolt SVG-rétegen futnak:
         // így a hozzászólások közti margó/padding sem szakíthatja meg a vonalakat.
         const STORAGE_KEY = KEYS.STATE.THREAD_VIEW;
-        const STATUS = { ON: 'enabled', OFF: 'disabled' };
         const FOLD_KEY = 'ph_pt_thread_fold_v1:' + location.host + location.pathname + location.search;
         const mobileQuery = window.matchMedia('(max-width: 640px)');
         const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -7440,7 +7447,7 @@
         injectPostCardStyles();
 
         function saveEnabled(active) {
-            storage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
+            storage.setItem(STORAGE_KEY, active ? VIEW_STATUS.ON : VIEW_STATUS.OFF);
         }
 
         function saveFolds() {
@@ -8227,7 +8234,7 @@
                 if (threadActive) restoreOriginalOrder();
             });
 
-            if (storage.getItem(STORAGE_KEY) === STATUS.ON) renderThreading();
+            if (storage.getItem(STORAGE_KEY) === VIEW_STATUS.ON) renderThreading();
             return true;
         }
 
@@ -8241,7 +8248,6 @@
 
     function modernView() {
         const STORAGE_KEY = KEYS.STATE.MODERN_VIEW;
-        const STATUS = { ON: 'enabled', OFF: 'disabled' };
         let ul = null;
         let active = false;
         const buttons = [];
@@ -8424,7 +8430,7 @@
             active = enabled;
             ul.classList.toggle('ph-mv-active', active);
             getFeaturedLists().forEach(list => list.classList.toggle('ph-mv-active', active));
-            storage.setItem(STORAGE_KEY, active ? STATUS.ON : STATUS.OFF);
+            storage.setItem(STORAGE_KEY, active ? VIEW_STATUS.ON : VIEW_STATUS.OFF);
             updateButtons();
             // A rejtett szerzok fejleceinek interaktiv allapota a nezettel valtozik.
             document.dispatchEvent(new Event('ph-pt-modern-view-changed'));
@@ -8457,7 +8463,7 @@
             if (!ul) return false;
             headers.forEach(header => header.appendChild(makeToggle()));
             document.addEventListener('ph-pt-thread-activating', () => setActive(false));
-            if (storage.getItem(STORAGE_KEY) === STATUS.ON) setActive(true);
+            if (storage.getItem(STORAGE_KEY) === VIEW_STATUS.ON) setActive(true);
             else {
                 // Régi állapot ne maradjon fenn az extra listákon sem.
                 getFeaturedLists().forEach(list => list.classList.remove('ph-mv-active'));
@@ -8712,10 +8718,6 @@
     function keyboardNavigation() {
         const replyNavigator = getReplyNavigator();
 
-        function getPosts() {
-            return [...document.querySelectorAll('li[data-id]')];
-        }
-
         function getCurrentIndex(posts) {
             const hash = location.hash.replace('#msg', '');
             return posts.findIndex(li => li.dataset.id === hash);
@@ -8741,21 +8743,6 @@
             window.phPtMessageScroller?.scrollToMsgId(id, true);
         }
 
-        function findClosestPost(posts, targetId) {
-            let closest = null;
-            let minDiff = Infinity;
-            posts.forEach(li => {
-                const id = parseInt(li.dataset.id, 10);
-                if (Number.isNaN(id)) return;
-                const diff = Math.abs(id - targetId);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    closest = li;
-                }
-            });
-            return closest;
-        }
-
         function getSortedPostIds(posts) {
             return posts.map(p => parseInt(p.dataset.id, 10))
                 .filter(id => !Number.isNaN(id)).sort((a, b) => a - b);
@@ -8771,7 +8758,7 @@
             if (index !== -1) return index;
             const hashId = getMsgIdFromHash();
             if (hashId === null) return 0;
-            const closest = findClosestPost(posts, hashId);
+            const closest = findClosestForumPost(posts, hashId);
             return closest ? posts.indexOf(closest) : 0;
         }
 
@@ -8794,7 +8781,7 @@
             if (active && (active.isContentEditable ||
                 ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName))) return;
 
-            const posts = getPosts();
+            const posts = getForumPosts();
             if (!posts.length) return;
 
             // R = a kijelölt hozzászólás előzménye; Shift+R = vissza az R útvonalán.
@@ -8901,11 +8888,14 @@
                    nezet eredeti rejtessavja valtozatlan marad. */
                 .ph-hu-card-summary { display: none; }
                 ul:is(.ph-mv-active:not(.ph-tv-active), .ph-tv-active) > li[data-id] > .hidden-bar {
+                    position: relative;
+                    z-index: 3;
                     display: flex;
                     align-items: center;
                     justify-content: stretch;
                     box-sizing: border-box;
                     width: 100%;
+                    min-width: 0;
                     min-height: 52px;
                     gap: 9px;
                     margin: 0;
@@ -8916,7 +8906,11 @@
                     background: var(--ph-tv-card-head) !important;
                     color: var(--ph-ui-fg) !important;
                     box-shadow: 0 2px 9px rgba(0, 0, 0, .05);
+                    font-size: 12px;
+                    font-weight: 600;
+                    line-height: 1.25;
                     text-align: left;
+                    overflow-wrap: anywhere;
                     /* A hagyomanyos rejtosav animacioja ne kesleltesse az uj hover reteget. */
                     transition: none;
                 }
@@ -9024,7 +9018,8 @@
                     gap: 8px;
                     padding: 7px 11px 6px;
                 }
-                ul.ph-tv-active:not(.ph-mv-active) > li[data-id] > .hidden-bar > .ph-hu-card-summary {
+                ul.ph-tv-active:not(.ph-mv-active) > li[data-id] > .hidden-bar > .ph-hu-card-summary,
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > .hidden-bar > .ph-hu-card-summary {
                     gap: 8px;
                 }
                 ul.ph-tv-active > li[data-id] .ph-hu-card-face {
@@ -9045,17 +9040,20 @@
                     border-radius: inherit;
                     pointer-events: none;
                 }
-                ul.ph-tv-active > li[data-id] .ph-hu-card-copy {
+                ul.ph-tv-active > li[data-id] .ph-hu-card-copy,
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .ph-hu-card-copy {
                     gap: 3px;
                 }
-                ul.ph-tv-active > li[data-id] :is(.ph-hu-card-author, .ph-hu-card-status) {
+                ul.ph-tv-active > li[data-id] :is(.ph-hu-card-author, .ph-hu-card-status),
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] :is(.ph-hu-card-author, .ph-hu-card-status) {
                     min-width: 0;
                     max-width: 100%;
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
                 }
-                ul.ph-tv-active > li[data-id] .ph-hu-card-status {
+                ul.ph-tv-active > li[data-id] .ph-hu-card-status,
+                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .ph-hu-card-status {
                     font-size: 12px;
                 }
                 @media (max-width: 640px) {
@@ -9072,29 +9070,11 @@
                     gap: 8px;
                     padding: 6px 10px;
                 }
-                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] > .hidden-bar > .ph-hu-card-summary {
-                    gap: 8px;
-                }
                 ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .ph-hu-card-face {
                     flex: 0 0 40px;
                     width: 40px;
                     height: 40px;
                     border-radius: 9px;
-                }
-                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .ph-hu-card-copy {
-                    /* A normal fejlec nev/rang blokkjaval megegyezo sorkoz.
-                       Nincs kulon fuggoleges eltolás: az avatarhoz igazodik. */
-                    gap: 3px;
-                }
-                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] :is(.ph-hu-card-author, .ph-hu-card-status) {
-                    min-width: 0;
-                    max-width: 100%;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-                ul.ph-mv-active:not(.ph-tv-active) > li[data-id] .ph-hu-card-status {
-                    font-size: 12px;
                 }
                 /* A Modern kartyak sajat szelessege iranyitja a normal fejlec
                    kontenerlekerdezeset. Ugyanazt a kuszobot hasznaljuk a rejtett
@@ -9173,14 +9153,6 @@
         document.addEventListener("ph-pt-theme-changed", applyHiddenBarStyle);
 
         // ===== SEGÉDFÜGGVÉNYEK =====
-        function getAuthor(msg) {
-            return msg.querySelector(".message-head-user .user-title .user-link")?.textContent?.trim() || "";
-        }
-
-        function getPosts() {
-            return Array.from(document.querySelectorAll("li[data-id]"));
-        }
-
         // A kártyás Modern és Thread nézetben a régi max-height/data-collapsed
         // sorrend azonnal elvette a kártya szegélyét és magasságát. A mért
         // méretek között animálunk, és csak a végén írjuk be a végállapotot.
@@ -9201,18 +9173,6 @@
             const msg = li.querySelector(':scope > .message');
             return getComputedStyle(li).display !== 'none' && !!msg &&
                 getComputedStyle(msg).display !== 'none';
-        }
-
-        function snapshotProps(element, props) {
-            return props.map(prop => [prop, element.style.getPropertyValue(prop),
-                element.style.getPropertyPriority(prop)]);
-        }
-
-        function restoreProps(element, values) {
-            for (const [prop, value, priority] of values) {
-                if (value) element.style.setProperty(prop, value, priority);
-                else element.style.removeProperty(prop);
-            }
         }
 
         // Az összecsukott elem scrollHeight-ja a böngészőtől és a fórum
@@ -9264,7 +9224,7 @@
                 bar.tabIndex = 0;
                 bar.setAttribute('role', 'button');
                 bar.setAttribute('aria-expanded', 'false');
-                bar.setAttribute('aria-label', `${getAuthor(msg)} hozzászólásának megjelenítése`);
+                bar.setAttribute('aria-label', `${getForumPostAuthor(msg)} hozzászólásának megjelenítése`);
                 bar.title = 'Kattints a fejlécre a hozzászólás megjelenítéséhez';
             } else {
                 bar.removeAttribute('tabindex');
@@ -9283,7 +9243,7 @@
                 head.tabIndex = 0;
                 head.setAttribute('role', 'button');
                 head.setAttribute('aria-expanded', 'true');
-                head.setAttribute('aria-label', `${getAuthor(msg)} hozzászólásának újra elrejtése`);
+                head.setAttribute('aria-label', `${getForumPostAuthor(msg)} hozzászólásának újra elrejtése`);
                 head.title = 'Kattints a fejlécre a hozzászólás elrejtéséhez';
             } else {
                 head.classList.remove('ph-hu-card-toggle-head');
@@ -9307,7 +9267,7 @@
             const running = userTransitions.get(msg);
             const wasCollapsed = running ? running.collapsed : msg.dataset.collapsed === 'true';
             const collapse = !wasCollapsed;
-            setHiddenBarLabel(bar, collapse, getAuthor(msg));
+            setHiddenBarLabel(bar, collapse, getForumPostAuthor(msg));
             if (inCardHeaderView(li)) {
                 // A Lanc popuphoz hasonloan a Modern es Thread nezet azonnal
                 // valt a ket fejlec kozott; a hagyomanyos rejtessav megmarad.
@@ -9402,7 +9362,7 @@
             } else {
                 msg.dataset.collapsed = collapsed ? 'true' : 'false';
                 msg.style.maxHeight = collapsed ? '0px' : 'none';
-                setHiddenBarLabel(bar, collapsed, getAuthor(msg));
+                setHiddenBarLabel(bar, collapsed, getForumPostAuthor(msg));
             }
             syncCardHiddenControls(li, msg, bar);
             if (li.parentElement?.classList.contains('ph-tv-active')) {
@@ -9421,16 +9381,16 @@
             const startBarOpacity = isNewBar ? 0 : parseFloat(getComputedStyle(bar).opacity) || 0;
             const startBarBorder = isNewBar ? 0 : parseFloat(getComputedStyle(bar).borderTopWidth) || 0;
             const startBarPadding = isNewBar ? 0 : parseFloat(getComputedStyle(bar).paddingTop) || 0;
-            const originalMsg = previous?.originalMsg || snapshotProps(msg, msgAnimatedProps);
+            const originalMsg = previous?.originalMsg || snapshotInlineStyles(msg, msgAnimatedProps);
             const originalBar = previous?.originalBar || (isNewBar
-                ? barAnimatedProps.map(prop => [prop, '', '']) : snapshotProps(bar, barAnimatedProps));
+                ? barAnimatedProps.map(prop => [prop, '', '']) : snapshotInlineStyles(bar, barAnimatedProps));
             if (previous) previous.cancel();
 
             const expandedMsgH = measureExpandedHeight(msg);
             const expandedBarH = measureBarHeight(bar);
             if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-                restoreProps(msg, originalMsg);
-                restoreProps(bar, originalBar);
+                restoreInlineStyles(msg, originalMsg);
+                restoreInlineStyles(bar, originalBar);
                 // Az újonnan beszúrt sáv induló inline stílusait is töröljük.
                 if (isNewBar) bar.removeAttribute('style');
                 finishUserState(li, msg, bar, collapsed, removeBar);
@@ -9470,8 +9430,8 @@
                 finish() {
                     if (userTransitions.get(msg) !== this) return;
                     this.cancel();
-                    restoreProps(msg, originalMsg);
-                    restoreProps(bar, originalBar);
+                    restoreInlineStyles(msg, originalMsg);
+                    restoreInlineStyles(bar, originalBar);
                     if (isNewBar) bar.removeAttribute('style');
                     finishUserState(li, msg, bar, collapsed, removeBar);
                 }
@@ -9527,7 +9487,7 @@
         document.addEventListener('keydown', handleCardHeaderToggle);
         for (const eventName of ['ph-pt-modern-view-changed', 'ph-pt-thread-view-changed']) {
             document.addEventListener(eventName, () => {
-                getPosts().forEach(li => {
+                getForumPosts().forEach(li => {
                     const bar = li.querySelector(':scope > .hidden-bar');
                     const msg = li.querySelector(':scope > .message');
                     if (msg && bar) syncCardHiddenControls(li, msg, bar);
@@ -9545,11 +9505,11 @@
         }
 
         function updateHiddenComments(animate = false) {
-            getPosts().forEach(li => {
+            getForumPosts().forEach(li => {
                 injectDropdownToggle(li);
                 const msg = li.querySelector('.message');
                 if (!msg) return;
-                const author = getAuthor(msg);
+                const author = getForumPostAuthor(msg);
                 const isHidden = hiddenUsers.includes(author);
                 let bar = li.querySelector('.hidden-bar');
                 const running = userTransitions.get(msg);
@@ -9623,7 +9583,7 @@
             const msg = li.querySelector(".message");
             if (!msg) return;
 
-            const author = getAuthor(msg);
+            const author = getForumPostAuthor(msg);
             if (!author) return;
 
             const dropdown = li.querySelector(".dropdown-menu");
@@ -9639,7 +9599,7 @@
             a.href = "javascript:;";
 
             function refreshText() {
-                const currentAuthor = getAuthor(li.querySelector(".message"));
+                const currentAuthor = getForumPostAuthor(li.querySelector(".message"));
                 const hidden = hiddenUsers.includes(currentAuthor);
                 a.innerHTML = hidden
                     ? `<span class="fas fa-eye fa-fw"></span> Felhasználó feloldása`
@@ -9797,10 +9757,10 @@
             // külön profiloldalakat; a más témából rejtett, itt nem szereplő
             // szerzőknél egy semleges felhasználóikon jelenik meg.
             const authorAvatars = new Map();
-            for (const li of getPosts()) {
+            for (const li of getForumPosts()) {
                 const msg = li.querySelector(':scope > .message');
                 if (!msg) continue;
-                const author = getAuthor(msg);
+                const author = getForumPostAuthor(msg);
                 if (!author || authorAvatars.has(author)) continue;
                 const avatar = msg.querySelector(
                     '.message-head-user .user-face img, .message-body-user .user-face img');
@@ -9850,7 +9810,7 @@
                 leftList.replaceChildren();
                 rightList.replaceChildren();
 
-                const domAuthors = Array.from(new Set(getPosts().map(li => getAuthor(li))))
+                const domAuthors = Array.from(new Set(getForumPosts().map(li => getForumPostAuthor(li))))
                     .filter(a => !tempHiddenUsers.includes(a))
                     .sort((a,b) => a.localeCompare(b));
 
@@ -11668,10 +11628,7 @@
     function giveawayAnswerChecker() {
         const $ = window.jQuery;
 
-        const USER = (() => {
-            const el = document.querySelector('.dropdown-menu h6 a[href^="/tag/"]');
-            return el ? el.textContent.trim() : "__NINCS_BEJELENTKEZVE__";
-        })();
+        const USER = getCurrentUserName();
 
         const EMOJI_CORRECT = "✅";
         const EMOJI_WRONG = "❌";
@@ -11679,7 +11636,6 @@
         const CHECK_BUTTON_HTML = `<span class="fas fa-rotate-right"></span> Válaszok ellenőrzése`;
         const CHECKING_HTML = `<span class="fas fa-spinner fa-spin"></span> Ellenőrzés folyamatban ...`;
 
-        $(".check_answers").html(CHECKING_HTML);
         $(".check_answers").html(CHECK_BUTTON_HTML);
 
         const questionsElement = $("div.content-body:contains('A játék kérdései:')");
@@ -11805,8 +11761,8 @@
                 subtree: true
             };
 
-            const observer = new MutationObserver((mutations, obs) => {
-                checkAndHighlight(obs);
+            const observer = new MutationObserver(() => {
+                checkAndHighlight(observer);
             });
 
             observer.observe(targetNode, observerOptions);
@@ -12125,7 +12081,7 @@
     }
 
     function mobileScrollNav() {
-        const POSITION_KEY = 'ph_mobile_scroll_nav_position';
+        const POSITION_KEY = KEYS.STATE.MOBILE_SCROLL_NAV_POSITION;
         const replyNavigator = getReplyNavigator();
 
         function loadNavPosition() {
@@ -13184,16 +13140,10 @@
 
             if (items.length < 2) return;
 
-            const originalIndex = new Map(
-                items.map((item, index) => [item, index])
-            );
-
-            const sorted = [...items].sort((a, b) => {
-                const countDiff = getNewPostCount(b) - getNewPostCount(a);
-                if (countDiff !== 0) return countDiff;
-
-                return originalIndex.get(a) - originalIndex.get(b);
-            });
+            const sorted = items
+                .map((item, index) => ({ item, index, count: getNewPostCount(item) }))
+                .sort((a, b) => b.count - a.count || a.index - b.index)
+                .map(entry => entry.item);
 
             const alreadySorted = sorted.every(
                 (item, index) => item === items[index]
