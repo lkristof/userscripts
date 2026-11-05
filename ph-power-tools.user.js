@@ -21,10 +21,8 @@
 // @grant        GM_info
 // @grant        GM.getValue
 // @grant        GM.setValue
-// @grant        GM.deleteValue
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @grant        GM_deleteValue
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @connect      kek.sh
@@ -153,7 +151,6 @@
             version: '2.5.3',
             title: '2026.11.05',
             changes: [
-                '[CHANGED] Belső kódtisztítás: egységes beállításdefiníciók, közös segédfüggvények és egyszerűbb CSS, a funkciók megőrzésével.',
                 '[CHANGED] Rejtett felhasználók: profilképes lista, egységes lenyitható fejlécek a Modern, Thread és Lánc nézetben.',
                 '[CHANGED] Modern nézet: szögletes, hézagmentes kártyák, egysoros fejléc.',
                 '[CHANGED] Thread nézet: az összecsukott válaszágak fejlécéből kikerült a felesleges pluszjel.',
@@ -387,11 +384,6 @@
         if (typeof GM === "object" && typeof GM.setValue === "function") return await GM.setValue(key, val);
     }
 
-    async function gmDel(key) {
-        if (typeof GM_deleteValue === "function") return GM_deleteValue(key);
-        if (typeof GM === "object" && typeof GM.deleteValue === "function") return await GM.deleteValue(key);
-    }
-
     function lsLoad() {
         try { return JSON.parse(localStorage.getItem(SECRETS_KEY) || "{}") || {}; }
         catch { return {}; }
@@ -405,14 +397,28 @@
         localStorage.removeItem(SECRETS_KEY);
     }
 
+    // A GM-tároló minden PH-domainen közös, a korábbi localStorage viszont
+    // domainenként különálló. A régi példányt az adott domainen eltávolítjuk.
+    function clearLegacySecrets() {
+        try { lsClear(); }
+        catch (error) {
+            console.warn('[PH Power Tools] Legacy secrets cleanup failed:', error);
+        }
+    }
+
     async function loadSecrets() {
         if (hasGM()) {
             const s = await gmGet(SECRETS_KEY, null);
-            if (s && typeof s === "object") return s;
+            if (s && typeof s === "object") {
+                clearLegacySecrets();
+                return s;
+            }
 
             const legacy = lsLoad();
             if (legacy && Object.keys(legacy).length) {
+                // Csak sikeres GM-mentés után törölhető a régi helyi példány.
                 await gmSet(SECRETS_KEY, legacy);
+                clearLegacySecrets();
                 return legacy;
             }
             return {};
@@ -422,12 +428,22 @@
     }
 
     async function saveSecrets(secrets) {
-        if (hasGM()) return gmSet(SECRETS_KEY, secrets || {});
+        if (hasGM()) {
+            await gmSet(SECRETS_KEY, secrets || {});
+            clearLegacySecrets();
+            return;
+        }
         return lsSave(secrets);
     }
 
     async function clearSecrets() {
-        if (hasGM()) return gmDel(SECRETS_KEY);
+        if (hasGM()) {
+            // Az üres objektum szándékos törlést jelöl. A GM-kulcs eltávolítása
+            // egy másik PH-domain régi localStorage-ából visszamigrálhatna adatokat.
+            await gmSet(SECRETS_KEY, {});
+            clearLegacySecrets();
+            return;
+        }
         return lsClear();
     }
 
@@ -2122,7 +2138,7 @@
             storage.setItem(STORAGE_KEY, JSON.stringify(currentSettings));
             await storage.flush();
 
-            colorsModal.style.display = "none";
+            closeColorsModal();
             location.reload();
         });
 
@@ -2199,29 +2215,23 @@
             document.addEventListener('keydown', (e) => {
                 if (e.key !== 'Escape') return;
 
-                const secretsModal = document.getElementById('ph-secrets-modal');
-                const colorsModal  = document.getElementById('ph-colors-modal');
-                const backupModal  = document.getElementById('ph-backup-modal');
-
                 if (changelogModal?.style.display === 'flex') {
                     closeChangelogModal();
                     return;
                 }
 
                 if (backupModal?.style.display === 'flex') {
-                    backupModal.style.display = 'none';
+                    closeBackupModal();
                     return;
                 }
 
-                // Először a színek modalt zárjuk, ha az van nyitva
                 if (colorsModal?.style.display === 'flex') {
-                    colorsModal.style.display = 'none';
+                    closeColorsModal();
                     return;
                 }
 
-                // Utána a secrets modalt
-                if (secretsModal?.style.display === 'flex') {
-                    secretsModal.style.display = 'none';
+                if (modal?.style.display === 'flex') {
+                    closeSecretsModal();
                     return;
                 }
             });
