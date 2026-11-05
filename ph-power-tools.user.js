@@ -2208,7 +2208,7 @@
             closeSecretsModal();
         });
 
-        // ESC = bezár
+        // ESC = modalok és a PH Power Tools menü bezárása
         if (!document.body.dataset.phModalsEscBound) {
             document.body.dataset.phModalsEscBound = "1";
 
@@ -2233,6 +2233,12 @@
                 if (modal?.style.display === 'flex') {
                     closeSecretsModal();
                     return;
+                }
+
+                // A meglévő dropdown-mechanizmus zárja be a menüt, ne csak a CSS.
+                if (li.querySelector('.ph-power-menu.show')) {
+                    e.preventDefault();
+                    li.querySelector('.ph-power-btn')?.click();
                 }
             });
         }
