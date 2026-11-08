@@ -149,7 +149,7 @@
     const CHANGELOG = [
         {
             version: '2.5.3',
-            title: '2026.11.05',
+            title: '2026.11.08',
             changes: [
                 '[CHANGED] Rejtett felhasználók: profilképes lista, egységes lenyitható fejlécek a Modern, Thread és Lánc nézetben.',
                 '[CHANGED] Modern nézet: szögletes, hézagmentes kártyák, egysoros fejléc.',
