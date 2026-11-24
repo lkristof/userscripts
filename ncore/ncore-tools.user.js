@@ -712,7 +712,7 @@
             data: 'urls=' + encodeURIComponent(dlUrl),
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             onload(resp) {
-                if (resp.status === 200) {
+                if (resp.status >= 200 && resp.status < 300) {
                     const torrentId = String(downloadInfo.torrentId || new URL(dlUrl).searchParams.get('id') || '');
                     seenSync.addDownload(torrentId, downloadInfo.title || '');
                     showToast('Torrent elküldve qBittorrentnek!');
